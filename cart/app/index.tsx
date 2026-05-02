@@ -14,7 +14,7 @@ import { classifiers as S } from '@reactjit/core';
 import { useIFTTT } from '@reactjit/runtime/hooks/useIFTTT';
 import IndexPage from './page';
 import AboutPage from './about/page';
-import SettingsPage, { SettingsNav, SETTINGS_NAV_W } from './settings/page';
+import SettingsPage, { SettingsNav } from './settings/page';
 import SweatshopPage from './sweatshop/page';
 import { OnboardingProvider, useOnboarding } from './onboarding/state';
 import { useAnimationTimeline } from './anim';
@@ -304,12 +304,11 @@ function ShellBody() {
   // stay in the same `headingTo` and don't fire the morph).
   const route = useRoute();
   const routeMode: RouteMode = ROUTES.find((r) => r.path === route.path)?.mode ?? 'full';
-  // Some routes have an in-page sub-nav that's been promoted to the HUD
-  // (settings: Profile/Preferences/Providers/…). When active, it
-  // occupies a fixed-width rail beside the assistant rail and the
-  // iframe content slot shrinks accordingly.
+  // Some routes have an in-page sub-nav that's been promoted to the
+  // HUD (settings: Profile/Preferences/…). The sub-nav stacks at the
+  // top of the assistant rail — same column as the chat — so the rail
+  // reads as one continuous left chrome instead of a separate slot.
   const isSettings = route.path === '/settings';
-  const subnavWidth = isSettings ? SETTINGS_NAV_W : 0;
   const [focal, setFocal] = useInputFocal();
   const headingTo = deriveHeadingTo(routeMode, focal);
   const chatShape = deriveChatShape(headingTo);
@@ -485,7 +484,7 @@ function ShellBody() {
                   (rail is opaque chrome). */}
               <Box style={{
                 flexGrow: 1,
-                paddingLeft: sideWidth + subnavWidth,
+                paddingLeft: sideWidth,
               }}>
                 <Route path="/">
                   <IndexPage />
@@ -500,29 +499,17 @@ function ShellBody() {
                   <SweatshopPage />
                 </Route>
               </Box>
-              {/* Page-level sub-nav HUD rail — sits to the right of
-                  the assistant rail and to the left of the iframe.
-                  Currently only /settings populates it. The iframe
-                  paddingLeft above already reserves SETTINGS_NAV_W so
-                  the page content clears it. */}
-              {isSettings ? (
-                <Box style={{
-                  position: 'absolute', left: sideWidth, top: 0, bottom: 0,
-                  width: SETTINGS_NAV_W,
-                }}>
-                  <SettingsNav />
-                </Box>
-              ) : null}
               {/* SideMenuInput — absolute overlay on the left.
                   Rendered FIRST so BottomInputBar overlays it in
                   z-order during phase 1 of shrink (input still in
-                  BottomInputBar). The chat panel sits ABOVE the
-                  InputStrip via flexGrow:1 on AppChatPanel; the rail's
-                  justifyContent:'flex-end' still keeps InputStrip
-                  pinned to the bottom. */}
+                  BottomInputBar). The rail is the unified left HUD:
+                  page sub-nav (when present) sits at the top, the
+                  assistant chat fills the middle (flexGrow:1), the
+                  InputStrip pins to the bottom. */}
               <S.AppSideMenuInput style={{
                 position: 'absolute', left: 0, top: 0, bottom: 0, width: sideWidth,
               }}>
+                {isSettings ? <SettingsNav /> : null}
                 {chatShape === 'side' ? (
                   <ConditionalAssistantChat shape="side" onToggleShape={() => setFocal(true)} />
                 ) : null}

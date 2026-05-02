@@ -199,36 +199,34 @@ export default function SettingsPage() {
 }
 
 // SettingsNav — exported so the shell (ShellBody in ../index.tsx) can
-// render it as a HUD rail beside the assistant rail. Reads/writes the
-// active section from the shell-level store; takes no props.
-export const SETTINGS_NAV_W = 220;
-
+// render it at the top of the assistant rail (same column as the chat).
+// Width is inherited from the rail; height grows with the items list.
+// Reads/writes the active section from the shell-level store.
 export function SettingsNav() {
   const [active, setActive] = useSettingsSection();
   return (
     <Box style={{
-      width: SETTINGS_NAV_W, flexShrink: 0, height: '100%',
+      width: '100%', flexShrink: 0,
       flexDirection: 'column',
-      borderRightWidth: 1, borderRightColor: 'theme:rule',
+      borderBottomWidth: 1, borderBottomColor: 'theme:rule',
       backgroundColor: 'theme:bg',
+      paddingTop: 16, paddingBottom: 12,
+      paddingLeft: 12, paddingRight: 12,
+      gap: 2,
     }}>
-      <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
-        <Box style={{ flexDirection: 'column', paddingTop: 24, paddingBottom: 16, paddingLeft: 12, paddingRight: 12, gap: 4 }}>
-          <Box style={{ paddingLeft: 8, paddingRight: 8, paddingBottom: 16 }}>
-            <S.Caption>App</S.Caption>
-            <S.Title>Settings</S.Title>
-          </Box>
-          {NAV_ITEMS.map((item) => {
-            const isActive = item.id === active;
-            const Pill = isActive ? S.NavPillActive : S.NavPill;
-            return (
-              <Pill key={item.id} onPress={() => setActive(item.id)}>
-                <S.Body>{item.label}</S.Body>
-              </Pill>
-            );
-          })}
-        </Box>
-      </ScrollView>
+      <Box style={{ paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}>
+        <S.Caption>App</S.Caption>
+        <S.Title>Settings</S.Title>
+      </Box>
+      {NAV_ITEMS.map((item) => {
+        const isActive = item.id === active;
+        const Pill = isActive ? S.NavPillActive : S.NavPill;
+        return (
+          <Pill key={item.id} onPress={() => setActive(item.id)}>
+            <S.Body>{item.label}</S.Body>
+          </Pill>
+        );
+      })}
     </Box>
   );
 }
