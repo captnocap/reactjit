@@ -101,6 +101,7 @@ comptime {
 // LuaJIT main-thread runtime — replaces QuickJS for logic (events, state, conditionals).
 // Same API surface as qjs_runtime: initVM, evalScript, evalExpr, tick, callGlobal.
 const luajit_runtime = @import("luajit_runtime.zig");
+const mouse_state = @import("mouse_state.zig");
 
 // Force-reference audio.zig so its export fn symbols are available to the linker.
 comptime {
@@ -224,6 +225,7 @@ const effects = if (HAS_EFFECTS) @import("effects.zig") else struct {
     pub fn init() void {}
     pub fn deinit() void {}
     pub fn update(_: f32) void {}
+    pub fn pollMouse(_: f32, _: f32, _: f32) void {}
     pub fn paintEffect(_: ?[]const u8, _: f32, _: f32, _: f32, _: f32, _: f32) bool {
         return false;
     }
@@ -289,6 +291,11 @@ const witness = @import("witness.zig");
 // ── Cursor blink state ───────────────────────────────────────────────────
 var g_cursor_visible: bool = true;
 var g_prev_tick: u32 = 0;
+
+// ── Resize HUD state ────────────────────────────────────────────────────
+var g_resize_hud_until_ms: u64 = 0;
+var g_resize_hud_w: i32 = 0;
+var g_resize_hud_h: i32 = 0;
 
 // ── Physics 2D state ────────────────────────────────────────────────────
 var physics_initialized: bool = false;
@@ -842,6 +849,17 @@ var g_chrome_drag_mouse_x: f32 = 0;
 var g_chrome_drag_mouse_y: f32 = 0;
 var g_chrome_drag_window_x: c_int = 0;
 var g_chrome_drag_window_y: c_int = 0;
+
+// SIGINT/SIGTERM handler — flips a flag the main loop polls so the existing
+// defer cleanup (SDL_Quit, geometry.save, SDL_CaptureMouse(false), etc.) runs
+// on graceful shutdown. Without this, scripts/dev's `kill -TERM` is dropped on
+// the floor (signal was previously ignored), the 0.5s grace period expires,
+// and `kill -KILL` skips every defer — leaving SDL_CaptureMouse held on the
+// X server, which manifests next session as a window glued to the cursor.
+var g_received_quit_signal: bool = false;
+fn quitSignalHandler(_: c_int) callconv(.c) void {
+    g_received_quit_signal = true;
+}
 
 /// SDL hit-test callback — called by SDL to determine what region of a borderless
 /// window the cursor is in. Walks the node tree looking for window_drag / window_resize nodes.
@@ -1657,6 +1675,40 @@ fn paintNode(node: *Node) void {
     if (g_paint_opacity <= 0) {
         g_paint_opacity = saved_opacity;
         return;
+    }
+
+    // Filter: render the subtree into an offscreen texture EVERY frame and
+    // composite via a fragment-shader pass (deepfry, crt, vhs, etc.). Same
+    // capture machinery as StaticSurface but the cache is disabled, so
+    // animated children keep playing.
+    if (node.filter_name) |filter_name| {
+        // Stable key derived from the node pointer (8 bytes, alignment-safe).
+        // Across frames the same node sees the same key → texture is reused.
+        const ptr_int: usize = @intFromPtr(node);
+        var key_buf: [@sizeOf(usize)]u8 = undefined;
+        std.mem.writeInt(usize, key_buf[0..], ptr_int, .little);
+        const filter_key: []const u8 = key_buf[0..];
+        const surface_scale: f32 = 1.0;
+        if (gpu.beginFilterCapture(filter_key, filter_name, node.filter_intensity, r.x, r.y, r.w, r.h, surface_scale)) |token| {
+            const scissor_snapshot = gpu.suspendScissorForStaticCapture(token.width, token.height);
+            const start_counts = gpu.primitiveCounts();
+            const saved_capture_tf = gpu.getTransform();
+            const saved_static_surface_capture = g_static_surface_capture;
+            g_static_surface_capture = true;
+            offsetDescendants(node, -r.x, -r.y);
+            const capture_saved_opacity = g_paint_opacity;
+            g_paint_opacity = saved_opacity;
+            for (node.children) |*child| if (!child.effect_background) paintNode(child);
+            g_paint_opacity = capture_saved_opacity;
+            restoreGpuTransform(saved_capture_tf);
+            offsetDescendants(node, r.x, r.y);
+            g_static_surface_capture = saved_static_surface_capture;
+            const end_counts = gpu.primitiveCounts();
+            gpu.restoreScissorAfterStaticCapture(scissor_snapshot);
+            gpu.finishFilterCapture(token, start_counts, end_counts, filter_name, node.filter_intensity, r.x, r.y, r.w, r.h);
+            g_paint_opacity = saved_opacity;
+            return;
+        }
     }
 
     // StaticSurface: cache a stable subtree into a GPU texture. The children
@@ -2692,7 +2744,8 @@ pub fn run(config_in: AppConfig) !void {
     // Ignore signals that kill the process when launched without a controlling terminal
     crashlog.ignoreSignal(13); // SIGPIPE
     crashlog.ignoreSignal(1); // SIGHUP
-    crashlog.ignoreSignal(15); // SIGTERM (catch and log instead of die)
+    crashlog.installQuitHandler(2, &quitSignalHandler); // SIGINT — ctrl-c from terminal
+    crashlog.installQuitHandler(15, &quitSignalHandler); // SIGTERM — `kill` / scripts/dev cleanup
     crashlog.ignoreSignal(20); // SIGTSTP
 
     // External watchdog: monitors RSS spikes + heartbeat from a separate process.
@@ -2710,6 +2763,12 @@ pub fn run(config_in: AppConfig) !void {
 
     if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_AUDIO)) return error.SDLInitFailed;
     defer {
+        // Release any held SDL captures BEFORE SDL_Quit so the X server (or
+        // equivalent on macOS/Wayland) drops the pointer grab. SDL_Quit alone
+        // sometimes leaves grabs dangling if the binary was mid-chrome-drag
+        // when shutdown started; this is the belt to SDL_Quit's suspenders.
+        _ = c.SDL_CaptureMouse(false);
+        if (g_chrome_dragging) endChromeDrag();
         whisper.deinit();
         voice.deinit();
         c.SDL_Quit();
@@ -2907,6 +2966,14 @@ pub fn run(config_in: AppConfig) !void {
     var telemetry_stderr_last: u64 = 0;
 
     while (running) {
+        // Graceful shutdown via SIGINT/SIGTERM — drop out of the loop so the
+        // defer block below runs SDL_CaptureMouse(false) + SDL_Quit + state
+        // saves before the process exits.
+        if (g_received_quit_signal) {
+            running = false;
+            break;
+        }
+
         // Hot-reload: check if the app .so was recompiled
         if (config.check_reload) |check| {
             if (check(&config)) {
@@ -2937,8 +3004,18 @@ pub fn run(config_in: AppConfig) !void {
             }
         }
 
+        // [drag-trace] per-iteration counters for chrome-drag freeze diagnosis.
+        // Counters and timestamps are unconditional (cheap); the print at the
+        // end of the iteration is gated on g_chrome_dragging.
+        const dt_iter_start = std.time.microTimestamp();
+        const dt_evt_start = dt_iter_start;
+        var dt_evt_count: u32 = 0;
+        var dt_motion_count: u32 = 0;
+
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
+            dt_evt_count += 1;
+            if (event.type == c.SDL_EVENT_MOUSE_MOTION) dt_motion_count += 1;
             // Route to secondary windows first — if consumed, skip main window handling
             if (windows.routeEvent(&event)) continue;
 
@@ -2960,8 +3037,12 @@ pub fn run(config_in: AppConfig) !void {
                     win_h = @floatFromInt(wh);
                     gpu.resize(@intCast(ww), @intCast(wh));
                     breakpoint.update(win_w);
+                    system_signals.notifyResize(win_w, win_h);
                     geometry.save(window);
                     layout.markLayoutDirty();
+                    g_resize_hud_w = @intFromFloat(win_w);
+                    g_resize_hud_h = @intFromFloat(win_h);
+                    g_resize_hud_until_ms = c.SDL_GetTicks() + 500;
                 },
                 c.SDL_EVENT_WINDOW_MOVED => {
                     geometry.save(window);
@@ -2980,8 +3061,8 @@ pub fn run(config_in: AppConfig) !void {
                             continue;
                         }
                     }
-                    qjs_runtime.updateMouse(event.button.x, event.button.y);
-                    qjs_runtime.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
+                    mouse_state.updateMouse(event.button.x, event.button.y);
+                    mouse_state.updateMouseButton(true, event.button.button == c.SDL_BUTTON_RIGHT);
                     // Render surface input forwarding (VNC mouse) — check first
                     {
                         const rmx: f32 = event.button.x;
@@ -3349,10 +3430,22 @@ pub fn run(config_in: AppConfig) !void {
                 c.SDL_EVENT_MOUSE_MOTION => {
                     const mx: f32 = event.motion.x;
                     const my: f32 = event.motion.y;
-                    qjs_runtime.updateMouse(mx, my);
-                    luajit_runtime.updateMouse(mx, my);
+                    mouse_state.updateMouse(mx, my);
+                    effects.pollMouse(mx, my, 0.016);
                     if (g_chrome_dragging) {
-                        if ((event.motion.state & c.SDL_BUTTON_LMASK) != 0) {
+                        // Use the LIVE global mouse state, not event.motion.state.
+                        // event.motion.state is captured when SDL queued the
+                        // event; on 60Hz monitors a fast mouse-whip lets SDL
+                        // queue motion events whose cached state briefly drops
+                        // LMASK (cursor escapes the still-async-catching-up
+                        // window hitbox). That false release was killing the
+                        // drag mid-whip. Re-querying right now avoids the
+                        // staleness while still catching real releases when
+                        // the button-up event happens outside the window.
+                        var gx_now: f32 = 0;
+                        var gy_now: f32 = 0;
+                        const buttons_now = c.SDL_GetGlobalMouseState(&gx_now, &gy_now);
+                        if ((buttons_now & c.SDL_BUTTON_LMASK) != 0) {
                             updateChromeDrag();
                         } else {
                             endChromeDrag();
@@ -3484,9 +3577,8 @@ pub fn run(config_in: AppConfig) !void {
                     }
                 },
                 c.SDL_EVENT_MOUSE_BUTTON_UP => {
-                    qjs_runtime.updateMouse(event.button.x, event.button.y);
-                    qjs_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
-                    luajit_runtime.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
+                    mouse_state.updateMouse(event.button.x, event.button.y);
+                    mouse_state.updateMouseButton(false, event.button.button == c.SDL_BUTTON_RIGHT);
                     if (event.button.button == c.SDL_BUTTON_LEFT) {
                         qjs_runtime.endTerminalDockResize();
                         if (g_chrome_dragging) {
@@ -3759,6 +3851,8 @@ pub fn run(config_in: AppConfig) !void {
             }
         }
 
+        const dt_evt_end = std.time.microTimestamp();
+
         // QuickJS tick
         const t0 = std.time.microTimestamp();
         js_vm.tick();
@@ -3933,6 +4027,29 @@ pub fn run(config_in: AppConfig) !void {
         // Context menu overlay (on top of everything except debug pairing)
         context_menu.paintOverlay(measureCallback, win_w, win_h);
 
+        // Resize HUD — shows "W × H" centered for ~500ms after a resize event
+        if (g_resize_hud_until_ms != 0) {
+            const now_ms = c.SDL_GetTicks();
+            if (now_ms >= g_resize_hud_until_ms) {
+                g_resize_hud_until_ms = 0;
+            } else {
+                const remaining: f32 = @floatFromInt(g_resize_hud_until_ms - now_ms);
+                const alpha: f32 = if (remaining < 200) remaining / 200.0 else 1.0;
+                var buf: [48]u8 = undefined;
+                const label = std.fmt.bufPrint(&buf, "{d} × {d}", .{ g_resize_hud_w, g_resize_hud_h }) catch "";
+                const size_px: u16 = 20;
+                const text_w = gpu.measureTextLineWidth(label, size_px);
+                const cw: f32 = @max(140, text_w + 36);
+                const ch: f32 = 56;
+                const cx = (win_w - cw) / 2;
+                const cy = (win_h - ch) / 2;
+                const tx = cx + (cw - text_w) / 2;
+                const ty = cy + (ch - @as(f32, @floatFromInt(size_px))) / 2;
+                gpu.drawRect(cx, cy, cw, ch, 0.10, 0.12, 0.16, 0.85 * alpha, 10, 1, 1, 1, 1, 0.30 * alpha);
+                gpu.drawTextLine(label, tx, ty, size_px, 0.92, 0.94, 0.97, alpha);
+            }
+        }
+
         // Debug pairing overlay — modal with 6-digit code
         if (debug_server.getPairingCode()) |code| {
             // Semi-transparent backdrop
@@ -4059,6 +4176,30 @@ pub fn run(config_in: AppConfig) !void {
             g_zero_count = 0;
             fps_frames = 0;
             fps_last = now;
+        }
+
+        // [drag-trace] only fires while chrome is being dragged. One line per
+        // iteration: where did the time go in this frame? Lets us pinpoint
+        // which phase causes the chrome-drag freeze. Goes to log.writeLine
+        // (file only, no stderr) so a stalled terminal doesn't itself become
+        // the bottleneck we're trying to measure. Set ZIGOS_LOG_FILE=/tmp/drag.log
+        // before launching the dev host to capture.
+        if (g_chrome_dragging) {
+            const dt_iter_end = std.time.microTimestamp();
+            log.writeLine(
+                "[drag-trace] iter={d}us evt={d}us(n={d},mot={d}) jstick={d}us apptick={d}us layout={d}us paint={d}us gpufrm={d}us",
+                .{
+                    dt_iter_end - dt_iter_start,
+                    dt_evt_end - dt_evt_start,
+                    dt_evt_count,
+                    dt_motion_count,
+                    t1 - t0,
+                    phase_t1 - phase_t0,
+                    t3 - t2,
+                    t5 - t4,
+                    phase_t_postframe - phase_t_preframe,
+                },
+            );
         }
     }
 }

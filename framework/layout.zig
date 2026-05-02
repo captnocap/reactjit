@@ -336,6 +336,13 @@ pub const Node = struct {
     static_surface_warmup_frames: u16 = 0,
     static_surface_intro_frames: u16 = 0,
     static_surface_overlay: bool = false,
+    // Post-process shader filter — when set, the subtree is rendered into
+    // an offscreen texture every frame and composited via the named
+    // filter's fragment shader. See framework/gpu/filters.zig for the
+    // available filters. The cache is intentionally disabled, so children
+    // animate normally inside.
+    filter_name: ?[]const u8 = null,
+    filter_intensity: f32 = 1.0,
     cartridge_src: ?[]const u8 = null,
     effect_type: ?[]const u8 = null,
     input_id: ?u8 = null,
@@ -1641,6 +1648,16 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     if (isRow) {
                         if (child.text != null) {
                             if (child.style.height != null) continue;
+                            // CSS flex: a wrappable text child can't exceed the parent's
+                            // content cross-axis (innerW for both row main-axis and the
+                            // wrap floor). The column branch below already clamps to
+                            // innerW; mirror it here so onlyTextChildren (which forces
+                            // isRow=true on a Text wrapper laying out its __TEXT__ leaf)
+                            // also respects the wrap constraint. `no_wrap` opts out.
+                            if (!child.no_wrap and childBasis[@intCast(i)] > innerW) {
+                                childBasis[@intCast(i)] = innerW;
+                                childMainSize[@intCast(i)] = innerW;
+                            }
                             const finalW = clampVal(childBasis[@intCast(i)], resolveMaybePct(child.style.min_width, innerW), resolveMaybePct(child.style.max_width, innerW));
                             const prevW = childMainSize[@intCast(i)];
                             if (@abs(finalW - prevW) > 0.5) {
@@ -1668,6 +1685,14 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                             if (child.no_wrap) break :blk natural;
                             break :blk @min(natural, innerW);
                         };
+                        // Always store the constrained cross-axis size, not just
+                        // for direct-text children. A wrapper that contains text
+                        // (e.g. React's <Text> host with a __TEXT__ leaf inside)
+                        // has child.text == null, but it still needs to inherit
+                        // the parent's innerW so its own children wrap correctly.
+                        // Without this, the wrapper kept its intrinsic 160px and
+                        // overflowed its 72px-inner Pressable.
+                        childCrossSize[@intCast(i)] = finalW;
                         if (child.text != null) {
                             const cpl = padLeft(child.style);
                             const cpr = padRight(child.style);
@@ -1680,7 +1705,6 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                                 childBasis[@intCast(i)] = newH;
                                 childMainSize[@intCast(i)] = newH;
                             }
-                            childCrossSize[@intCast(i)] = finalW;
                         }
                     }
                 }

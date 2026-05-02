@@ -1340,6 +1340,10 @@ fn removePropKeys(node: *Node, keys_v: std.json.Value) void {
             node.static_surface_intro_frames = 0;
         } else if (std.mem.eql(u8, k, "staticSurfaceOverlay")) {
             node.static_surface_overlay = false;
+        } else if (std.mem.eql(u8, k, "filterName")) {
+            node.filter_name = null;
+        } else if (std.mem.eql(u8, k, "filterIntensity")) {
+            node.filter_intensity = 1.0;
         } else if (std.mem.eql(u8, k, "d")) {
             node.canvas_path_d = null;
         } else if (std.mem.eql(u8, k, "stroke")) {
@@ -1601,6 +1605,10 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonInt(v)) |i| node.static_surface_intro_frames = @intCast(@max(0, @min(i, std.math.maxInt(u16))));
         } else if (std.mem.eql(u8, k, "staticSurfaceOverlay")) {
             if (jsonBool(v)) |b| node.static_surface_overlay = b;
+        } else if (std.mem.eql(u8, k, "filterName")) {
+            if (dupJsonText(v)) |s| node.filter_name = s;
+        } else if (std.mem.eql(u8, k, "filterIntensity")) {
+            if (jsonFloat(v)) |f| node.filter_intensity = @max(0.0, @min(@as(f32, @floatCast(f)), 1.0));
         } else if (std.mem.eql(u8, k, "videoSrc")) {
             // Path or URL to a video. framework/videos.zig hooks the paint
             // pass and decodes lazily — no audio yet, just frames.

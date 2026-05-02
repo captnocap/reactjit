@@ -20,6 +20,7 @@ const capsules = @import("capsules.zig");
 const polys = @import("polys.zig");
 pub const images = @import("images.zig");
 const scene3d = @import("3d.zig");
+pub const filters = @import("filters.zig");
 const log = @import("../log.zig");
 
 // ════════════════════════════════════════════════════════════════════════
@@ -34,6 +35,7 @@ pub const drawRectShadow = rects.drawRectShadow;
 pub const drawRectGradient = rects.drawRectGradient;
 pub const drawTextLine = text.drawTextLine;
 pub const drawTextWrapped = text.drawTextWrapped;
+pub const measureTextLineWidth = text.measureTextLineWidth;
 pub const drawColorTextRow = text.drawColorTextRow;
 pub const drawSelectionRects = text.drawSelectionRects;
 pub const getLineHeight = text.getLineHeight;
@@ -662,6 +664,13 @@ const StaticSurfaceEntry = struct {
     active: bool = false,
     warmup_started_frame: u64 = 0,
     ready_frame: u64 = 0,
+    // Filter mode — when true, this entry feeds a post-process shader
+    // pass instead of being blitted as a plain image quad. The entry is
+    // never marked ready=true, so the subtree re-renders every frame and
+    // animations inside the filter keep playing.
+    is_filter: bool = false,
+    filter_uniform_buf: ?*wgpu.Buffer = null,
+    filter_bind_group: ?*wgpu.BindGroup = null,
 };
 
 const StaticSurfaceCapture = struct {
@@ -670,6 +679,13 @@ const StaticSurfaceCapture = struct {
     height: u32 = 0,
     start: PrimitiveCounts = .{},
     end: PrimitiveCounts = .{},
+    is_filter: bool = false,
+    filter: filters.Filter = .invert,
+    filter_intensity: f32 = 1.0,
+    filter_x: f32 = 0,
+    filter_y: f32 = 0,
+    filter_w: f32 = 0,
+    filter_h: f32 = 0,
 };
 
 const MAX_STATIC_SURFACES = 512;
@@ -712,10 +728,14 @@ fn findStaticEntry(hash: u64, key_len: usize) ?usize {
 }
 
 fn releaseStaticResources(entry: *StaticSurfaceEntry) void {
+    if (entry.filter_bind_group) |bg| bg.release();
+    if (entry.filter_uniform_buf) |buf| buf.release();
     if (entry.bind_group) |bg| bg.release();
     if (entry.sampler) |sampler| sampler.release();
     if (entry.view) |view| view.release();
     if (entry.texture) |texture| texture.release();
+    entry.filter_bind_group = null;
+    entry.filter_uniform_buf = null;
     entry.bind_group = null;
     entry.sampler = null;
     entry.view = null;
@@ -896,6 +916,89 @@ pub fn finishStaticSurfaceCapture(token: StaticSurfaceToken, start: PrimitiveCou
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// Filter capture — like static surface but the cache is intentionally
+// disabled so animations inside survive. The same texture pool is used.
+// ════════════════════════════════════════════════════════════════════════
+
+fn ensureFilterResources(entry: *StaticSurfaceEntry) bool {
+    if (entry.filter_bind_group != null and entry.filter_uniform_buf != null) return true;
+    const device = g_device orelse return false;
+    const view = entry.view orelse return false;
+    const sampler = entry.sampler orelse return false;
+    const globals = g_globals_buffer orelse return false;
+    const res = filters.createEntryResources(device, globals, view, sampler) orelse return false;
+    entry.filter_uniform_buf = res.uniform_buf;
+    entry.filter_bind_group = res.bind_group;
+    entry.is_filter = true;
+    return true;
+}
+
+/// Like beginStaticSurfaceCapture, but the entry never marks ready=true,
+/// so the subtree re-renders into the offscreen texture every frame.
+/// The composite step runs `filter`'s fragment shader instead of a plain
+/// blit. Caller should wrap the children paint with the same scissor /
+/// transform / opacity dance as static surface.
+pub fn beginFilterCapture(
+    key: []const u8,
+    filter_name: []const u8,
+    intensity: f32,
+    x: f32,
+    y: f32,
+    width_f: f32,
+    height_f: f32,
+    scale_f: f32,
+) ?StaticSurfaceToken {
+    _ = intensity;
+    _ = x;
+    _ = y;
+    _ = filter_name;
+    const width = staticDim(width_f, scale_f);
+    const height = staticDim(height_f, scale_f);
+    const idx = ensureStaticEntry(staticKeyHash(key), key.len, width, height) orelse return null;
+    const entry = &g_static_entries[idx];
+    if (!ensureFilterResources(entry)) return null;
+    return .{ .entry_index = idx, .width = width, .height = height };
+}
+
+pub fn finishFilterCapture(
+    token: StaticSurfaceToken,
+    start: PrimitiveCounts,
+    end: PrimitiveCounts,
+    filter_name: []const u8,
+    intensity: f32,
+    x: f32,
+    y: f32,
+    width_f: f32,
+    height_f: f32,
+) void {
+    if (token.entry_index >= MAX_STATIC_SURFACES) return;
+    if (g_static_capture_count >= MAX_STATIC_CAPTURES) return;
+    if (end.rects <= start.rects and end.glyphs <= start.glyphs and end.curves <= start.curves and end.capsules <= start.capsules and end.polys <= start.polys and end.images <= start.images) {
+        return;
+    }
+    const filter = filters.resolveFilter(filter_name) orelse {
+        log.warn(.gpu, "filter unknown: {s}", .{filter_name});
+        return;
+    };
+    g_static_entries[token.entry_index].ready = false;
+    g_static_captures[g_static_capture_count] = .{
+        .entry_index = token.entry_index,
+        .width = token.width,
+        .height = token.height,
+        .start = start,
+        .end = end,
+        .is_filter = true,
+        .filter = filter,
+        .filter_intensity = intensity,
+        .filter_x = x,
+        .filter_y = y,
+        .filter_w = width_f,
+        .filter_h = height_f,
+    };
+    g_static_capture_count += 1;
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // Dirty tracking & memory drain
 // ════════════════════════════════════════════════════════════════════════
 
@@ -1048,8 +1151,29 @@ fn renderStaticSurfaceCaptures(device: *wgpu.Device, queue: *wgpu.Queue) void {
         encoder.release();
         queue.submit(&.{command});
         command.release();
-        entry.ready = true;
-        entry.ready_frame = g_frame_counter;
+        if (cap.is_filter) {
+            // Filter captures intentionally don't cache. Leave entry.ready=false
+            // so the offscreen pass runs again next frame. Queue the filter
+            // shader composite to run during the main render pass.
+            const bg = entry.filter_bind_group orelse continue;
+            const ub = entry.filter_uniform_buf orelse continue;
+            const t_seconds: f32 = @floatCast(@as(f64, @floatFromInt(g_frame_counter % 1_000_000)) / 60.0);
+            filters.queueComposite(
+                queue,
+                cap.filter,
+                bg,
+                ub,
+                cap.filter_x,
+                cap.filter_y,
+                cap.filter_w,
+                cap.filter_h,
+                t_seconds,
+                cap.filter_intensity,
+            );
+        } else {
+            entry.ready = true;
+            entry.ready_frame = g_frame_counter;
+        }
     }
 
     writeGlobals(queue, g_width, g_height);
@@ -1215,6 +1339,7 @@ pub fn initWeb(device: *wgpu.Device, queue: *wgpu.Queue, width: u32, height: u32
     polys.initPipeline(device, globals_buffer);
     std.debug.print("[gpu.initWeb] init images pipeline...\n", .{});
     images.initPipeline(device, globals_buffer);
+    filters.ensureInit(device, g_format);
     std.debug.print("[gpu.initWeb] done\n", .{});
 }
 
@@ -1316,12 +1441,14 @@ pub fn init(window: if (is_web) *anyopaque else *c.SDL_Window) !void {
     capsules.initPipeline(device, globals_buffer);
     polys.initPipeline(device, globals_buffer);
     images.initPipeline(device, globals_buffer);
+    filters.ensureInit(device, g_format);
 
     std.debug.print("wgpu initialized: {d}x{d}\n", .{ g_width, g_height });
 }
 
 pub fn deinit() void {
     deinitStaticSurfaces();
+    filters.deinit();
     images.deinit();
     polys.deinit();
     capsules.deinit();
@@ -1358,6 +1485,7 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
     // Periodic memory drain
     g_frame_counter += 1;
     if (g_frame_counter % DRAIN_INTERVAL == 0) drainMemory();
+    filters.frameReset();
 
     // Get current surface texture
     var surface_texture: wgpu.SurfaceTexture = undefined;
@@ -1505,6 +1633,13 @@ pub fn frame(bg_r: f64, bg_g: f64, bg_b: f64) void {
             }
         }
     }
+
+    // Filter composites — run AFTER all primitive draws so the filter
+    // shader samples its captured offscreen texture and writes the result
+    // over the area where the captured primitives would have appeared
+    // (those primitives were skipped by drawRectsSkipping et al).
+    render_pass.setScissorRect(0, 0, g_width, g_height);
+    filters.drawComposites(render_pass);
 
     render_pass.end();
     render_pass.release();

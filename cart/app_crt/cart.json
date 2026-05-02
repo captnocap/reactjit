@@ -1,0 +1,7 @@
+{
+  "name": "AppCRT",
+  "description": "cart/app through the CRT post-process filter (scanlines + barrel + chromatic).",
+  "customChrome": true,
+  "width": 1280,
+  "height": 860
+}

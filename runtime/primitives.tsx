@@ -228,6 +228,22 @@ export const StaticSurface: any = ({
   }, rest.children);
 };
 
+// ── Filter — post-process shader filter on a subtree. Children render
+// into an offscreen texture every frame and are composited via the named
+// fragment shader (deepfry, crt, vhs, chromatic, posterize, scanlines,
+// invert, grayscale, pixelate, dither). Hit-test, layout, and animations
+// inside the subtree are unaffected — the filter is purely presentation.
+//
+//   <Filter shader="deepfry" intensity={1}>
+//     <App />
+//   </Filter>
+export const Filter: any = ({ shader, intensity, ...rest }: any) =>
+  h('View', {
+    ...rest,
+    filterName: shader,
+    filterIntensity: intensity ?? 1,
+  }, rest.children);
+
 // ── Physics — Box2D 2D physics. Three sub-components:
 //   <Physics.World gravityX gravityY>          container that owns the simulation
 //     <Physics.Body type="dynamic" x y bullet> rigid body, props alias to physicsX/Y/etc.
