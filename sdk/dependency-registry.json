@@ -369,11 +369,14 @@
       "shipGate": "sdk",
       "triggers": [
         { "kind": "metafileInput", "input": "runtime/hooks/http.ts" },
-        { "kind": "metafileInput", "input": "runtime/hooks/browser_page.ts" }
+        { "kind": "metafileInput", "input": "runtime/hooks/browser_page.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useLocalChat.ts" },
+        { "kind": "metafileInput", "input": "runtime/hooks/useClaudeChat.ts" }
       ],
       "buildOptions": ["has-sdk"],
       "v8Bindings": ["sdk"],
-      "nativeLibraries": ["curl", "tls.zig"]
+      "nativeLibraries": ["curl", "tls.zig"],
+      "note": "useLocalChat / useClaudeChat are here because __localai_* / __claude_* bindings live in v8_bindings_sdk.zig. The chat runtime no longer needs libllama_ffi linked (it dlopens an LM Studio backend at runtime), so this is the only gate it needs."
     },
     "voice": {
       "shipGate": "voice",
@@ -419,7 +422,7 @@
       ],
       "buildOptions": ["has-embed"],
       "v8Bindings": ["embed"],
-      "note": "Local embedding + retrieval. Links libllama_ffi.so from tsz/zig-out/lib + pgvector store. Implies has-pg (framework/embed.zig pulls framework/pg.zig)."
+      "note": "Local embedding + retrieval via libllama_ffi.so (linked from tsz/zig-out/lib at build). Chat generation no longer rides this gate — useLocalChat dlopens an LM Studio backend at runtime (framework/local_ai_runtime.zig) and is gated by has-sdk for its host bindings."
     }
   },
   "shipGate": {
