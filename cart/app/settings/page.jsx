@@ -56,7 +56,7 @@ import * as pg from '@reactjit/runtime/hooks/pg';
 import * as embed from '@reactjit/runtime/hooks/embed';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../onboarding/state';
-import { useHudInsets, useSettingsSection, RAIL_SUBNAV_MAX_PCT } from '../shell';
+import { useHudInsets, useSettingsSection, RAIL_SUBNAV_MAX_H } from '../shell';
 import { TRAITS } from '../onboarding/traits';
 
 const NS = 'app';
@@ -200,40 +200,37 @@ export default function SettingsPage() {
 
 // SettingsNav — exported so the shell (ShellBody in ../index.tsx) can
 // render it at the top of the assistant rail (same column as the chat).
-// Capped at RAIL_SUBNAV_MAX_PCT of the rail's height so a long sub-nav
-// can't crowd out the chat; overflow scrolls inside the cap.
+// Capped at RAIL_SUBNAV_MAX_H pixels so a long sub-nav can't crowd
+// out the chat. No nested ScrollView — the cap is large enough for
+// the current item count, and ScrollView in a maxHeight-only parent
+// collapses to 0 (proportional fallback rule).
 export function SettingsNav() {
   const [active, setActive] = useSettingsSection();
   return (
     <Box style={{
       width: '100%', flexShrink: 0,
-      maxHeight: RAIL_SUBNAV_MAX_PCT,
+      maxHeight: RAIL_SUBNAV_MAX_H,
+      overflow: 'hidden',
       flexDirection: 'column',
       borderBottomWidth: 1, borderBottomColor: 'theme:rule',
       backgroundColor: 'theme:bg',
+      paddingTop: 16, paddingBottom: 12,
+      paddingLeft: 12, paddingRight: 12,
+      gap: 2,
     }}>
-      <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
-        <Box style={{
-          flexDirection: 'column',
-          paddingTop: 16, paddingBottom: 12,
-          paddingLeft: 12, paddingRight: 12,
-          gap: 2,
-        }}>
-          <Box style={{ paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}>
-            <S.Caption>App</S.Caption>
-            <S.Title>Settings</S.Title>
-          </Box>
-          {NAV_ITEMS.map((item) => {
-            const isActive = item.id === active;
-            const Pill = isActive ? S.NavPillActive : S.NavPill;
-            return (
-              <Pill key={item.id} onPress={() => setActive(item.id)}>
-                <S.Body>{item.label}</S.Body>
-              </Pill>
-            );
-          })}
-        </Box>
-      </ScrollView>
+      <Box style={{ paddingLeft: 8, paddingRight: 8, paddingBottom: 12 }}>
+        <S.Caption>App</S.Caption>
+        <S.Title>Settings</S.Title>
+      </Box>
+      {NAV_ITEMS.map((item) => {
+        const isActive = item.id === active;
+        const Pill = isActive ? S.NavPillActive : S.NavPill;
+        return (
+          <Pill key={item.id} onPress={() => setActive(item.id)}>
+            <S.Body>{item.label}</S.Body>
+          </Pill>
+        );
+      })}
     </Box>
   );
 }
