@@ -21,6 +21,7 @@ import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
 import { useInputFocal, setHudInsets, RAIL_SUBNAV_MAX_FRAC } from './shell';
 import { AssistantChat } from './chat/AssistantChat';
+import { AssistantChatProvider } from './chat/AssistantChatProvider';
 import type { ChatShape } from './chat/types';
 
 applyGalleryTheme(getActiveGalleryThemeId());
@@ -593,6 +594,7 @@ export default function App() {
       <OnboardingProvider>
         <Router initialPath="/">
           <NavigationBus />
+          <AssistantChatProvider />
           <ShellBody />
         </Router>
       </OnboardingProvider>
