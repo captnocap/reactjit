@@ -15,17 +15,26 @@ import { useIFTTT } from '@reactjit/runtime/hooks/useIFTTT';
 import IndexPage from './page';
 import AboutPage from './about/page';
 import SettingsPage from './settings/page';
+import SweatshopPage from './sweatshop/page';
 import { OnboardingProvider, useOnboarding } from './onboarding/state';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
+import { useInputFocal } from './shell';
 
 applyGalleryTheme(getActiveGalleryThemeId());
 installBrowserShims();
 
-const ROUTES = [
-  { path: '/', label: 'Home', icon: Home },
-  { path: '/settings', label: 'Settings', icon: Settings },
-  { path: '/about', label: 'About', icon: Info },
+// Each route declares its shell layout mode. `full` means home-style
+// layout (no side panel). `side` means activity-style layout (side
+// panel visible, input docks unless an activity calls setInputFocal).
+// The shell derives `headingTo` from (active-route.mode, inputFocal),
+// so transitions only fire when the resolved state actually changes.
+type RouteMode = 'full' | 'side';
+const ROUTES: Array<{ path: string; label: string; icon: number[][]; mode: RouteMode }> = [
+  { path: '/',                  label: 'Home',      icon: Home,     mode: 'full' },
+  { path: '/settings',          label: 'Settings',  icon: Settings, mode: 'full' },
+  { path: '/about',             label: 'About',     icon: Info,     mode: 'full' },
+  { path: '/activity/sweatshop', label: 'Sweatshop', icon: Settings, mode: 'side' },
 ];
 
 function NavLink({ path, label, icon }: { path: string; label: string; icon: number[][] }) {
@@ -222,23 +231,59 @@ function getViewportW(): number {
 
 const easeMorph = (p: number) => (EASINGS as any).easeInOutCubic(p);
 
-export default function App() {
-  // Layout variant lives in the global theme store. AppBottomInputBar
-  // and AppSideMenuInput's classifier variants (`side`) flip their
-  // visibility based on this. We DON'T flip variant at click time —
-  // we flip it at the END of the morph (or BEGINNING of the reverse
-  // morph) so the visible container always matches the morphed shape.
+// Three resolved shell states. Derived from (active route's mode,
+// inputFocal) — see deriveHeadingTo below. Each maps to a target
+// triple (sideMorph, inputMorph, bottomMorph) plus a variant value
+// that determines which slot hosts the input.
+//
+//   home              (route=full, focal=*) — A
+//   activity-docked   (route=side, focal=false) — B
+//   activity-focal    (route=side, focal=true)  — C
+
+type HeadingTo = 'home' | 'activity-docked' | 'activity-focal';
+
+const TARGETS: Record<HeadingTo, {
+  side: number; input: number; bottom: number; variant: string | null;
+}> = {
+  'home':            { side: 0, input: 0, bottom: 0, variant: null   },
+  'activity-docked': { side: 1, input: 1, bottom: 1, variant: 'side' },
+  'activity-focal':  { side: 1, input: 0, bottom: 0, variant: null   },
+};
+
+function deriveHeadingTo(routeMode: RouteMode, focal: boolean): HeadingTo {
+  if (routeMode === 'full') return 'home';
+  return focal ? 'activity-focal' : 'activity-docked';
+}
+
+// All the shell-level hooks (useRoute, useActiveVariant, useInputFocal,
+// the morph effect) MUST run inside <Router>'s subtree — useRoute
+// looks up RouterContext and would never see updates if called from
+// App itself, since App is what mounts the Router. Splitting App into
+// a thin shell + ShellBody (the actual UI + state) is the standard
+// fix for "I'm a Provider's parent and I want the Provider's hook".
+function ShellBody() {
+  // The variant store still tracks WHERE the input is rendered (which
+  // slot has it). It lags `headingTo` because we flip it at the right
+  // moment in the morph (start of TO-bar, end of TO-panel) — that
+  // timing is what makes the swap visually invisible.
   const variant = useActiveVariant();
   const isSide = variant === 'side';
 
-  // `headingTo` is the user's intent — what we're morphing toward.
-  // Stays in sync with variant most of the time, but can lead it
-  // mid-tween (full→side: heading is 'side', variant is still null
-  // until the shrink finishes; side→full: heading is 'full', variant
-  // flips to null immediately so AppBottomInputBar appears narrow at
-  // current paddingRight, then expands).
-  const [headingTo, setHeadingTo] = useState<'full' | 'side'>('full');
-  const toggleStrip = () => setHeadingTo((p) => (p === 'side' ? 'full' : 'side'));
+  // Resolved state derives from route + inputFocal. `headingTo` is
+  // what we're morphing toward; the morph machinery transitions only
+  // when this value actually changes (same-mode route navigations
+  // stay in the same `headingTo` and don't fire the morph).
+  const route = useRoute();
+  const routeMode: RouteMode = ROUTES.find((r) => r.path === route.path)?.mode ?? 'full';
+  const [focal, setFocal] = useInputFocal();
+  const headingTo = deriveHeadingTo(routeMode, focal);
+  const nav = useNavigate();
+  // Temporary debug toggle — flips between '/' and '/activity/sweatshop'
+  // for testing the A↔B/C transitions. Real triggers (chat-message,
+  // grid-item click, @-token) replace this.
+  const toggleStrip = () => {
+    nav.push(routeMode === 'side' ? '/' : '/activity/sweatshop');
+  };
 
   // Three independent morph timelines — see the constants comment for
   // the sequencing. Each is a snapshot RAF tween that survives
@@ -290,24 +335,51 @@ export default function App() {
       rafRef.current = sched(tick);
     }
 
-    if (headingTo === 'side') {
-      // Phase 1 (parallel): input shrinks AND side menu grows. Same
-      // duration so they finish together; attach the variant flip to
-      // the input's tween.
-      startTween(sideTweenRef, sideRafRef, 1);
-      startTween(inputTweenRef, inputRafRef, 1, () => {
+    // Pivot on the variant target. The variant flip is the moment the
+    // input's React placement actually swaps containers. To make the
+    // swap visually invisible:
+    //   - going TO panel ('side'): morph "shrink" first (input width
+    //     reaches SIDE_W in BottomInputBar; side panel reaches its
+    //     target width), THEN flip variant so SideMenuInput hosts the
+    //     input at the matching narrow width, THEN morph "grow"
+    //     (page extends down via bottomMorph).
+    //   - going TO bar (null): flip variant FIRST so BottomInputBar
+    //     reappears at the input's current narrow paddingRight, THEN
+    //     morph "shrink" (page retracts), THEN morph "grow" (input
+    //     expands; side panel collapses if leaving activity entirely).
+    //   - no variant change: state transition stays inside one slot
+    //     (A↔C: only sideMorph; B→B: no-op). Just animate the deltas.
+    //
+    // The startTween calls are no-ops when from===to, so it's safe to
+    // call them for morphs that don't need to change.
+    const target = TARGETS[headingTo];
+    const variantNeedsToBecomeSide = target.variant === 'side' && variant !== 'side';
+    const variantNeedsToBecomeNull = target.variant === null   && variant === 'side';
+
+    if (variantNeedsToBecomeSide) {
+      // TO PANEL — input + side panel animate first; bottom waits for flip.
+      startTween(sideTweenRef, sideRafRef, target.side);
+      startTween(inputTweenRef, inputRafRef, target.input, () => {
         setVariant('side');
-        // Phase 2: page extends downward (paddingBottom shrinks).
-        startTween(bottomTweenRef, bottomRafRef, 1);
+        startTween(bottomTweenRef, bottomRafRef, target.bottom);
       });
+    } else if (variantNeedsToBecomeNull) {
+      // TO BAR — variant flip + all morphs in PARALLEL. Sequencing
+      // the bottom morph first (page retract) before the input morph
+      // (expand) gave a visible 600ms delay before the input animated,
+      // because the page-retract step is subtle and easy to miss.
+      // BottomInputBar's bg covers the bottom strip area cleanly while
+      // the page content retracts behind it, so they can overlap.
+      setVariant(null);
+      startTween(sideTweenRef, sideRafRef, target.side);
+      startTween(inputTweenRef, inputRafRef, target.input);
+      startTween(bottomTweenRef, bottomRafRef, target.bottom);
     } else {
-      // Phase 1: page retracts vertically (paddingBottom grows back).
-      startTween(bottomTweenRef, bottomRafRef, 0, () => {
-        setVariant(null);
-        // Phase 2 (parallel): input expands AND side menu shrinks.
-        startTween(sideTweenRef, sideRafRef, 0);
-        startTween(inputTweenRef, inputRafRef, 0);
-      });
+      // No variant change. Just move each morph to its target — most
+      // of these will be no-ops (e.g., A↔C only animates sideMorph).
+      startTween(sideTweenRef, sideRafRef, target.side);
+      startTween(inputTweenRef, inputRafRef, target.input);
+      startTween(bottomTweenRef, bottomRafRef, target.bottom);
     }
 
     return () => {
@@ -340,20 +412,16 @@ export default function App() {
   // page-retracts step is smooth.
   const paddingBottom = (1 - bottomMorph) * APP_BOTTOM_BAR_H;
   return (
-    <TooltipRoot>
-      <OnboardingProvider>
-        <Router initialPath="/">
-          <NavigationBus />
-          <Box style={{
-            width: '100%', height: '100%',
-            flexDirection: 'column', position: 'relative',
-            // Match the page bg so the area BottomInputBar vacates
-            // (between variant flip and the page's paddingBottom
-            // animation catching up) doesn't reveal a different bg
-            // underneath. Without this the empty bottom strip flashes
-            // the app's default bg color during phase 2 of shrink.
-            backgroundColor: 'theme:bg',
-          }}>
+    <Box style={{
+      width: '100%', height: '100%',
+      flexDirection: 'column', position: 'relative',
+      // Match the page bg so the area BottomInputBar vacates
+      // (between variant flip and the page's paddingBottom
+      // animation catching up) doesn't reveal a different bg
+      // underneath. Without this the empty bottom strip flashes
+      // the app's default bg color during phase 2 of shrink.
+      backgroundColor: 'theme:bg',
+    }}>
             <Chrome />
             {/* Below the chrome — a flex row with the side menu slot on
                 the left (visible only when variant='side') and the page
@@ -388,6 +456,9 @@ export default function App() {
                 <Route path="/settings">
                   <SettingsPage />
                 </Route>
+                <Route path="/activity/sweatshop">
+                  <SweatshopPage />
+                </Route>
               </Box>
               {/* SideMenuInput — absolute overlay on the left.
                   Rendered FIRST so BottomInputBar overlays it in
@@ -417,21 +488,55 @@ export default function App() {
                 trigger lands (clicking into an app, sending a message,
                 etc.). Anchored to the App's outer Box via
                 position:relative + position:absolute. */}
-            <Box style={{ position: 'absolute', top: 60, left: 60, zIndex: 100 }}>
+            <Box style={{ position: 'absolute', top: 60, left: 60, zIndex: 100, flexDirection: 'row', gap: 8 }}>
+              {/* Route toggle — flips between '/' (state A) and
+                  '/activity/sweatshop' (state B or C depending on
+                  focal). Tests A↔B/C transitions. */}
               <Pressable onPress={toggleStrip}>
                 <Box style={{
-                  paddingLeft: 18, paddingRight: 18, paddingTop: 10, paddingBottom: 10,
+                  paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8,
                   borderRadius: 8,
                   backgroundColor: 'theme:accentHot',
                   borderWidth: 2, borderColor: 'theme:accentHot',
                 }}>
-                  <Text style={{ fontSize: 14, fontWeight: 700, color: 'theme:bg' }}>
-                    {isSide ? 'BACK → BOTTOM' : 'SWAP → SIDE'}
+                  <Text style={{ fontSize: 12, fontWeight: 700, color: 'theme:bg' }}>
+                    {routeMode === 'side' ? '← HOME' : 'SWEATSHOP →'}
                   </Text>
                 </Box>
               </Pressable>
+              {/* Focal toggle — flips inputFocal directly. Lets you
+                  hit B↔C from the chrome, useful before activities
+                  have their own focal triggers wired (sweatshop's
+                  worker tiles do; this is the universal escape hatch). */}
+              {routeMode === 'side' ? (
+                <Pressable onPress={() => setFocal(!focal)}>
+                  <Box style={{
+                    paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8,
+                    borderRadius: 8,
+                    backgroundColor: 'theme:bg2',
+                    borderWidth: 1, borderColor: 'theme:rule',
+                  }}>
+                    <Text style={{ fontSize: 12, fontWeight: 700, color: 'theme:ink' }}>
+                      {focal ? 'UNFOCUS' : 'FOCUS'}
+                    </Text>
+                  </Box>
+                </Pressable>
+              ) : null}
             </Box>
           </Box>
+  );
+}
+
+// Thin App — just mounts the providers. All shell-level UI + state
+// lives in <ShellBody>, which is INSIDE <Router> so its useRoute()
+// call resolves to the live router context (not undefined).
+export default function App() {
+  return (
+    <TooltipRoot>
+      <OnboardingProvider>
+        <Router initialPath="/">
+          <NavigationBus />
+          <ShellBody />
         </Router>
       </OnboardingProvider>
     </TooltipRoot>

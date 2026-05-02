@@ -2,41 +2,198 @@
 
 Living index of every file under `cart/app/` — what each one is, how it's wired, and what's still pending. Format is per-file: a status word (Stub / WIP / Complete) + a checklist. "Complete" means *complete for what it is meant to do today*, not "feature-complete forever". Line numbers are accurate to the file at the time of writing.
 
-The app is a router-driven cart with custom window chrome, an `OnboardingProvider` context wrapping the route tree, and routes mounted at `/` and `/about`. **All theme-touching styling lives in `cart/component-gallery/components.cls.ts`** — every surface in cart/app is a classifier (`<S.AppChrome>`, `<S.AppHello>`, `<S.AppProviderTile>` etc.). There is no `theme.js` shim; if you find yourself reaching for `tokenColor` or hex literals, add a classifier in `components.cls.ts` instead. Active/inactive variants are separate classifiers (e.g. `AppNavLink` / `AppNavLinkActive`); the JSX picks one. Dynamic per-render values (animation opacity, slide marginTop) flow as inline `style={{...}}` overrides — `mergeUserProps` in `runtime/classifier.tsx` merges user style over the classifier's resolved style.
+The app is a router-driven cart with a **two-chrome shell** — top window chrome (titlebar + nav + window controls) and a bottom supervisor input strip (`CommandComposer`-shaped, persistent across routes) — wrapping a route slot mounted at `/`, `/settings`, and `/about`. The bottom strip dispatches navigation through the IFTTT bus (`app:navigate`) so every future input tier (@-token catalog, router model, supervisor session) fires the same event the router subscribes to. An `OnboardingProvider` context wraps the route tree. **All theme-touching styling lives in `cart/component-gallery/components.cls.ts`** — every surface in cart/app is a classifier (`<S.AppChrome>`, `<S.AppHello>`, gallery menu atoms, etc.). There is no `theme.js` shim; if you find yourself reaching for `tokenColor` or hex literals, add a classifier in `components.cls.ts` instead. Active/inactive variants are separate classifiers (e.g. `AppNavLink` / `AppNavLinkActive`); the JSX picks one. Dynamic per-render values (animation opacity, slide marginTop, fixed home-menu stage size) flow as inline `style={{...}}` overrides — `mergeUserProps` in `runtime/classifier.tsx` merges user style over the classifier's resolved style.
+
+---
+
+## Animation principles
+
+Three transition shapes, picked by the *origin* of the element being animated. Validated 2026-05-01 across two labs: `cart/input_lab/` (tween / spring / fade on the persistent `<InputStrip>` moving between focal / side / docked layouts) and `cart/list_lab/` (list building, box wipe, border trace, SVG path trace).
+
+- **Tween** — for elements **already rendered in view** moving to a new placement. `easeInOutCubic` lerp on position + size. Reads as "the same thing went over there." Use for: layout reflow, mode switches, the InputStrip migrating between focal / side / docked, anything where identity continuity matters.
+- **Spring** — for elements **newly entering view**. `easeOutBack` overshoot. Reads as "this just arrived." Use for: notifications sliding in, popovers opening, a card mounting for the first time. Do NOT use for elements that were already on screen — the overshoot makes a moving element look unstable.
+- **Fade** — for **nested / transitionary** content. Cross-dissolve, no translate. Reads as "the surface changed underneath you." Use for: startup splash → app, route content swaps inside a stable shell, body changes inside a card whose chrome stays put.
+
+Rule of thumb when in doubt: was the element on screen one frame ago? Tween. Did it just appear from nowhere? Spring. Is it the *contents* of a container that itself isn't moving? Fade.
+
+### List building (validated in `cart/list_lab/` "list" scene)
+
+- **Adding items** — each new item SPRINGS in: opacity 0→1 + small `translateY` offset eased by `easeOutBack`. Stagger by index when adding multiple at once (default 60ms between items) so a batch reads as a *ripple*, not a pop. Per-item entry duration ~380ms.
+- **Reordering** — items already on screen TWEEN to their new y. Snapshot each item's last rendered y on every render keyed by id; on the next render, if the target y differs, animate from the snapshot (FLIP-style). Same `easeInOutCubic` as everything else. Duration ~400ms.
+- **Removing items** — opacity + scale shrink (`easeOutCubic`, 240ms), then GC the row from state. No spring on exit. Removing items must NOT shift the surviving items abruptly — the reorder tween handles the gap-close smoothly.
+- **Layout strategy** — render items into an `overflow: hidden` container with `position: absolute` per row, computing each row's target `top` from its index in the alive set. Reorder tweening only works when items have stable ids that aren't reused across mount/unmount.
+
+### Drawing an element outwards
+
+Pick the technique by the *shape* of the thing being revealed:
+
+- **Card / box borders (preferred — adopt this everywhere it fits)** — animated dashed border via `borderDashOn` / `borderDashOff` / `borderDashWidth` (any Box accepts these — `framework/border_dash.zig` walks a flattened rounded-rect perimeter). Two modes:
+  - **One-shot border trace** — animate `borderDashOn` from 0 to the rect's perimeter and `borderDashOff` from perimeter to 0; a single dash extends around the corners. **Use this as the hover effect for list items, menu rows, and any pressable surface** — the trace fires on pointer-enter and reverses on leave. Cheap, doesn't re-render the element body, and reads as "this thing is now selectable."
+  - **Continuous marching flow** — static dash pattern + `borderFlowSpeed: <px/sec>` (negative reverses). **Use this for activity / attention-grabbing states** — a card processing in the background, an unread item, a primary CTA waiting for input. This is the GenericCardShell pattern (`cart/component-gallery/components/generic-card/GenericCardShell.tsx`).
+  - Both demoed in `cart/list_lab/` "border" scene.
+- **SVG paths** (icons, signatures, diagrams, charts) — reactive `d` recomputation. Compute the path's total arc length, then per frame emit a `d` string truncated to `t * arcLength` and let `<Graph.Path d={...}>` re-render. Mount `<Graph>` with `originTopLeft` so coordinates anchor at the container's top-left rather than centered. Demoed in `cart/list_lab/` "trace" scene. The framework has `svg_path.zig:drawStrokePartial` implemented but not yet wired to a JS prop — when a `drawProgress: 0..1` prop lands on `<Canvas.Path>` / `<Graph.Path>` this collapses to a single-prop API.
+- **Continuous stroke flow on a path** — `flowSpeed: <px/sec>` on `<Canvas.Path>`. Glow pulses slide along the stroke. Use for "this path is alive / signaling," not for one-shot reveals.
+- **Block elements via width+height wipe** — `overflow: hidden` container animating from 0×0 to full size with the inner content laid out at full size from the start. Demoed in `cart/list_lab/` "wipe" scene but **avoid for now** — feels heavier than it looks on paper, and the border trace covers most of the cases this would have been used for. Revisit if a real need surfaces.
+
+Picking between these: if the surface has a border, prefer the border-dash trace — cheaper and reads better than wiping the whole body. If it's a vector graphic, use the SVG path trace. `flowSpeed` and `borderFlowSpeed` continuous flows are for *state*, not entry — use them once the element has finished revealing.
+
+### Slot-stable menu transition
+
+When swapping the *content* of a fixed list (menu A → menu B), don't tear down the rows and rebuild — keep the slot positions stable and animate the *text inside each slot*. Per slot, erase the old label left-to-right while the new label scans in from the same direction; render a hybrid string per frame where character indices to the left of the scan head come from the new label and indices to the right come from the old. Stagger by row index so the wipe cascades top-to-bottom as a wave. Use `theme:fontMono` for the labels — proportional fonts make the row jiggle as letters with different widths flow through.
+
+Count differences are handled at the trailing edge: if the new menu has more rows, the extras enter via the standard list-entry spring; if fewer, the trailing rows exit via the standard list shrink-and-fade. The middle (slots present in both menus) does the text-scan in lockstep. Mid-transition reversals snapshot each slot's currently-visible hybrid string as the new `from`. Demoed in `cart/list_lab/` "menu" scene.
+
+### Input-strip shell morph (GOLDEN — `cart/app/index.tsx`, commits 3bad2f07d → present)
+
+Three resolved shell states. The persistent `<InputStrip>` morphs between them via three coordinated tweens + a variant flip that swaps the input's React placement at the right moment.
+
+| state | description | sideMorph | inputMorph | bottomMorph | input slot | variant |
+|-------|-------------|-----------|------------|-------------|-----------|---------|
+| **A** home | route=full | 0 | 0 | 0 | BottomInputBar | null |
+| **B** activity-docked | route=side, focal=false | 1 | 1 | 1 | SideMenuInput | 'side' |
+| **C** activity-focal | route=side, focal=true  | 1 | 0 | 0 | BottomInputBar | null |
+
+**Two driver axes** — both feed `deriveHeadingTo(routeMode, focal)`:
+- **Route** declares `mode: 'full' | 'side'` per entry in the `ROUTES` table. Same-mode navigations (e.g., between two activity routes) keep `headingTo` constant — the morph effect doesn't fire, only the page-area content swaps.
+- **Focus** is a global flag in `cart/app/shell.tsx` (`useInputFocal()` / `setInputFocal()`). Activities call `setInputFocal(true)` to take the input into focal mode; `setInputFocal(false)` to release. Focal state PERSISTS across route changes — only the activity that took focus knows when it's done. Going home and back to the same activity preserves the focal state.
+
+**Three independent morphs**, each a snapshot RAF tween that survives mid-flight reversals:
+- `inputMorph` — paddingRight on `AppBottomInputBar`, shrinks/grows the input within the full-width bar.
+- `sideMorph` — width on `AppSideMenuInput` (absolute overlay, left edge), grows/shrinks the docked panel.
+- `bottomMorph` — paddingBottom on the routes wrapper, drives the smooth page-extends-down / page-retracts step.
+
+**Pivoting on variant** — the useEffect on `[headingTo]` looks at whether the variant needs to flip and which direction:
+- **TO PANEL** (variant `null` → `'side'`): morph "shrink" first (`inputMorph` + `sideMorph` in parallel), then variant flip on input completion, then `bottomMorph`. Input is visibly the dominant animation; sequencing matters because the user expects to see the input shrink before the page extends.
+- **TO BAR** (variant `'side'` → `null`): variant flip + ALL morphs in PARALLEL. No sequencing — sequencing the bottom morph first (page retract) before the input expand introduced a perceived 600ms delay before the input animated, because the page-retract step is too subtle to register. BottomInputBar's `theme:bg` covers the bottom strip while the page content retracts behind it, so they overlap cleanly.
+- **No variant change** (A↔C, where the input stays in the bar but the side panel grows/shrinks): just animate whichever morphs differ. `startTween` is a no-op when from===to.
+
+**Single source of truth:** `APP_BOTTOM_BAR_H` is exported from `cart/component-gallery/components.cls.ts`. The `AppBottomInputBar` classifier owns its own `height: APP_BOTTOM_BAR_H`; the cart imports the same constant for routes' paddingBottom calc. Never inline a height fallback in cart code — the regression that bites is that the input strip's natural height changes (added/removed chip rows, etc.), the cart's local fallback drifts out of sync, and the page reflow stops aligning.
+
+**Architectural invariant — useRoute placement.** Hooks that subscribe to `<Router>` (and the variant store, and the focal store) MUST run inside `<Router>`'s subtree. App is split into a thin shell (mounts `TooltipRoot > OnboardingProvider > Router > NavigationBus > ShellBody`) and `<ShellBody>` (everything route-aware). If you collapse them back into one component the route changes won't trigger re-renders and the morph will look like it never fires — only the page-area content will swap.
+
+**Layout invariants** (do not break, in order of how badly each one bites if you do):
+- Both slots are `position: absolute` inside a `position: relative` page area. SideMenuInput must NOT be a flex sibling — if it pushes BottomInputBar via flex, the `paddingRight = inputMorph * (vw - SIDE_W)` formula leaks `sideMorph` into the calc and the input collapses to 0 width by end of phase 1.
+- `AppBottomInputBar`'s height comes from the classifier, not from the cart. The framework's layout engine treats absolute boxes without explicit dimensions as 0-tall.
+- BottomInputBar leaves the React tree (outer conditional `{isSide ? null : (...)}`) on variant flip. Don't try to animate its height collapse instead — it covers SideMenuInput's input from the top down as it shrinks (the "rollout from the top" regression).
+- Inside the conditional, `display: 'flex'` is set explicitly. The framework treated `display: undefined` as `display: none`, leaving the bar invisible.
+- `App` outer Box, `AppBottomInputBar`, and `AppSideMenuInput` all carry `backgroundColor: 'theme:bg'`. The first matches the bg behind any vacated area; the second covers the gap above the input (over-allocated height vs strip natural); the third blends the side panel with the page so the empty rail doesn't show as a colored split.
+
+**Named regressions** to grep for if anyone breaks this:
+- "input invisible in full mode"
+- "input shrinks to 0 then resets"
+- "rollout from the top"
+- "color split / mismatch"
+- "morph never fires on route change" → check that ShellBody is INSIDE `<Router>`, not its parent.
+- "B→C feels like a 1s delay before the input animates" → the TO BAR branch must be parallel; sequencing puts the visible animation behind the subtle one.
+
+If you hit any of those, `git log --grep GOLDEN` finds the canonical reference.
 
 ---
 
 ## Routes & screens
 
-### App shell — `index.tsx` — Complete
+### App shell — `index.tsx` — WIP
 
 CHECKLIST:
-- Purpose: Cart entry. Boots the gallery theme, mounts the custom window chrome (titlebar + drag region + onboarding step cubes / route nav swap + tour banner + window controls), wraps the route tree in `<TooltipRoot>` and `<OnboardingProvider>`, and registers the `/` and `/about` routes.
+- Purpose: Cart entry. Boots the gallery theme, mounts the top window chrome (titlebar + drag region + onboarding step cubes / route nav swap + tour banner + window controls) and the bottom supervisor `InputStrip` (post-onboarding only), wraps the route tree in `<TooltipRoot>` and `<OnboardingProvider>`, and registers the `/`, `/settings`, and `/about` routes. Also mounts a small `NavigationBus` component (no DOM output) that subscribes to `app:navigate` on the IFTTT bus and converts emitted paths into `nav.push(...)` calls — every input tier (today: `InputStrip` token resolver; future: router model, supervisor session) fires that same bus event.
 - isRoute: FALSE
-- Route: N/A (registers `/` and `/about` inside the `<Router>`)
+- Route: N/A (registers `/`, `/settings`, and `/about` inside the `<Router>`)
 - hasDatashape: FALSE
-- Datashape: consumes `onboarding/state.jsx` (`useOnboarding`)
+- Datashape: consumes `onboarding/state.jsx` (`useOnboarding`); subscribes to the IFTTT bus event `app:navigate` (payload = path string) via `NavigationBus`
 - exposedDatashapes: `onb.step`, `onb.totalSteps`, `onb.setStep`, `onb.complete`, `onb.loading`, `onb.tourStatus`, `onb.acceptTour`, `onb.declineTour`
-- Hooks: `useOnboarding`, `useNavigate`, `useRoute`, `useAnimationTimeline` (inside `TourBanner`)
+- Hooks: `useOnboarding`, `useNavigate`, `useRoute`, `useAnimationTimeline` (inside `TourBanner`), `useIFTTT` (inside `NavigationBus`)
 - Conditions:
   - `onboardingActive = !onb.loading && !onb.complete` swaps step cubes for route nav links on the right side of the chrome
   - `showTour = !onboardingActive && onb.tourStatus === 'pending'` — drops the tour banner into the right cluster (BEFORE the nav row, after the brand) once Step5 has called `markComplete()`. Banner unmounts on accept / decline (`tourStatus` flips to `'accepted'` or `'declined'`).
-- Components: `TooltipRoot`, `OnboardingProvider`, `Router`, `Route`, `IndexPage`, `AboutPage`, `Chrome`, `NavLink`, `StepCubes`, `TourBanner`
+  - `ConditionalInputStrip` renders only when `!onb.loading && onb.complete` — the bottom supervisor strip stays hidden during onboarding so it doesn't fight the step-driven flow. Top chrome always renders, so the shell is asymmetric until step 5 lands.
+  - `NavigationBus` subscribes once at mount; `useIFTTT('app:navigate', cb)` validates the payload is a string starting with `/` before calling `nav.push(payload)` (so non-route emits — future `app:open` etc. — won't accidentally route).
+- Components: `TooltipRoot`, `OnboardingProvider`, `Router`, `Route`, `IndexPage`, `SettingsPage`, `AboutPage`, `Chrome`, `NavLink`, `StepCubes`, `TourBanner`, `NavigationBus`, `ConditionalInputStrip`, `InputStrip`
 - Atoms: `Box`, `S.AppChrome`, `S.AppChromeBrandRow`, `S.AppChromeNavRow`, `S.AppChromeRightCluster`, `S.AppBrandSwatch`, `S.AppBrandTitle`, `S.AppBrandSub`, `S.AppNavLink` / `S.AppNavLinkActive`, `S.AppNavIcon` / `S.AppNavIconActive`, `S.AppNavLabel` / `S.AppNavLabelActive`, `S.AppStepCubeRow`, `S.AppStepCubePast` / `S.AppStepCubeCurrent` / `S.AppStepCubeFuture`, `S.AppChromeDivider`, `S.AppChromeTourBanner`, `S.AppChromeTourText`, `S.AppChromeTourActions`, `S.AppChromeTourYes` / `S.AppChromeTourNo`, `S.AppChromeTourYesLabel` / `S.AppChromeTourNoLabel`, `S.AppWindowBtn`, `S.AppWindowBtnIcon` / `S.AppWindowBtnIconClose`
 - isUsingTheme: TRUE — every surface goes through a classifier in `components.cls.ts`
 - hasIcons: TRUE
-- Icons: `Home`, `Info`, `Minimize`, `Maximize`, `X`
+- Icons: `Home`, `Settings`, `Info`, `Minimize`, `Maximize`, `X`
 - hasAnimation: TRUE (only the tour banner; the chrome itself is static)
 - Animations: `TourBanner` mounts at `markComplete()` time, holds invisible until `TOUR_BANNER_FADE_DELAY_MS = 1400ms` (so the home-page carryover dominates first), then fades in over `TOUR_BANNER_FADE_MS = 500ms`. Yes / No has no exit animation — the answer **is** the action, banner unmounts immediately.
-- TODO: once a real tour is wired, `acceptTour()` should additionally arm the overlay (today it just hides the banner). Banner re-arm is handled — `tourStatus` persists through `User.onboarding.tourStatus`, so a declined tour stays declined across reloads.
-- PROBLEMS: none known
+- TODO:
+  - Once a real tour is wired, `acceptTour()` should additionally arm the overlay (today it just hides the banner). Banner re-arm is handled — `tourStatus` persists through `User.onboarding.tourStatus`, so a declined tour stays declined across reloads.
+  - Decide whether `ConditionalInputStrip` should also render in onboarding's later steps (e.g. expose `/help` while the user is mid-flow). Today it's all-or-nothing on `complete`.
+  - Route slot (`<Box style={{flexGrow: 1}}>` between Chrome and InputStrip) doesn't expose its own bottom-padding budget — anything inside a route that wants to clear the InputStrip needs to know `S.CommandComposerFrame.minHeight` (206 today). Lift that to a shared constant if multiple routes start consuming it.
+- PROBLEMS:
+  - **Shell vertical budget shrunk.** With InputStrip's `minHeight: 206`, route content has noticeably less room. Anything that hardcoded "fill the viewport" math (Canvas surfaces, full-bleed embeds) now over-flows or clips. Audit when next rebudgeting layout.
+
+---
+
+### Input strip — `InputStrip.tsx` — WIP
+
+CHECKLIST:
+- Purpose: The supervisor's persistent input surface — pinned to the bottom of the shell once onboarding completes. Visually a `CommandComposer` (gallery shape: routing/attached header up top, prompt area + action rail in the middle, branch chip + shortcut hints in the footer); the static `CommandComposerPromptLine` segments are swapped for a live `<TextInput>` so the surface is editable. Submit parses `@`-tokens against `tokens.ts` and fires `app:navigate` on the IFTTT bus per route token; anything else is dropped today (router-model and supervisor-session wiring lands in follow-up commits and plug into the same `submit()` path).
+- isRoute: FALSE
+- Route: —
+- hasDatashape: FALSE
+- Datashape: emits `app:navigate` events on the IFTTT bus (consumed by `index.tsx`'s `NavigationBus`); reads `useRoute().path` for the live branch chip; consumes `tokens.ts` (`resolveTokens`, `TokenMatch`, `Token`)
+- exposedDatashapes: —
+- Hooks: `useState`, `useRef`, `useRoute`
+- Conditions:
+  - Token preview row renders only when `resolveTokens(draft).length > 0` — chip strip sits above the live `<TextInput>` inside the same `<S.CommandComposerPromptRows>` container
+  - `submit()` is a no-op on empty/whitespace input (`text.trim().length === 0`)
+  - Per-keystroke `resolveTokens(draft)` drives the chip preview; on submit the token list is recomputed off the trimmed `draftRef.current` so the chips and the dispatched events agree even with mid-string edits
+  - Submit fires one `busEmit('app:navigate', token.path)` per matched route token, in source order; `NavigationBus`'s subscriber (in `index.tsx`) is the single subscriber that converts each emit into a `nav.push(...)`
+- Components: `CommandComposerHeader`, `CommandComposerFooter`, `CommandComposerChip` (all from `cart/component-gallery/components/command-composer/`), `TextInput`
+- Atoms: `S.CommandComposerFrame`, `S.CommandComposerMain`, `S.CommandComposerPromptRows`, `S.CommandComposerPromptFlow`, `S.CommandComposerActionRow`, `S.CommandComposerShortcutGroup`, `S.CommandComposerIconButton`, `S.CommandComposerIconText`, `S.CommandComposerSend`, `S.CommandComposerActionText`
+- isUsingTheme: TRUE — every surface is a gallery classifier; the embedded `<TextInput>` overrides only with `theme:` tokens (transparent background, `theme:ink` color, no hex literals)
+- hasIcons: TRUE (via `CommandComposerChip` — the gallery component handles `iconForChip` based on chip prefix; `⌁` → `GitBranch` for the live branch chip, no icon for `@`-prefixed token chips)
+- Icons: routed through `CommandComposerChip` based on chip prefix (`⌁` → `GitBranch`, `▣` / `☰` for file-shaped chips when those land)
+- hasAnimation: FALSE
+- Animations: —
+- TODO:
+  - Wire the router-model tier: parallel HTTP request from `submit()`, parse one-line response (`GOTO <path>` / `OPEN <app>` / `NONE`), fire `app:navigate` from the same code path. Read connection from `Settings.routerConnectionId` once that field exists.
+  - Wire the supervisor session: long-lived Claude session via the cockpit poll-loop pattern (`__claude_init` / `__claude_send` / `__claude_poll`). Render the chat thread inside the route slot, not the strip itself.
+  - Swap the static `ROUTE_CHIP` (label `tier-1 only`) for the live model name once a `Settings.routerConnectionId` (or supervisor connection) is wired. Same for `TARGET_CHIP` once "currently focused app" is a concept.
+  - Token chips for resolved `@`-mentions currently sit on a separate row above the live input; explore inline replacement once the renderer can host mixed text + chip segments inside one `<TextInput>` analogue.
+  - Add an `app:open` IFTTT subscriber and emit shape for app-typed tokens once cartridges mount inline (tokens.ts already has the union slot reserved).
+- PROBLEMS:
+  - The `LEFT_SHORTCUTS` (`@ tag file`, `{} variable`, `/ command`) advertise capabilities only the `@` shortcut delivers today. Either ship the other two or drop them from the static envelope.
+  - `ROUTE_CHIP` (`@tier-1 only`) and `TARGET_CHIP` (`+nav`) are static placeholders. Until they're wired to live state they over-promise — the user sees a `+nav` target chip but no app actually owns "nav" as a target.
+  - Send button and Icon button (`S.CommandComposerSend`, `S.CommandComposerIconButton`) inherit the gallery classifier's hover/press affordance; the icon-button currently has no `onPress` (mode toggle is a future feature) so it visually invites a click that does nothing. Either wire it or strip the affordance.
+
+---
+
+### Token registry — `tokens.ts` — WIP
+
+CHECKLIST:
+- Purpose: Source of truth for the cart's `@`-token catalog — the zero-latency tier of the dispatch hierarchy. Each `@<name>` token resolves to a route (today) or, eventually, an app/command/file/variable. `resolveTokens(text)` runs the regex `/@([A-Za-z][A-Za-z0-9_-]*)/g` against the input, looks up each match in the catalog, and returns `TokenMatch[]` with `{raw, start, end, token}` so a future renderer could highlight inline if it wanted to. Today only `InputStrip` consumes the result.
+- isRoute: FALSE
+- Route: —
+- hasDatashape: FALSE (catalog is a hand-maintained `Record<string, Token>`, not a persisted gallery row — yet)
+- Datashape: produces `TokenMatch` records (`{ raw, start, end, token: { type: 'route'; path; label } }`); the `Token` union has `RouteToken` only today, with an `{ type: 'app'; id; label }` variant reserved in a comment for when cartridges mount inline
+- exposedDatashapes: `Token`, `RouteToken`, `TokenMatch`, `TOKENS` (catalog), `resolveTokens(text)`
+- Hooks: —
+- Conditions:
+  - Lookup is case-insensitive — `@Home`, `@home`, `@HOME` all resolve to the same entry via `m[1].toLowerCase()`
+  - Unknown tokens are silently dropped from the result (no error surface — the user sees the raw `@unknown` text in the input but no chip in the preview)
+  - Regex anchors on a name-start letter (`[A-Za-z]`), so prose with embedded `@` (email addresses, mid-word `@`s) still matches when followed by a name; v1 leaves it permissive — refine the boundary if false positives show up
+  - `TOKEN_RE.lastIndex = 0` reset every call — the `g` flag's stateful index would otherwise leak across calls and skip matches
+- Components: —
+- Atoms: —
+- isUsingTheme: FALSE
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: FALSE
+- Animations: —
+- TODO:
+  - Add `@settings` now that the `/settings` route exists. `@sweatshop` / `@gallery` / `@chatbot` wait for the cartridge ABI to mount those inline.
+  - Add the `{ type: 'app'; id: string }` variant when cartridges are mountable — `InputStrip.submit()` will branch on `token.type` to fire either `app:navigate` (route) or `app:open` (app).
+  - Lift the catalog to a persisted gallery row when third-party cartridges can register their own tokens at install time. Until then, cart code is the authority.
+- PROBLEMS:
+  - Catalog can drift from the actual route list. If a token's `path` no longer matches a registered route, `nav.push(path)` silently lands on an empty Route slot. Add a build-time check against the routes registered in `index.tsx` once the route catalog is extracted to a shared constant.
+  - `@-token` names share namespace across types (route / app / command). When the catalog grows, collision becomes a real concern — first-match-wins or explicit prefixes (`@route:home` vs `@app:sweatshop`) are the next decisions.
 
 ---
 
 ### Index page — `page.tsx` — WIP
 
 CHECKLIST:
-- Purpose: `/` route. Three-way gate: while `onb.complete` is false → `<Onboarding>`; on the first render after `markComplete()` (`!onb.homeEntryPlayed`) → `<HomeEntry>` which carries Step5's exit final frame ("Welcome aboard." + spinner) and dissolves it into the staggered home surface (greeting → goal card → cartridge tile row → profile facts); otherwise → `<HomeStatic>` direct. Both Home variants render through a shared `<HomeBody>` that takes phase opacities — `HomeEntry` drives them off `useAnimationTimeline`, `HomeStatic` passes `1` for everything.
+- Purpose: `/` route. Three-way gate: while `onb.complete` is false → `<Onboarding>`; on the first render after `markComplete()` (`!onb.homeEntryPlayed`) → `<HomeEntry>` which carries Step5's exit final frame ("Welcome aboard." + spinner) and dissolves it into the staggered home surface (greeting → goal card → shell-free gallery tile menu → profile facts); otherwise → `<HomeStatic>` direct. Both Home variants render through a shared `<HomeBody>` that takes phase opacities — `HomeEntry` drives them off `useAnimationTimeline`, `HomeStatic` passes `1` for everything.
 - isRoute: TRUE
 - Route: `/`
 - hasDatashape: FALSE (consumes the onboarding-provider surface)
@@ -50,8 +207,10 @@ CHECKLIST:
   - else `return <HomeStatic />;`
   - `HomeEntry` schedules `markHomeEntryPlayed()` at `ENTRY_DONE_MS = T_PROFILE_END + 80 = 3280 ms` so the next render flips to `<HomeStatic />` cleanly.
   - Goal card body branches on `hasGoal = goal.trim().length > 0` — shows the goal statement when present, falls back to a "you can set one anytime" line when not. The `User.onboarding.status === 'skipped'` branch isn't wired here yet (open thread).
-- Components: `Onboarding`, `HomeEntry`, `HomeStatic`, `HomeBody`, `CartridgeTile`, `ProfileFact`, `SnakeSpinner`
-- Atoms: `Box`, `S.Page`, `S.Card`, `S.Title`, `S.Body`, `S.Caption`, `S.AppStepFrame`, `S.AppStepCenter`, `S.AppStepBottomRight`, `S.AppGreet`, `S.AppProviderTile`, `S.AppProviderTileTitle`, `S.AppProviderTileSubtitle`
+  - Home launcher uses `MenuGridSquareContent` from the component gallery, not `MenuGridSquare`, so the app gets the C1 tile menu body without the gallery demo chrome (`MenuTileShell`, id/title/kind header, outer bordered specimen frame).
+  - Because the gallery shell previously provided the stage height, the app wraps `MenuGridSquareContent` in an explicit `720 x 360` stage (`maxWidth: '100%'`) so flex rows have a stable height and tile text does not collapse.
+- Components: `Onboarding`, `HomeEntry`, `HomeStatic`, `HomeBody`, `MenuGridSquareContent`, `ProfileFact`, `SnakeSpinner`
+- Atoms: `Box`, `S.Page`, `S.Card`, `S.Title`, `S.Body`, `S.Caption`, `S.AppStepFrame`, `S.AppStepCenter`, `S.AppStepBottomRight`, `S.AppGreet`, gallery menu atoms (`S.MenuGridBox`, `S.MenuGridRow`, `S.MenuGridTile` / `S.MenuGridTileActive`, `S.MenuNum`, `S.MenuLabel`, `S.MenuLabelStrong`, `S.MenuHint`)
 - isUsingTheme: TRUE (via classifiers)
 - hasIcons: FALSE
 - Icons: —
@@ -61,17 +220,47 @@ CHECKLIST:
   - Carryover fade-out 500→1400 ms (`fadeOut`)
   - Greet fade-in 1400→1950 ms (24 px slide)
   - Goal card fade-in 1950→2300 ms
-  - Cartridge tile 1 fade-in 2300→2650 ms
-  - Cartridge tile 2 fade-in 2550→2820 ms (overlap by ~100 ms for staggered feel)
-  - Cartridge tile 3 fade-in 2720→2990 ms
+  - Home tile menu fade-in follows the old three-tile stagger envelope: tile opacities are averaged for the menu stage while the stage slide is keyed off tile 1.
+  - Tile phase 1 2300→2650 ms
+  - Tile phase 2 2550→2820 ms (overlap by ~100 ms for staggered feel)
+  - Tile phase 3 2720→2990 ms
   - Profile fact row fade-in 2990→3200 ms
   - `markHomeEntryPlayed()` at 3280 ms
 - TODO:
-  - Wire cartridge tile click handlers when the cartridge ABI lands in cart/app — today they're visual scaffolding (no `onPress` action). Sweatshop / Component gallery / Chatbot tiles each carry a `hint` line indicating wiring state.
+  - Wire home menu click handlers when the cartridge ABI lands in cart/app. Today the tile menu is a launcher-shaped visual surface only; hover/active state works, but no item routes or opens a cartridge yet.
   - Add the `User.onboarding.status === 'skipped'` runtime branch so skipped users see a degraded surface and can resume / restart onboarding inline. The plumbing is half-there (state.jsx persists `'skipped'`); IndexPage just doesn't read it yet.
   - Resolve `~` → `$HOME` in the `Config path` profile fact (currently shows the raw string).
-  - Persist a "last-active cartridge" pointer once tiles can route, so reopening the app lands on the user's last surface instead of always the selector.
+  - Persist a "last-active cartridge" pointer once menu tiles can route/open, so reopening the app lands on the user's last surface instead of always the selector.
 - PROBLEMS: none known.
+
+---
+
+### Settings page — `settings/page.jsx` — Stub
+
+CHECKLIST:
+- Purpose: `/settings` route. Placeholder settings surface attached to the same top chrome nav as Home and About. Shows the current onboarding-backed shell/profile facts that exist today: config path, tour status, and whether the bottom `InputStrip` is enabled.
+- isRoute: TRUE
+- Route: `/settings`
+- hasDatashape: FALSE (consumes the onboarding-provider surface)
+- Datashape: reads `onboarding/state.jsx` (`configPath`, `tourStatus`, `complete`)
+- exposedDatashapes: `onb.configPath`, `onb.tourStatus`, `onb.complete`
+- Hooks: `useOnboarding`
+- Conditions:
+  - `configPath` falls back to `Default config path` when unset/blank
+  - `tourStatus` falls back to `pending` when not a string
+  - Input strip row reports `Enabled` only once onboarding is complete; otherwise `Hidden during onboarding`
+- Components: `SettingRow`
+- Atoms: `Box`, `S.Page`, `S.Card`, `S.Caption`, `S.Title`, `S.Body`
+- isUsingTheme: TRUE (via classifiers)
+- hasIcons: FALSE (route nav icon comes from `index.tsx`, not the page body)
+- Icons: —
+- hasAnimation: FALSE
+- Animations: —
+- TODO:
+  - Replace the stub facts with real editable Settings rows once the gallery `Settings` / `Connection` data shapes get editor components.
+  - Add controls for default provider/model, router connection, privacy policy, budgets, and profile switching.
+  - Decide whether Settings should be a full route or eventually an activity-mode panel once the two-mode shell lands.
+- PROBLEMS: none
 
 ---
 
@@ -158,7 +347,7 @@ CHECKLIST:
 
 ---
 
-### Step 1 — Provider selection — `onboarding/Step2.jsx` — Complete
+### Step 1 — Provider selection — `onboarding/Step2.jsx` — WIP
 
 CHECKLIST:
 - Purpose: Onboarding step 1. Carries over the FirstStep exit-final frame (greet + spinner) when name is persisted, eases everything out, fades in "This application requires a connection to a provider", slides it up, staggers in 3 provider tiles. Click a tile → that tile gains the active border + an inline form expands below the row. Each form has a Probe button that gates on any-input-non-empty. When the probe succeeds (and a model is picked, for API/Local) the screen-level Next button fades in bottom-right. Click Next → exit transition (menu/form fade out, spinner fades in bottom-right, "Thanks for that" fades in centered) → `setStep(2)` advances to Step3. Bottom-left "Take me back!" returns to step 0.
@@ -254,7 +443,7 @@ CHECKLIST:
 
 ---
 
-### Step 3 — Config path — `onboarding/Step4.jsx` — Complete
+### Step 3 — Config path — `onboarding/Step4.jsx` — WIP
 
 CHECKLIST:
 - Purpose: Onboarding step 3. Carries over Step3's exit-final frame (the branching "We get it…" / "Somehow we already knew…" message + bottom-right spinner) when `providerKind` is set, eases everything out, fades in "Where would you like to store your config files?", slides it up, fades in a `TextInput` whose placeholder is `~/.app/config`. Bottom-right shows "Use default" (outline) until any character is typed — then the same anchor swaps to "Next" (filled accent). "Use default" commits the placeholder string `~/.app/config`; "Next" commits the trimmed input. Bottom-left "Take me back!" returns to step 2. Click forward → exit transition fades the interface out, fades in spinner bottom-right + centered "Got it." bridge message, then dispatches `setStep(4)`.
@@ -315,7 +504,7 @@ CHECKLIST:
   - finish path requires a non-empty goal; "I don't know" path explicitly persists `''` so downstream code can distinguish "user said nothing" from "user is mid-type"
   - `exitStartT != null` gates the exit visuals + blocks finish / dontKnow / takeMeBack mid-transition; `setTimeout(..., EXIT_TOTAL_MS)` calls `onb.markComplete()` (no `setStep` — `complete=true` is the terminal state)
   - `<Tooltip>` wraps the `goal` link with `side='top'`, `delayMs={200}`, copy in `GOAL_TOOLTIP`
-- Components: `Tooltip` (`cart/shared/tooltip/Tooltip`), `SnakeSpinner`, `S.Button`, `S.ButtonLabel`, `S.ButtonOutline`, `S.ButtonOutlineLabel`
+- Components: `Tooltip` (`runtime/tooltip/Tooltip`), `SnakeSpinner`, `S.Button`, `S.ButtonLabel`, `S.ButtonOutline`, `S.ButtonOutlineLabel`
 - Atoms: `Box`, `TextInput`
 - isUsingTheme: TRUE — every surface goes through a classifier in `components.cls.ts` (`AppPromptText`, `AppPromptRow`, `AppPromptLink`, `AppPromptLinkText`, `AppGreet`, `AppNameInput` (reused for the goal field), `AppStepFrame`, `AppStepCenter`, `AppStepCenterCol`, `AppStepBottomLeft`, `AppStepBottomRight`, `AppStepBottomRightRow`, `AppStepDimmable`)
 - hasIcons: FALSE
@@ -345,7 +534,7 @@ CHECKLIST:
 
 ## State, library, manifest
 
-### Onboarding state provider — `onboarding/state.jsx` — Complete
+### Onboarding state provider — `onboarding/state.jsx` — WIP
 
 **Persistence is live.** State.jsx now writes to the gallery data graph through `useCRUD` (namespace `app`). The captured fields don't sit on `User.onboarding` as a blob — each one lands in its proper home: `name → User.displayName`, `traits → User.preferences.accommodations[]` (catalog notes from `traits.js`), `configPath → User.configPath`, `goal → Goal row`, provider pick + form values → a `Connection` row + `Settings.defaultConnectionId/defaultModelId`. `User.onboarding` keeps just the meta (status / step / timestamps / tourStatus). On bootstrap the provider follows User → Settings → Connection to recover `providerKind`, and lists Goals (workspaceId='ws_local', originActor='user') for goal text. Set `SEED_COMPLETED_USER = true` at the top of state.jsx to short-circuit a fresh boot straight into the homepage for dev iteration.
 
@@ -461,6 +650,67 @@ CHECKLIST:
 - Animations: —
 - TODO: add an icon path once we have one
 - PROBLEMS: none
+
+---
+
+## Chat → Activity transition (WIP)
+
+The cart/app shell today is "chat is everything" — onboarding flows are full-screen, the home page centers around the persistent `<InputStrip>`, every route is a page-sized surface. The next architectural shift is a **two-mode shell**: focal mode (today's shape, generalized — chat IS the screen) versus activity mode (chat docks to a sidebar in the bottom-left, a side menu sits above it, an actual app activity occupies the main view). The chat is the *same instance* throughout — typed text, scroll position, message history all carry through. The `<InputStrip>` never unmounts; the surrounding chrome rearranges around it.
+
+Prototyped end-to-end in `cart/input_lab/` (2026-05-01) — that lab was the canonical source for the layout rects, the timing, and the animation roles.
+
+**Implementation status (2026-05-01):**
+- ✅ **Input side-dock morph (A↔B)** — landed in `cart/app/index.tsx` (commit `3bad2f07d`). Documented in the **Animation principles → Input-strip shell morph (GOLDEN)** section above.
+- ✅ **Three-state shell** — A (home) / B (activity-docked) / C (activity-focal). `headingTo` derived from `(routeMode, focal)`; same-mode route navigations don't fire the morph. All six transitions (A↔B, A↔C, B↔C) handled by the same useEffect via the `TARGETS` table + variant-flip pivot logic.
+- ✅ **Route trigger** — routes carry `mode: 'full' | 'side'` metadata in the `ROUTES` table. `nav.push('/activity/sweatshop')` triggers A→B; `nav.push('/')` triggers B→A or C→A. Same-mode navigations between `/` ↔ `/about` ↔ `/settings` (all mode='full') stay in state A — no morph fires, just route content swaps.
+- ✅ **Focus trigger** — `cart/app/shell.tsx` exports `useInputFocal()` + `setInputFocal()`. Activities call `setInputFocal(true)` to take the input into focal mode (B→C); `setInputFocal(false)` to release (C→B). State PERSISTS across route changes — going home from C and back to the same activity preserves focal=true → arrives in C directly via A→C.
+- ✅ **Activity host (initial)** — activity routes render their pages in the same routes Box as `/`, `/about`, `/settings`. The page-area layout reflows around the slots via `paddingLeft: sideWidth, paddingBottom`; activities don't need to know about the shell. `cart/app/sweatshop/page.tsx` is the placeholder demo, with worker tiles that exercise B↔C.
+- ⬜ **Side menu content** — `AppSideMenuInput` is empty (just the input when in B; nothing when in C). Needs menu items (Home / Files / Memory / Settings shape from input_lab) and chat-history list.
+- ⬜ **Real trigger surfaces** — currently the debug toggle at top-left (top:60, left:60) navigates between `/` and `/activity/sweatshop`, plus a FOCUS/UNFOCUS button when in side mode. Real triggers (chat-message-sent, grid-tile click, @-token) replace those.
+- ⬜ **Persistence** — `inputFocal` lives in a module-level store; doesn't survive Zig hot-reloads. Wire into `state.jsx`'s `useCRUD` namespace alongside `User.onboarding` once the activity registry exists.
+
+### Planned shape — Chat → Activity transition — WIP
+
+CHECKLIST:
+- Purpose: A shell-level mode toggle one level above the router. **Focal mode**: a centered chat panel (~640w) with mock convo + InputStrip is the entire UI. **Activity mode**: chat panel tweens to a docked sidebar (~360w, bottom-left), a side menu (Home / Files / Memory / Settings shape) springs in above it, and an `ActivityHost` springs in to fill the main view. Trigger surface is the open question — @-token (`@activity:foo`), explicit button on a chat suggestion, IFTTT bus event from the supervisor, or some combination. The mode swap is *not* a route change; routes (if any survive) live inside the ActivityHost.
+- isRoute: FALSE — shell-level mode that wraps the router, not a route itself
+- Route: —
+- hasDatashape: TRUE — needs `User.shell.{mode: 'focal' | 'activity', activeActivityId?: string, lastActivityId?: string}`. Persist alongside onboarding so reload restores the user where they left off.
+- Datashape: reads `OnboardingProvider` (gated on completion — focal stays the only mode during onboarding); writes shell mode on every transition; writes `activeActivityId` when the user picks one
+- exposedDatashapes: `shellMode`, `activeActivityId`, `setShellMode(mode)`, `openActivity(id)`, `closeActivity()`
+- Hooks: `usePhaseTimeline` (lift from `cart/input_lab/index.tsx:71`), a new `useShellMode` context provider mounted alongside `OnboardingProvider`, `useActivity(id)` once the activity registry exists, `useIFTTT('app:openActivity', ...)` to receive triggers from the bus
+- Conditions:
+  - **Trigger to activity:** `setShellMode('activity')` fires on (a) IFTTT `app:openActivity` event with a valid id, (b) sidebar menu item click in activity mode (switches `activeActivityId` without leaving activity mode), (c) — TBD — an @-token resolved by `tokens.ts`. Onboarding gate: while `!onb.complete`, all triggers no-op.
+  - **Trigger to focal:** explicit "Back to chat" affordance (top-right in lab); also fires when `activeActivityId` becomes null with no fallback. Closing an activity defaults to focal.
+  - **Mid-transition reversal:** snapshot the chat panel's current visual rect as the new `from` so a fast back-click glides instead of snapping. Already handled by `usePhaseTimeline` in the lab.
+  - **Hot-reload:** mode + activity id should round-trip through `state.jsx` persistence so a Zig-side rebuild doesn't dump the user into focal mode mid-task.
+- Components: `AppShell` (top-level mode container, replaces today's `<Box>` wrap in `index.tsx:176`), `ChatPanel` (lifts the persistent `<InputStrip>` plus the home/onboarding message history), `SideMenu` (NEW — vertical nav, lab uses Home / Files / Memory / Settings as placeholder), `ActivityHost` (NEW — mounts the activity referenced by `activeActivityId`, with an empty / not-found fallback), `ActivityChrome` (the titlebar over the activity content — see lab's AppWindow header)
+- Atoms: `Box`, `Pressable`, `Text` for the shell scaffolding. Classifiers TBD — add `AppShellRoot`, `AppShellChatPanel`, `AppShellSideMenu`, `AppShellSideMenuItem`, `AppShellSideMenuItemActive`, `AppShellActivityHost`, `AppShellActivityChrome` to `components.cls.ts`. The lab uses inline theme tokens (`theme:bg1`, `theme:rule`, `theme:accent`, etc.) — keep classifier-only theming when porting per the cart's no-color-drift rule.
+- isUsingTheme: TRUE
+- hasIcons: TBD — side menu items likely need icons (the cart's existing `runtime/icons/icons` set has Home / Info; Files / Memory / Settings need adding or substituting)
+- Icons: TBD
+- hasAnimation: TRUE
+- Animations: follow the **Animation principles** section above.
+  - **Chat panel: TWEEN.** `easeInOutCubic` lerp on `{ left, top, width, height }` between focal and docked rects. The chat is on screen one frame ago — same identity across the move.
+  - **Side menu: SPRING in / smooth out.** Opacity tracks the same eased phase progress (`t` 0→1) as the chat. Scale `0.94 + 0.06 * easeOutBack(t)` on entry (overshoots toward 1 then settles); on exit, scale uses `easeInOutCubic` (no overshoot — overshoot on disappearing things reads as broken). New element entering view.
+  - **App window (ActivityHost): SPRING in / smooth out.** Same shape as side menu. New element entering view.
+  - **Duration:** 700ms in the lab. Probably tune down to ~500ms in the real app once content is real, since every activity-launch eats this.
+  - **Direction detection:** computed from this transition's `from→to` — `isEntering = toPhase >= fromPhase`. Picks spring on the way in, smooth on the way out, and survives mid-transition reversals.
+- TODO:
+  - **Define what an "activity" actually is.** Manifest format? Component + lifecycle hooks (`onOpen`, `onClose`, `onResize`)? Title source? Co-located with the cart or registered globally? Until this is decided, ActivityHost is just a placeholder.
+  - **Decide trigger surface(s).** @-token (`@activity:embed-pipeline`) is the most consistent with how nav already works (`tokens.ts` route entries fire `app:navigate`). Add an `activity` token type and have `InputStrip.submit()` fire `app:openActivity` for those. Direct buttons in chat suggestions are also fine. Don't ship multiple competing triggers.
+  - **Promote `usePhaseTimeline` to shared.** Today it lives in `cart/input_lab/index.tsx:71`. Move to `cart/app/anim.js` (or a new `cart/app/shell.tsx`) so the real shell can consume it. Keep the snapshot-on-change behavior — it's load-bearing.
+  - **Side menu items:** lab hardcodes `['Home', 'Files', 'Memory', 'Settings']`. Real list comes from a registered set per activity? A static app-wide nav? Could be both (app-wide affordances above an activity-specific section).
+  - **Persistence:** mode + active activity id should survive reloads. Wire through `state.jsx`'s `useCRUD` namespace alongside `User.onboarding`.
+  - **Top chrome reconciliation:** today's `Chrome` component (`index.tsx:100`) carries brand row + nav row + window controls. In activity mode the side menu replaces the nav row; the top chrome should reduce to brand + window controls. Decide whether the brand row stays at top or moves into the side menu's header.
+  - **Routing:** today's `/` and `/about` routes are full-page. In activity mode do they live inside the ActivityHost, or does routing become per-activity? Likely the latter — global routes feel wrong inside a focused activity surface.
+- PROBLEMS:
+  - **InputStrip sizing in a 360w sidebar.** `CommandComposerFrame` has `minHeight: 206`, `CommandComposerMain` has `paddingLeft: 32, paddingRight: 24` (`components.cls.ts:708, 735`). At sidebar width the strip looks chunky and the asymmetric left padding is more visible. The `sm` breakpoint variant drops minHeight to 80 — but `useBreakpoint` reads the *window* size, not the container size, so docking the strip into a sidebar inside a 1280-wide window won't trigger compact mode. Two paths: (a) add a `compact` prop to InputStrip that the shell sets explicitly when docked, (b) introduce a container-query-style hook for local sizing. (a) is the smaller change.
+  - **`useBreakpoint` is window-scoped.** Same root cause as above; affects any future "this widget is in a small slot" decision. Container-query-shaped solution is the real fix; not blocking for the first activity.
+  - **No activities exist yet.** This is a transition with nothing to transition to. Build at least one real activity (embed-pipeline is the natural first one — `cart/embed_lab/` is already shaped like an activity) before shipping the shell change, or the activity mode will be empty placeholder all the way down.
+  - **Hot-reload state preservation.** `useHotState` + `framework/hotstate.zig` are wired but state resets on reload (per top-level CLAUDE.md). Until that's fixed, every Zig rebuild snaps the user back to focal mode and clears `activeActivityId`.
+  - **Onboarding interaction.** The lab gates on no onboarding. The real shell needs to: stay focal during onboarding (no activity triggers fire), allow the deferred-clarification notification (see next section) to work in either mode, decide whether tour mode lives in focal or its own thing.
+  - **No activity registry / no activity loader.** ActivityHost can't be written without knowing what it loads. The "activity = component + manifest" decision is gating.
 
 ---
 
