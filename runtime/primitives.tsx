@@ -77,13 +77,37 @@ export const Col: any = (props: any) => {
   return h('View', { ...props, style }, props.children);
 };
 
-// Coalesce adjacent string/number children into a single string so the layout
-// engine sees one continuous text run, not N independent inline boxes.
-// Without this, `<Text>{n} item{n===1?'':'s'}</Text>` lays out "6", " item",
-// "s" as three siblings and can wrap mid-word ("item" on one line, "s" on
-// the next). React-DOM and React-Native both flatten this; we have to here.
-// Element children (nested <strong>, etc.) pass through untouched — true
-// inline flow across element boundaries is the framework-side fix.
+// Flatten children into a single text run.
+//
+// Two jobs:
+//   1. Coalesce adjacent string/number children, so `<Text>{n} item{n===1?'':'s'}</Text>`
+//      doesn't wrap mid-word as three siblings.
+//   2. Splice nested Text-like elements (the Text primitive, and any classifier
+//      whose def.type === 'Text') inline. Without this, `<Body>foo <Body>bar</Body> baz</Body>`
+//      becomes three blocks-in-row in the layout — the author wrote one string,
+//      the user sees three. React-DOM solves this with text-flow inline boxes;
+//      RN solves it by collapsing nested <Text>. We follow RN.
+//
+// Phase-1 tradeoff: a nested Text-like contributes its text content but loses
+// its own per-element style. For the common case (same-style nesting like
+// <Body>...<Body>x</Body>...</Body>) this is exactly right. For genuine
+// styled inline emphasis (bold/colored span inside paragraph), Phase-2 would
+// emit a host-level `segments` prop and a segmented draw path in text.zig.
+// No cart needs that today; if one ever does, that's the upgrade path.
+//
+// Non-text element children (e.g. <Pressable>, <Image>) pass through
+// untouched — they remain block siblings, same as today.
+function isInlineTextLike(el: any): boolean {
+  if (!el || typeof el !== 'object') return false;
+  const t = (el as any).type;
+  if (t == null) return false;
+  if (t === Text) return true;
+  // Text-classifier: classifier({ Body: { type: 'Text', ... } }) tags its
+  // component with __isClassifier and stashes the original def on __def.
+  if (typeof t === 'function' && (t as any).__isClassifier && (t as any).__def?.type === 'Text') return true;
+  return false;
+}
+
 function flattenTextChildren(children: any): any {
   if (children == null) return children;
   const list = Array.isArray(children) ? children : [children];
@@ -93,17 +117,27 @@ function flattenTextChildren(children: any): any {
   const flush = (): void => {
     if (bufHas) { out.push(buf); buf = ''; bufHas = false; }
   };
-  for (const c of list) {
-    if (c == null || c === false || c === true) continue;
+  const visit = (c: any): void => {
+    if (c == null || c === false || c === true) return;
     const t = typeof c;
     if (t === 'string' || t === 'number') {
       buf += String(c);
       bufHas = true;
-    } else {
-      flush();
-      out.push(c);
+      return;
     }
-  }
+    if (Array.isArray(c)) {
+      for (const ci of c) visit(ci);
+      return;
+    }
+    if (isInlineTextLike(c)) {
+      const inner = (c as any).props?.children;
+      if (inner != null) visit(inner);
+      return;
+    }
+    flush();
+    out.push(c);
+  };
+  for (const c of list) visit(c);
   flush();
   if (out.length === 0) return undefined;
   if (out.length === 1) return out[0];
