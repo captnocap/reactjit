@@ -3670,4 +3670,444 @@ classifier({
     backgroundColor: 'theme:bg',
     justifyContent: 'flex-end',
   }},
+
+  // ══════════════════════════════════════════════════════════════
+  //   Manifest Gate (cart/manifest_gate/index.tsx) — Round-2 of the
+  //   line-manifest benchmark. All theme-touching styling lives here;
+  //   per-render values (spring opacity, slide y, pulse-driven sizes)
+  //   flow as inline style overrides at the call sites.
+  // ══════════════════════════════════════════════════════════════
+
+  ManifestGateRoot: { type: 'Box', style: {
+    width: '100%', height: '100%',
+    backgroundColor: 'theme:bg',
+    flexDirection: 'column',
+  }},
+  ManifestGateChrome: { type: 'Box', style: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 'theme:spaceX6', paddingRight: 'theme:spaceX6',
+    paddingTop: 'theme:spaceX5', paddingBottom: 'theme:spaceX5',
+    backgroundColor: 'theme:bg1',
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+  }},
+  ManifestGateChromeTitle:    { type: 'Text', size: 'theme:typeHeading', bold: true, color: 'theme:ink' },
+  ManifestGateChromeSubtitle: { type: 'Text', size: 'theme:typeMeta', color: 'theme:inkDim' },
+  ManifestGateChromeStatusCol: { type: 'Box', style: {
+    flexDirection: 'column', alignItems: 'flex-end', gap: 'theme:spaceX1',
+  }},
+  ManifestGateChromeStatusRow: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center', gap: 'theme:spaceX3',
+  }},
+  ManifestGatePhaseLabel: { type: 'Text', size: 'theme:typeMeta', bold: true, color: 'theme:ink' },
+  ManifestGatePhaseMeta:  { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim' },
+
+  // Status-dot variants — discrete classifier per phase color so the
+  // theme owns the palette. JSX picks one based on phase.
+  ManifestGateStatusDotIdle:       { type: 'Box', style: { borderRadius: 'theme:radiusRound', backgroundColor: 'theme:inkDim' } },
+  ManifestGateStatusDotLoading:    { type: 'Box', style: { borderRadius: 'theme:radiusRound', backgroundColor: 'theme:warn' } },
+  ManifestGateStatusDotLoaded:     { type: 'Box', style: { borderRadius: 'theme:radiusRound', backgroundColor: 'theme:ok' } },
+  ManifestGateStatusDotGenerating: { type: 'Box', style: { borderRadius: 'theme:radiusRound', backgroundColor: 'theme:accent' } },
+  ManifestGateStatusDotFailed:     { type: 'Box', style: { borderRadius: 'theme:radiusRound', backgroundColor: 'theme:flag' } },
+
+  // Body region (everything below the chrome).
+  ManifestGateBody: { type: 'Box', style: {
+    flexGrow: 1,
+    paddingLeft: 'theme:spaceX7', paddingRight: 'theme:spaceX7',
+    paddingTop: 'theme:spaceX6', paddingBottom: 'theme:spaceX6',
+    gap: 'theme:spaceX5',
+    flexDirection: 'column',
+  }},
+
+  ManifestGatePanel: { type: 'Box', style: {
+    backgroundColor: 'theme:bg1',
+    borderWidth: 1,
+    borderColor: 'theme:rule',
+    borderRadius: 'theme:radiusMd',
+    paddingLeft: 'theme:spaceX6', paddingRight: 'theme:spaceX6',
+    paddingTop: 'theme:spaceX5', paddingBottom: 'theme:spaceX5',
+    gap: 'theme:spaceX4',
+    flexDirection: 'column',
+  }},
+  ManifestGatePanelGrow: { type: 'Box', style: {
+    backgroundColor: 'theme:bg1',
+    borderWidth: 1,
+    borderColor: 'theme:rule',
+    borderRadius: 'theme:radiusMd',
+    paddingLeft: 'theme:spaceX6', paddingRight: 'theme:spaceX6',
+    paddingTop: 'theme:spaceX5', paddingBottom: 'theme:spaceX5',
+    gap: 'theme:spaceX4',
+    flexDirection: 'column',
+    flexGrow: 1, minHeight: 0,
+  }},
+  ManifestGatePanelHeader: { type: 'Box', style: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+  }},
+  ManifestGatePanelTitle:    { type: 'Text', size: 'theme:typeBase', bold: true, color: 'theme:ink' },
+  ManifestGatePanelHint:     { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim' },
+  ManifestGatePanelHintMono: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim', font: 'theme:fontMono' },
+
+  // Verdict count badges — separate classifiers, picked by JSX.
+  ManifestGateCountTrue:    { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:ok' },
+  ManifestGateCountFalse:   { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:flag' },
+  ManifestGateCountUnclear: { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:warn' },
+  ManifestGateCountElapsed: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim' },
+
+  // Run button: active vs disabled (separate classifiers, no inline color
+  // logic — JSX picks based on (ready && !running)).
+  ManifestGateRunBtn: { type: 'Pressable', style: {
+    paddingLeft: 'theme:spaceX5', paddingRight: 'theme:spaceX5',
+    paddingTop: 'theme:spaceX3', paddingBottom: 'theme:spaceX3',
+    borderRadius: 'theme:radiusSm',
+    backgroundColor: 'theme:accent',
+    alignItems: 'center', justifyContent: 'center',
+  }},
+  ManifestGateRunBtnDisabled: { type: 'Pressable', style: {
+    paddingLeft: 'theme:spaceX5', paddingRight: 'theme:spaceX5',
+    paddingTop: 'theme:spaceX3', paddingBottom: 'theme:spaceX3',
+    borderRadius: 'theme:radiusSm',
+    backgroundColor: 'theme:bg2',
+    alignItems: 'center', justifyContent: 'center',
+  }},
+  ManifestGateRunBtnLabel:         { type: 'Text', size: 'theme:typeBase', bold: true, color: 'theme:ink' },
+  ManifestGateRunBtnLabelDisabled: { type: 'Text', size: 'theme:typeBase', bold: true, color: 'theme:inkDim' },
+
+  // Stream panel — heartbeat sparkline cells + the live token line.
+  ManifestGateStreamSubtitle: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim' },
+  ManifestGateStreamCells: { type: 'Box', style: {
+    flexDirection: 'row', gap: 'theme:spaceX1',
+  }},
+  ManifestGateStreamCellOff: { type: 'Box', style: {
+    width: 6, height: 12, borderRadius: 'theme:radiusSm', backgroundColor: 'theme:bg2',
+  }},
+  ManifestGateStreamCellOn: { type: 'Box', style: {
+    width: 6, height: 12, borderRadius: 'theme:radiusSm', backgroundColor: 'theme:accent',
+  }},
+  ManifestGateStreamClaim: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim' },
+  ManifestGateStreamBox: { type: 'Box', style: {
+    backgroundColor: 'theme:bg2',
+    borderRadius: 'theme:radiusSm',
+    paddingLeft: 'theme:spaceX4', paddingRight: 'theme:spaceX4',
+    paddingTop: 'theme:spaceX3', paddingBottom: 'theme:spaceX3',
+    minHeight: 28,
+  }},
+  ManifestGateStreamText: { type: 'Text', size: 'theme:typeCaption', color: 'theme:accent', font: 'theme:fontMono' },
+  ManifestGateStreamPlaceholder: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim', font: 'theme:fontMono' },
+
+  // Verdict row — idle vs active (active gets a continuous border-flow
+  // trace; the GenericCardShell pattern from list_lab "border" scene).
+  ManifestGateVerdictRow: { type: 'Box', style: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 'theme:spaceX3',
+    paddingLeft: 'theme:spaceX3', paddingRight: 'theme:spaceX3',
+    paddingTop: 'theme:spaceX2', paddingBottom: 'theme:spaceX2',
+    borderRadius: 'theme:radiusSm',
+    backgroundColor: 'theme:bg2',
+    borderWidth: 1, borderColor: 'theme:rule',
+  }},
+  ManifestGateVerdictRowActive: { type: 'Box', style: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 'theme:spaceX3',
+    paddingLeft: 'theme:spaceX3', paddingRight: 'theme:spaceX3',
+    paddingTop: 'theme:spaceX2', paddingBottom: 'theme:spaceX2',
+    borderRadius: 'theme:radiusSm',
+    backgroundColor: 'theme:bg2',
+    borderWidth: 1, borderColor: 'theme:accent',
+    borderDashOn: 6, borderDashOff: 4, borderDashWidth: 1,
+    borderFlowSpeed: 24,
+  }},
+
+  // Verdict badge — discrete classifier per state (no inline color picks).
+  ManifestGateBadgeTrue:    { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:ok',     font: 'theme:fontMono' },
+  ManifestGateBadgeFalse:   { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:flag',   font: 'theme:fontMono' },
+  ManifestGateBadgePending: { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:warn',   font: 'theme:fontMono' },
+  ManifestGateBadgeUnclear: { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:warn',   font: 'theme:fontMono' },
+  ManifestGateBadgeIdle:    { type: 'Text', size: 'theme:typeCaption', bold: true, color: 'theme:inkDim', font: 'theme:fontMono' },
+
+  ManifestGateBadgeSlot: { type: 'Box', style: { width: 64, alignItems: 'center' } },
+  ManifestGateLineSlot:  { type: 'Box', style: { width: 40 } },
+  ManifestGateLineLabel: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim', font: 'theme:fontMono' },
+  ManifestGateClaimSlot: { type: 'Box', style: { flexGrow: 1 } },
+  ManifestGateClaimText: { type: 'Text', size: 'theme:typeCaption', color: 'theme:ink' },
+
+  ManifestGateEmpty: { type: 'Text', size: 'theme:typeCaption', color: 'theme:inkDim' },
+
+  // ──────────────────────────────────────────────────────────────
+  //   Persistent assistant chat (full ↔ side fluid surface)
+  // ──────────────────────────────────────────────────────────────
+  //
+  // The supervisor chat renders above the InputStrip in two shapes:
+  //   - 'side' — pinned inside AppSideMenuInput, above the docked
+  //              InputStrip (state B = activity-docked)
+  //   - 'full' — fills the activity content area, above the bottom
+  //              InputStrip bar (state C = activity-focal)
+  // Same component, two slots; thread state lives in cart/app/chat/store.
+  // The morph itself is a fade — geometry rides the InputStrip GOLDEN
+  // morph; the chat panel renders into whichever slot is winning.
+
+  AppChatPanel: { type: 'Box', style: {
+    width: '100%',
+    flexGrow: 1,
+    minHeight: 0,
+    flexDirection: 'column',
+    backgroundColor: 'theme:bg',
+    borderWidth: 1,
+    borderColor: 'theme:accentHot',
+    overflow: 'hidden',
+  }},
+
+  AppChatPanelHeader: { type: 'Box', style: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 36,
+    paddingLeft: 12, paddingRight: 8,
+    borderBottomWidth: 1,
+    borderColor: 'theme:rule',
+    gap: 8,
+    backgroundColor: 'theme:bg1',
+    flexShrink: 0,
+  }},
+
+  AppChatPanelHeaderLeft: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+  }},
+
+  AppChatPanelHeaderDot: { type: 'Box', style: {
+    width: 8, height: 8, borderRadius: 'theme:radiusPill',
+    backgroundColor: 'theme:accent',
+  }},
+
+  AppChatPanelHeaderTitle: { type: 'Text', size: 11, bold: true, color: 'theme:ink',
+                             style: { fontFamily: 'theme:fontMono', letterSpacing: 3, lineHeight: 13, whiteSpace: 'pre' } },
+
+  AppChatPanelHeaderState: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 18, paddingLeft: 6, paddingRight: 6,
+    borderWidth: 1, borderColor: 'theme:rule',
+    backgroundColor: 'theme:bg2',
+  }},
+
+  AppChatPanelHeaderStateText: { type: 'Text', size: 9, bold: true, color: 'theme:inkDim',
+                                  style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatPanelHeaderToggle: { type: 'Pressable', style: {
+    width: 24, height: 24,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'theme:rule',
+    backgroundColor: 'theme:bg2',
+  }},
+
+  AppChatPanelHeaderToggleText: { type: 'Text', size: 12, bold: true, color: 'theme:ink',
+                                   style: { fontFamily: 'theme:fontMono', lineHeight: 14, whiteSpace: 'pre' } },
+
+  AppChatPanelSubline: { type: 'Box', style: {
+    paddingLeft: 12, paddingRight: 12,
+    paddingTop: 6, paddingBottom: 6,
+    borderBottomWidth: 1, borderColor: 'theme:rule',
+    flexShrink: 0,
+  }},
+
+  AppChatPanelSublineText: { type: 'Text', size: 9, color: 'theme:inkDimmer',
+                              style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatTranscript: { type: 'Box', style: {
+    flexGrow: 1,
+    minHeight: 0,
+    flexDirection: 'column',
+    paddingLeft: 14, paddingRight: 14,
+    paddingTop: 14, paddingBottom: 14,
+    gap: 14,
+    overflow: 'scroll',
+  }},
+
+  AppChatTurn: { type: 'Box', style: {
+    flexDirection: 'column',
+    gap: 6,
+  }},
+
+  AppChatTurnMetaRow: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 8, flexWrap: 'wrap',
+  }},
+
+  AppChatTurnAuthor: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 16, paddingLeft: 4, paddingRight: 4,
+    borderWidth: 1, borderColor: 'theme:rule',
+    backgroundColor: 'theme:bg2',
+  }},
+
+  AppChatTurnAuthorText: { type: 'Text', size: 9, bold: true, color: 'theme:inkDim',
+                            style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatTurnTime: { type: 'Text', size: 9, color: 'theme:inkDimmer',
+                     style: { fontFamily: 'theme:fontMono', letterSpacing: 1, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatTurnTag: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 16, paddingLeft: 4, paddingRight: 4,
+    borderWidth: 1, borderColor: 'theme:accent',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatTurnTagText: { type: 'Text', size: 9, bold: true, color: 'theme:accent',
+                        style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatTurnLift: { type: 'Text', size: 9, color: 'theme:inkDimmer',
+                     style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatTurnBody: { type: 'Text', size: 13, color: 'theme:ink',
+                     style: { fontFamily: 'theme:fontSans', lineHeight: 18 } },
+
+  AppChatYouTurn: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    gap: 8,
+    paddingLeft: 10, paddingRight: 10,
+    paddingTop: 6,   paddingBottom: 6,
+    borderLeftWidth: 2,
+    borderColor: 'theme:rule',
+    backgroundColor: 'theme:bg1',
+  }},
+
+  AppChatYouTurnCaret: { type: 'Text', size: 13, color: 'theme:accent',
+                         style: { fontFamily: 'theme:fontMono', lineHeight: 18, whiteSpace: 'pre' } },
+
+  AppChatYouTurnText: { type: 'Text', size: 13, color: 'theme:ink',
+                        style: { fontFamily: 'theme:fontSans', lineHeight: 18 } },
+
+  // Embedded surface card (audit / fleet / etc.). Border is the
+  // continuous-flow dash from Animation principles → Card / box borders
+  // → Continuous marching flow ("this card is alive").
+  AppChatSurfaceCard: { type: 'Box', style: {
+    flexDirection: 'column',
+    paddingLeft: 12, paddingRight: 12,
+    paddingTop: 10,  paddingBottom: 10,
+    gap: 10,
+    backgroundColor: 'theme:bg1',
+    borderWidth: 1, borderColor: 'theme:accentHot',
+    borderDash: [44, 108],
+    borderDashWidth: 1,
+    borderFlowSpeed: 18,
+  }},
+
+  AppChatSurfaceHeader: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 8, flexWrap: 'wrap',
+  }},
+
+  AppChatSurfaceTitle: { type: 'Text', size: 14, bold: true, color: 'theme:ink',
+                         style: { fontFamily: 'theme:fontSans', lineHeight: 18 } },
+
+  AppChatSurfaceTag: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    height: 16, paddingLeft: 4, paddingRight: 4,
+    borderWidth: 1, borderColor: 'theme:accentHot',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatSurfaceTagText: { type: 'Text', size: 9, bold: true, color: 'theme:accentHot',
+                            style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatSurfaceCommand: { type: 'Box', style: {
+    paddingLeft: 10, paddingRight: 10,
+    paddingTop: 6, paddingBottom: 6,
+    borderWidth: 1, borderColor: 'theme:rule',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatSurfaceCommandText: { type: 'Text', size: 12, color: 'theme:accent',
+                                style: { fontFamily: 'theme:fontMono', lineHeight: 16, whiteSpace: 'pre' } },
+
+  AppChatSurfaceBody: { type: 'Text', size: 12, color: 'theme:inkDim',
+                        style: { fontFamily: 'theme:fontSans', lineHeight: 16 } },
+
+  AppChatSurfaceActions: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 8, flexWrap: 'wrap',
+  }},
+
+  AppChatSurfaceAction: { type: 'Pressable', style: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 24, paddingLeft: 10, paddingRight: 10,
+    borderWidth: 1, borderColor: 'theme:rule',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatSurfaceActionPrimary: { type: 'Pressable', style: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 24, paddingLeft: 10, paddingRight: 10,
+    borderWidth: 1, borderColor: 'theme:accentHot',
+    backgroundColor: 'theme:bg2',
+  }},
+
+  AppChatSurfaceActionText: { type: 'Text', size: 11, color: 'theme:ink',
+                               style: { fontFamily: 'theme:fontMono', letterSpacing: 1, lineHeight: 13, whiteSpace: 'pre' } },
+
+  // Fleet status pills — IDLE / TOOL / STUCK / RAT. One pill body per
+  // state so the border / text colors stay token-driven and never drift
+  // into hex. Add new states by adding a sibling classifier; never
+  // inline a color here.
+  AppChatStatusPill: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 18, paddingLeft: 6, paddingRight: 6,
+    borderWidth: 1, borderColor: 'theme:ok',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatStatusPillTool: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 18, paddingLeft: 6, paddingRight: 6,
+    borderWidth: 1, borderColor: 'theme:accent',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatStatusPillStuck: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 18, paddingLeft: 6, paddingRight: 6,
+    borderWidth: 1, borderColor: 'theme:warn',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatStatusPillRat: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 18, paddingLeft: 6, paddingRight: 6,
+    borderWidth: 1, borderColor: 'theme:flag',
+    backgroundColor: 'theme:bg',
+  }},
+
+  AppChatStatusPillText:      { type: 'Text', size: 9, bold: true, color: 'theme:ok',
+                                style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+  AppChatStatusPillTextTool:  { type: 'Text', size: 9, bold: true, color: 'theme:accent',
+                                style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+  AppChatStatusPillTextStuck: { type: 'Text', size: 9, bold: true, color: 'theme:warn',
+                                style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+  AppChatStatusPillTextRat:   { type: 'Text', size: 9, bold: true, color: 'theme:flag',
+                                style: { fontFamily: 'theme:fontMono', letterSpacing: 2, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatFleetGrid: { type: 'Box', style: {
+    flexDirection: 'column',
+    gap: 8,
+  }},
+
+  AppChatFleetRow: { type: 'Box', style: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 12, flexWrap: 'wrap',
+  }},
+
+  AppChatFleetCell: { type: 'Box', style: {
+    flexDirection: 'column',
+    gap: 4,
+    minWidth: 84,
+  }},
+
+  AppChatFleetCellName: { type: 'Text', size: 12, color: 'theme:ink',
+                          style: { fontFamily: 'theme:fontMono', lineHeight: 14, whiteSpace: 'pre' } },
+
+  AppChatFleetNote: { type: 'Text', size: 12, color: 'theme:inkDim',
+                      style: { fontFamily: 'theme:fontSans', lineHeight: 16 } },
 });
