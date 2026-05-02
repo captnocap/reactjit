@@ -23,7 +23,6 @@
 // `useAssistantChat()` hook in the follow-up commit.
 
 import { classifiers as S } from '@reactjit/core';
-import { Box, ScrollView } from '@reactjit/runtime/primitives';
 import type { ChatShape } from './types';
 import { useChatTurns } from './store';
 import { AssistantTurn } from './AssistantTurn';
@@ -67,28 +66,10 @@ export function AssistantChat({
         </S.AppChatPanelSubline>
       ) : null}
 
-      {/* Transcript wrapper drops the classifier's padding/gap so the
-          ScrollView can fill edge-to-edge inside the panel; the inner
-          Box re-applies the visual padding/gap so the messages keep
-          their breathing room while the scroll affordance sits on the
-          panel's edge. */}
-      <S.AppChatTranscript style={{
-        paddingLeft: 0, paddingRight: 0,
-        paddingTop: 0, paddingBottom: 0,
-        gap: 0,
-      }}>
-        <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
-          <Box style={{
-            flexDirection: 'column',
-            paddingLeft: 14, paddingRight: 14,
-            paddingTop: 14, paddingBottom: 14,
-            gap: 14,
-          }}>
-            {turns.map((t) => (
-              <AssistantTurn key={t.id} turn={t} showLift={showLift} />
-            ))}
-          </Box>
-        </ScrollView>
+      <S.AppChatTranscript>
+        {turns.map((t) => (
+          <AssistantTurn key={t.id} turn={t} showLift={showLift} />
+        ))}
       </S.AppChatTranscript>
     </S.AppChatPanel>
   );
