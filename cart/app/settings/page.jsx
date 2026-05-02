@@ -54,10 +54,51 @@ import { execAsync } from '@reactjit/runtime/hooks/process';
 import * as sqlite from '@reactjit/runtime/hooks/sqlite';
 import * as pg from '@reactjit/runtime/hooks/pg';
 import * as embed from '@reactjit/runtime/hooks/embed';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Children, useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../onboarding/state';
 import { useHudInsets, useSettingsSection } from '../shell';
+import { useAnimationTimeline } from '../anim';
 import { TRAITS } from '../onboarding/traits';
+
+// ── List-entry stagger ───────────────────────────────────────────────
+//
+// Per the app.md "List building" principle: each direct child fades +
+// slides in (opacity 0→1, translateY ~16px → 0) on mount, staggered
+// 60ms per index. Active-section swaps in settings remount the
+// section, so each section's rows ripple in. Wraps every child in a
+// Box layout participant — so the inner content is unchanged but the
+// outer per-row spacing is governed by the StaggerList parent's gap.
+const STAGGER_PER_ITEM_MS = 60;
+const STAGGER_DURATION_MS = 380;
+const STAGGER_SLIDE_PX = 16;
+
+function StaggerList({ children, gap = 14, style, direction }) {
+  const tl = useAnimationTimeline();
+  const items = Children.toArray(children).filter((c) => c != null && c !== false);
+  const dir = direction || (style && style.flexDirection) || 'column';
+  const isRow = dir === 'row' || dir === 'row-reverse';
+  return (
+    <Box style={{ flexDirection: dir, gap, ...(style || {}) }}>
+      {items.map((child, i) => {
+        const start = i * STAGGER_PER_ITEM_MS;
+        const op = tl.range(start, start + STAGGER_DURATION_MS, 'easeOutBack');
+        const slide = (1 - op) * STAGGER_SLIDE_PX;
+        return (
+          <Box
+            key={i}
+            style={
+              isRow
+                ? { opacity: op, marginLeft: i === 0 ? slide : 0 }
+                : { opacity: op, marginTop: slide }
+            }
+          >
+            {child}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}
 
 const NS = 'app';
 const USER_ID = 'user_local';
@@ -284,7 +325,7 @@ function ProfileSection({ user, userStore, reload, onb }) {
       <S.Title>You</S.Title>
       <S.Body>Identity-grain fields. Saved to <S.Body>User</S.Body>; not affected by switching Settings profiles.</S.Body>
 
-      <Box style={{ flexDirection: 'column', gap: 14, marginTop: 14 }}>
+      <StaggerList gap={14} style={{ marginTop: 14 }}>
         <Field label="Display name">
           <Input value={draft.displayName} onChange={(v) => setDraft((d) => ({ ...d, displayName: v }))} placeholder="josiah" />
         </Field>
@@ -300,13 +341,12 @@ function ProfileSection({ user, userStore, reload, onb }) {
         <Field label="Timezone">
           <Input mono value={draft.timezone} onChange={(v) => setDraft((d) => ({ ...d, timezone: v }))} placeholder="America/Chicago" />
         </Field>
-      </Box>
-
-      <S.AppFormButtonRow style={{ marginTop: 16, gap: 8 }}>
-        <S.Button onPress={saving ? () => {} : save}>
-          <S.ButtonLabel>{saving ? 'Saving…' : 'Save profile'}</S.ButtonLabel>
-        </S.Button>
-      </S.AppFormButtonRow>
+        <S.AppFormButtonRow style={{ marginTop: 2, gap: 8 }}>
+          <S.Button onPress={saving ? () => {} : save}>
+            <S.ButtonLabel>{saving ? 'Saving…' : 'Save profile'}</S.ButtonLabel>
+          </S.Button>
+        </S.AppFormButtonRow>
+      </StaggerList>
     </S.Card>
   );
 }
@@ -342,7 +382,10 @@ function PreferencesSection({ user, userStore, reload }) {
       <S.Title>Accommodations</S.Title>
       <S.Body>Free-form traits the assistant calibrates around. These get folded into the user-baseline system message — not corrective rules, just honest context. Toggle to add or remove.</S.Body>
 
-      <S.AppTraitGrid style={{ marginTop: 14, justifyContent: 'flex-start' }}>
+      <StaggerList
+        gap={8}
+        style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 14, justifyContent: 'flex-start' }}
+      >
         {TRAITS.map((t) => {
           const isOn = activeIds.has(`acc_${t.id}`);
           const Chip = isOn ? S.AppTraitChipActive : S.AppTraitChip;
@@ -353,10 +396,10 @@ function PreferencesSection({ user, userStore, reload }) {
             </Chip>
           );
         })}
-      </S.AppTraitGrid>
+      </StaggerList>
 
       {accs.length > 0 ? (
-        <Box style={{ flexDirection: 'column', gap: 8, marginTop: 16 }}>
+        <StaggerList gap={8} style={{ marginTop: 16 }}>
           <S.Caption>Active accommodations</S.Caption>
           {accs.map((a) => (
             <S.KV key={a.id}>
@@ -364,7 +407,7 @@ function PreferencesSection({ user, userStore, reload }) {
               <Box style={{ flexGrow: 1, flexShrink: 1 }}><S.Body>{a.note}</S.Body></Box>
             </S.KV>
           ))}
-        </Box>
+        </StaggerList>
       ) : null}
     </S.Card>
   );
