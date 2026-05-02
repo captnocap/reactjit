@@ -2,7 +2,7 @@ import '../component-gallery/components.cls';
 import { APP_BOTTOM_BAR_H } from '../component-gallery/components.cls';
 import { useEffect, useRef, useState } from 'react';
 import { EASINGS } from '@reactjit/runtime/easing';
-import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
+import { Box, Pressable } from '@reactjit/runtime/primitives';
 import { Route, Router, useNavigate, useRoute } from '@reactjit/runtime/router';
 import { installBrowserShims } from '@reactjit/runtime/hooks';
 import { useBreakpoint, useActiveVariant, setVariant } from '@reactjit/runtime/theme';
@@ -20,6 +20,8 @@ import { OnboardingProvider, useOnboarding } from './onboarding/state';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
 import { useInputFocal } from './shell';
+import { AssistantChat } from './chat/AssistantChat';
+import type { ChatShape } from './chat/types';
 
 applyGalleryTheme(getActiveGalleryThemeId());
 installBrowserShims();
@@ -32,7 +34,7 @@ installBrowserShims();
 type RouteMode = 'full' | 'side';
 const ROUTES: Array<{ path: string; label: string; icon: number[][]; mode: RouteMode }> = [
   { path: '/',                  label: 'Home',      icon: Home,     mode: 'full' },
-  { path: '/settings',          label: 'Settings',  icon: Settings, mode: 'full' },
+  { path: '/settings',          label: 'Settings',  icon: Settings, mode: 'side' },
   { path: '/about',             label: 'About',     icon: Info,     mode: 'full' },
   { path: '/activity/sweatshop', label: 'Sweatshop', icon: Settings, mode: 'side' },
 ];
@@ -181,6 +183,24 @@ function ConditionalInputStrip() {
   return <InputStrip />;
 }
 
+// Chat is gated on the same onboarding completion check, plus the shape
+// derivation from `headingTo`. Hidden on home (state A); 'side' when
+// docked above the side InputStrip (state B); 'full' when filling the
+// activity content area (state C). Thread state survives the slot swap
+// via the module-level store in `chat/store.ts`.
+function ConditionalAssistantChat({
+  shape,
+  onToggleShape,
+}: {
+  shape: ChatShape;
+  onToggleShape?: () => void;
+}) {
+  const onb = useOnboarding();
+  if (onb.loading || !onb.complete) return null;
+  if (shape === 'hidden') return null;
+  return <AssistantChat shape={shape} onToggleShape={onToggleShape} />;
+}
+
 // ── Morph constants + helpers ────────────────────────────────────────
 //
 // Two morphs, sequenced to avoid a flicker at the variant flip:
@@ -255,6 +275,15 @@ function deriveHeadingTo(routeMode: RouteMode, focal: boolean): HeadingTo {
   return focal ? 'activity-focal' : 'activity-docked';
 }
 
+// Chat shape rides the same axes as the InputStrip morph. Hidden on
+// home; 'side' docks above the side InputStrip; 'full' fills the
+// activity content area above the bottom InputStrip.
+function deriveChatShape(headingTo: HeadingTo): ChatShape {
+  if (headingTo === 'home') return 'hidden';
+  if (headingTo === 'activity-docked') return 'side';
+  return 'full';
+}
+
 // All the shell-level hooks (useRoute, useActiveVariant, useInputFocal,
 // the morph effect) MUST run inside <Router>'s subtree — useRoute
 // looks up RouterContext and would never see updates if called from
@@ -277,13 +306,7 @@ function ShellBody() {
   const routeMode: RouteMode = ROUTES.find((r) => r.path === route.path)?.mode ?? 'full';
   const [focal, setFocal] = useInputFocal();
   const headingTo = deriveHeadingTo(routeMode, focal);
-  const nav = useNavigate();
-  // Temporary debug toggle — flips between '/' and '/activity/sweatshop'
-  // for testing the A↔B/C transitions. Real triggers (chat-message,
-  // grid-item click, @-token) replace this.
-  const toggleStrip = () => {
-    nav.push(routeMode === 'side' ? '/' : '/activity/sweatshop');
-  };
+  const chatShape = deriveChatShape(headingTo);
 
   // Three independent morph timelines — see the constants comment for
   // the sequencing. Each is a snapshot RAF tween that survives
@@ -415,11 +438,6 @@ function ShellBody() {
     <Box style={{
       width: '100%', height: '100%',
       flexDirection: 'column', position: 'relative',
-      // Match the page bg so the area BottomInputBar vacates
-      // (between variant flip and the page's paddingBottom
-      // animation catching up) doesn't reveal a different bg
-      // underneath. Without this the empty bottom strip flashes
-      // the app's default bg color during phase 2 of shrink.
       backgroundColor: 'theme:bg',
     }}>
             <Chrome />
@@ -463,12 +481,36 @@ function ShellBody() {
               {/* SideMenuInput — absolute overlay on the left.
                   Rendered FIRST so BottomInputBar overlays it in
                   z-order during phase 1 of shrink (input still in
-                  BottomInputBar). */}
+                  BottomInputBar). The chat panel sits ABOVE the
+                  InputStrip via flexGrow:1 on AppChatPanel; the rail's
+                  justifyContent:'flex-end' still keeps InputStrip
+                  pinned to the bottom. */}
               <S.AppSideMenuInput style={{
                 position: 'absolute', left: 0, top: 0, bottom: 0, width: sideWidth,
               }}>
+                {chatShape === 'side' ? (
+                  <ConditionalAssistantChat shape="side" onToggleShape={() => setFocal(true)} />
+                ) : null}
                 {isSide ? <ConditionalInputStrip /> : null}
               </S.AppSideMenuInput>
+              {/* Full-mode chat overlay — fills the activity content
+                  area, leaves space for the side rail (left: sideWidth)
+                  and the bottom InputStrip (bottom: paddingBottom). The
+                  activity stays mounted underneath; we just cover it.
+                  When focal releases (state C → B), this unmounts and
+                  the activity surfaces again. */}
+              {chatShape === 'full' ? (
+                <Box style={{
+                  position: 'absolute',
+                  left: sideWidth, top: 0, right: 0,
+                  bottom: paddingBottom,
+                  paddingLeft: 24, paddingRight: 24,
+                  paddingTop: 24, paddingBottom: 16,
+                  flexDirection: 'column',
+                }}>
+                  <ConditionalAssistantChat shape="full" onToggleShape={() => setFocal(false)} />
+                </Box>
+              ) : null}
               {/* BottomInputBar — outer conditional removes it from the
                   tree when isSide. Inner display:'flex' is explicit
                   (avoids any framework ambiguity). Height comes from
@@ -483,45 +525,6 @@ function ShellBody() {
                   <ConditionalInputStrip />
                 </S.AppBottomInputBar>
               )}
-            </Box>
-            {/* Toggle overlay — temporary affordance until the real
-                trigger lands (clicking into an app, sending a message,
-                etc.). Anchored to the App's outer Box via
-                position:relative + position:absolute. */}
-            <Box style={{ position: 'absolute', top: 60, left: 60, zIndex: 100, flexDirection: 'row', gap: 8 }}>
-              {/* Route toggle — flips between '/' (state A) and
-                  '/activity/sweatshop' (state B or C depending on
-                  focal). Tests A↔B/C transitions. */}
-              <Pressable onPress={toggleStrip}>
-                <Box style={{
-                  paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8,
-                  borderRadius: 8,
-                  backgroundColor: 'theme:accentHot',
-                  borderWidth: 2, borderColor: 'theme:accentHot',
-                }}>
-                  <Text style={{ fontSize: 12, fontWeight: 700, color: 'theme:bg' }}>
-                    {routeMode === 'side' ? '← HOME' : 'SWEATSHOP →'}
-                  </Text>
-                </Box>
-              </Pressable>
-              {/* Focal toggle — flips inputFocal directly. Lets you
-                  hit B↔C from the chrome, useful before activities
-                  have their own focal triggers wired (sweatshop's
-                  worker tiles do; this is the universal escape hatch). */}
-              {routeMode === 'side' ? (
-                <Pressable onPress={() => setFocal(!focal)}>
-                  <Box style={{
-                    paddingLeft: 14, paddingRight: 14, paddingTop: 8, paddingBottom: 8,
-                    borderRadius: 8,
-                    backgroundColor: 'theme:bg2',
-                    borderWidth: 1, borderColor: 'theme:rule',
-                  }}>
-                    <Text style={{ fontSize: 12, fontWeight: 700, color: 'theme:ink' }}>
-                      {focal ? 'UNFOCUS' : 'FOCUS'}
-                    </Text>
-                  </Box>
-                </Pressable>
-              ) : null}
             </Box>
           </Box>
   );

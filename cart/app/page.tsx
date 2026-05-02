@@ -6,6 +6,8 @@ import { useOnboarding } from './onboarding/state';
 import { TRAITS_BY_ID } from './onboarding/traits';
 import { useAnimationTimeline } from './anim';
 import { SnakeSpinner } from '../component-gallery/components/grid-spinners/GridSpinners';
+import { MenuGridSquareContent } from '../component-gallery/components/menu-grid-square/MenuGridSquare';
+import type { MenuEntry } from '../component-gallery/data/menu-entry';
 
 // ── Carryover entry timeline ─────────────────────────────────────────
 //
@@ -27,31 +29,54 @@ const T_PROFILE_END      = 3200;
 const SLIDE_UP_PX        = 24;
 const ENTRY_DONE_MS      = T_PROFILE_END + 80;
 
-type Cartridge = {
-  id: string;
-  title: string;
-  subtitle: string;
-  hint: string; // muted line under the subtitle, today indicates wiring state
-};
-
-const CARTRIDGES: Cartridge[] = [
+const HOME_MENU_ROWS: MenuEntry[] = [
   {
     id: 'sweatshop',
-    title: 'Sweatshop',
-    subtitle: 'Canvas + sequencer + cockpit',
-    hint: 'Coming soon — cartridge ABI pending',
+    key: '1',
+    label: 'Sweatshop',
+    hint: 'Canvas, sequencer, cockpit',
+    glyph: 'S',
+    status: 'live',
   },
   {
     id: 'gallery',
-    title: 'Component gallery',
-    subtitle: 'The storybook of typed shapes',
-    hint: 'Coming soon — ships as a sibling cartridge',
+    key: '2',
+    label: 'Gallery',
+    hint: 'Typed component stories',
+    glyph: 'G',
+    status: 'idle',
   },
   {
     id: 'chatbot',
-    title: 'Chatbot',
-    subtitle: 'Non-agentic chat',
-    hint: 'Planned — see docs/01-console-cartridges',
+    key: '3',
+    label: 'Chatbot',
+    hint: 'Plain chat surface',
+    glyph: 'C',
+    status: 'idle',
+  },
+  {
+    id: 'recipes',
+    key: '4',
+    label: 'Recipes',
+    hint: 'Patterns and builds',
+    glyph: 'R',
+    status: 'idle',
+  },
+  {
+    id: 'docs',
+    key: '5',
+    label: 'Docs',
+    hint: 'Substrate notes',
+    glyph: 'D',
+    status: 'idle',
+  },
+  {
+    id: 'about',
+    key: '6',
+    label: 'About',
+    hint: 'Shell notes',
+    glyph: 'A',
+    status: 'mute',
   },
 ];
 
@@ -217,29 +242,21 @@ function HomeBody({
         </S.Card>
       </Box>
 
-      {/* Cartridge selector — three placeholder tiles, one per planned
-          cartridge. Today they're visual scaffolding; click handlers
-          land when the cartridge ABI is wired into cart/app. */}
+      {/* Launcher menu — uses the gallery's C1 tile menu as the initial
+          loaded home surface. The rows include the planned cartridges and
+          near-term app surfaces while routing/ABI wiring catches up. */}
       <Box
         style={{
-          flexDirection: 'row',
-          gap: 24,
-          flexWrap: 'wrap',
+          opacity: (tileOps[0] + tileOps[1] + tileOps[2]) / 3,
+          marginTop: (1 - tileOps[0]) * SLIDE_UP_PX,
+          width: 720,
+          maxWidth: '100%',
+          height: 360,
           justifyContent: 'center',
-          alignItems: 'stretch',
+          alignItems: 'center',
         }}
       >
-        {CARTRIDGES.map((c, i) => (
-          <Box
-            key={c.id}
-            style={{
-              opacity: tileOps[i],
-              marginTop: (1 - tileOps[i]) * SLIDE_UP_PX,
-            }}
-          >
-            <CartridgeTile cartridge={c} />
-          </Box>
-        ))}
+        <MenuGridSquareContent rows={HOME_MENU_ROWS} />
       </Box>
 
       {/* Profile chip — proves the persistence: name, configPath,
@@ -273,24 +290,6 @@ function HomeBody({
   );
 }
 
-// ── Cartridge tile ───────────────────────────────────────────────────
-//
-// Mirrors the visual language of `S.AppProviderTile` from Step2 so the
-// homepage doesn't feel disjointed from onboarding. Click is a no-op
-// for now — see TODO at the top of CARTRIDGES.
-
-function CartridgeTile({ cartridge }: { cartridge: Cartridge }) {
-  return (
-    <S.AppProviderTile onPress={() => {}}>
-      <S.AppProviderTileTitle>{cartridge.title}</S.AppProviderTileTitle>
-      <S.AppProviderTileSubtitle>{cartridge.subtitle}</S.AppProviderTileSubtitle>
-      <S.AppProviderTileSubtitle style={{ opacity: 0.6 }}>
-        {cartridge.hint}
-      </S.AppProviderTileSubtitle>
-    </S.AppProviderTile>
-  );
-}
-
 // ── Profile fact ─────────────────────────────────────────────────────
 
 function ProfileFact({ label, value }: { label: string; value: string }) {
@@ -301,4 +300,3 @@ function ProfileFact({ label, value }: { label: string; value: string }) {
     </Box>
   );
 }
-
