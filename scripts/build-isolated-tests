@@ -1,0 +1,55 @@
+#!/bin/bash
+# build-isolated-tests — bundle every cart/app/isolated_tests/ entry as a
+# cartridge (.cart.js) so the running app can load each into its own
+# native window via <Window><Cartridge src="..." /></Window>.
+#
+# Usage:  scripts/build-isolated-tests
+#
+# Outputs:  $CART_ROOT/.cache/isolated_tests/<name>.cart.js
+#
+# Same harness convention as scripts/dev / scripts/ship — sets
+# BUNDLE_FROM_HARNESS=1 before invoking the bundler.
+
+set -euo pipefail
+
+CART_ROOT="$PWD"
+RJIT_HOME="${RJIT_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+cd "$RJIT_HOME"
+
+ROOT_DIR="$CART_ROOT/cart/app/isolated_tests"
+OUT_DIR="$CART_ROOT/.cache/isolated_tests"
+
+if [[ ! -d "$ROOT_DIR" ]]; then
+  echo "[build-isolated-tests] not found: $ROOT_DIR" >&2
+  exit 1
+fi
+
+mkdir -p "$OUT_DIR"
+
+shopt -s nullglob
+ANY=0
+for entry in "$ROOT_DIR"/*; do
+  NAME=""
+  SRC=""
+  if [[ -d "$entry" && -f "$entry/index.tsx" ]]; then
+    NAME=$(basename "$entry")
+    SRC="$entry/index.tsx"
+  elif [[ -f "$entry" && "$entry" == *.tsx ]]; then
+    NAME=$(basename "$entry" .tsx)
+    SRC="$entry"
+  else
+    continue
+  fi
+  OUT="$OUT_DIR/$NAME.cart.js"
+  echo "[build-isolated-tests] $NAME"
+  BUNDLE_FROM_HARNESS=1 CART_ROOT="$CART_ROOT" \
+    tools/v8cli scripts/cart-bundle.js "$SRC" --out "$OUT" --cartridge
+  ANY=1
+done
+
+if [[ $ANY -eq 0 ]]; then
+  echo "[build-isolated-tests] no entries found in $ROOT_DIR" >&2
+  exit 1
+fi
+
+echo "[build-isolated-tests] done → $OUT_DIR"

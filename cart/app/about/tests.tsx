@@ -1,62 +1,48 @@
 // Isolated Tests panel — surfaces every standalone test as a click-to-open
-// native <Window>. Each window is a separate OS window sharing the React
-// tree; state flows back into the app, but layout is fully isolated. The
-// hidden zero-size container holds the <Window> nodes so they don't eat
-// page layout.
+// native <Window>. Each window mounts a <Cartridge> pointing at a guest
+// bundle pre-built by scripts/build-isolated-tests. The cartridge bundle
+// is a fresh module graph (separate IIFE in the same V8), so a test's
+// own TooltipRoot, Router, providers, classifiers, and side-effects live
+// in their own scope and can't smear into the app shell. Close the
+// window — gone.
 //
-// Add a new test: drop a default-export component into
-// cart/app/isolated_tests/, import it below, and append to TESTS.
+// Add a new test:
+//   1. Drop a default-export component into cart/app/isolated_tests/
+//   2. Run scripts/build-isolated-tests
+//   3. Append an entry to TESTS below.
 
 import { useState } from 'react';
-import { Box, Pressable, Text, ScrollView, Window } from '@reactjit/runtime/primitives';
-
-import BrowseAgent       from '../isolated_tests/browse-agent';
-import ChatLoom          from '../isolated_tests/chat-loom';
-import ClipboardMenuTest from '../isolated_tests/clipboard_menu_test';
-import Composer          from '../isolated_tests/composer';
-import ContextMenuDemo   from '../isolated_tests/context_menu_demo';
-import Dictation         from '../isolated_tests/dictation';
-import FlowEditor        from '../isolated_tests/flow_editor';
-import IftttTest         from '../isolated_tests/ifttt_test';
-import RotateText        from '../isolated_tests/rotate_text';
-import ShadowTest        from '../isolated_tests/shadow_test';
-import TileDrag          from '../isolated_tests/tile_drag';
-import TransparencyTest  from '../isolated_tests/transparency_test';
-import WhisperBench      from '../isolated_tests/whisper_bench';
-import EmbedLab          from '../isolated_tests/embed_lab';
-import FontLab           from '../isolated_tests/font_lab';
-import InputLab          from '../isolated_tests/input_lab';
-import LlmLab            from '../isolated_tests/llm_lab';
-import Scene3DLab        from '../isolated_tests/scene3d_lab';
+import { Box, Pressable, Text, ScrollView, Window, Cartridge } from '@reactjit/runtime/primitives';
 
 type TestEntry = {
   id: string;
   label: string;
-  Component: () => any;
   width?: number;
   height?: number;
 };
 
 const TESTS: TestEntry[] = [
-  { id: 'browse-agent',         label: 'Browse Agent',         Component: BrowseAgent },
-  { id: 'chat-loom',            label: 'Chat Loom',            Component: ChatLoom },
-  { id: 'clipboard-menu-test',  label: 'Clipboard Menu Test',  Component: ClipboardMenuTest },
-  { id: 'composer',             label: 'Composer',             Component: Composer, width: 1280, height: 820 },
-  { id: 'context-menu-demo',    label: 'Context Menu Demo',    Component: ContextMenuDemo },
-  { id: 'dictation',            label: 'Dictation',            Component: Dictation },
-  { id: 'embed-lab',            label: 'Embed Lab',            Component: EmbedLab },
-  { id: 'flow-editor',          label: 'Flow Editor',          Component: FlowEditor, width: 1280, height: 820 },
-  { id: 'font-lab',             label: 'Font Lab',             Component: FontLab },
-  { id: 'ifttt-test',           label: 'IFTTT Test',           Component: IftttTest },
-  { id: 'input-lab',            label: 'Input Lab',            Component: InputLab, width: 1280, height: 820 },
-  { id: 'llm-lab',              label: 'LLM Lab',              Component: LlmLab },
-  { id: 'rotate-text',          label: 'Rotate Text',          Component: RotateText },
-  { id: 'scene3d-lab',          label: 'Scene 3D Lab',         Component: Scene3DLab, width: 1280, height: 820 },
-  { id: 'shadow-test',          label: 'Shadow Test',          Component: ShadowTest },
-  { id: 'tile-drag',            label: 'Tile Drag',            Component: TileDrag },
-  { id: 'transparency-test',    label: 'Transparency Test',    Component: TransparencyTest },
-  { id: 'whisper-bench',        label: 'Whisper Bench',        Component: WhisperBench },
+  { id: 'browse-agent',         label: 'Browse Agent' },
+  { id: 'chat-loom',            label: 'Chat Loom' },
+  { id: 'clipboard_menu_test',  label: 'Clipboard Menu Test' },
+  { id: 'composer',             label: 'Composer',         width: 1280, height: 820 },
+  { id: 'context_menu_demo',    label: 'Context Menu Demo' },
+  { id: 'dictation',            label: 'Dictation' },
+  { id: 'embed_lab',            label: 'Embed Lab' },
+  { id: 'flow_editor',          label: 'Flow Editor',      width: 1280, height: 820 },
+  { id: 'font_lab',             label: 'Font Lab' },
+  { id: 'ifttt_test',           label: 'IFTTT Test' },
+  { id: 'input_lab',            label: 'Input Lab',        width: 1280, height: 820 },
+  { id: 'llm_lab',              label: 'LLM Lab' },
+  { id: 'rotate_text',          label: 'Rotate Text' },
+  { id: 'scene3d_lab',          label: 'Scene 3D Lab',     width: 1280, height: 820 },
+  { id: 'shadow_test',          label: 'Shadow Test' },
+  { id: 'tile_drag',            label: 'Tile Drag' },
+  { id: 'transparency_test',    label: 'Transparency Test' },
+  { id: 'whisper_bench',        label: 'Whisper Bench' },
 ];
+
+const BUNDLE_DIR = '.cache/isolated_tests';
 
 export default function TestsPanel() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -68,7 +54,8 @@ export default function TestsPanel() {
         Isolated Tests
       </Text>
       <Text style={{ fontSize: 12, color: 'theme:inkDim' }}>
-        Click a test to open it in its own native window.
+        Click a test to open it in its own native window. Each runs from a
+        cartridge bundle (rebuild with scripts/build-isolated-tests).
       </Text>
 
       <ScrollView style={{ width: '100%', maxHeight: 360 }}>
@@ -101,20 +88,17 @@ export default function TestsPanel() {
       {/* Zero-size container — holds the live <Window> nodes without
           consuming layout in the about page. */}
       <Box style={{ width: 0, height: 0, overflow: 'hidden' }}>
-        {TESTS.filter((t) => open[t.id]).map((t) => {
-          const Comp = t.Component;
-          return (
-            <Window
-              key={t.id}
-              title={t.label}
-              width={t.width ?? 960}
-              height={t.height ?? 720}
-              onClose={() => toggle(t.id)}
-            >
-              <Comp />
-            </Window>
-          );
-        })}
+        {TESTS.filter((t) => open[t.id]).map((t) => (
+          <Window
+            key={t.id}
+            title={t.label}
+            width={t.width ?? 960}
+            height={t.height ?? 720}
+            onClose={() => toggle(t.id)}
+          >
+            <Cartridge src={`${BUNDLE_DIR}/${t.id}.cart.js`} />
+          </Window>
+        ))}
       </Box>
     </Box>
   );
