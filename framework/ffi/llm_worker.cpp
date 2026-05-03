@@ -169,24 +169,42 @@ static std::vector<common_chat_tool_call> parse_hauhaucs_tool_calls(
     content_out.clear();
     reasoning_out.clear();
 
-    // Strip <think>…</think> into reasoning_out, keep the rest in `body`.
+    // Split reasoning out of `text`. Two patterns:
+    //   1. Implicit-open: Qwen3-thinking and similar models have <think>
+    //      pre-injected by the chat template, so the model emits only
+    //      </think>. Everything before the FIRST </think> is reasoning,
+    //      provided no <think> precedes it.
+    //   2. Explicit pairs: <think>…</think> blocks scattered in output.
+    std::string remaining = text;
+
+    {
+        size_t close_pos = remaining.find("</think>");
+        size_t open_pos  = remaining.find("<think>");
+        if (close_pos != std::string::npos &&
+            (open_pos == std::string::npos || close_pos < open_pos)) {
+            reasoning_out.append(remaining, 0, close_pos);
+            remaining.erase(0, close_pos + 8);
+        }
+    }
+
     std::string body;
     {
         size_t pos = 0;
-        while (pos < text.size()) {
-            size_t open = text.find("<think>", pos);
+        while (pos < remaining.size()) {
+            size_t open = remaining.find("<think>", pos);
             if (open == std::string::npos) {
-                body.append(text, pos, std::string::npos);
+                body.append(remaining, pos, std::string::npos);
                 break;
             }
-            body.append(text, pos, open - pos);
-            size_t close = text.find("</think>", open);
+            body.append(remaining, pos, open - pos);
+            size_t close = remaining.find("</think>", open);
             if (close == std::string::npos) {
-                // Unterminated <think> — take everything to end as reasoning
-                reasoning_out.append(text, open + 7, std::string::npos);
+                if (!reasoning_out.empty()) reasoning_out += "\n";
+                reasoning_out.append(remaining, open + 7, std::string::npos);
                 break;
             }
-            reasoning_out.append(text, open + 7, close - (open + 7));
+            if (!reasoning_out.empty()) reasoning_out += "\n";
+            reasoning_out.append(remaining, open + 7, close - (open + 7));
             pos = close + 8;
         }
     }
@@ -507,6 +525,7 @@ int main(int argc, char ** argv) {
                 std::string prompt = w.prev_len <= full.size() ? full.substr(w.prev_len) : full;
 
                 std::string response = generate(w, prompt, max_tokens);
+                fprintf(stderr, "[worker] generate done: %zu chars, tools=%zu, parsing...\n", response.size(), w.tools.size()); fflush(stderr);
 
                 // Parse model output. If no tools were registered (or the
                 // model didn't emit a call), parsed.tool_calls stays empty
@@ -516,18 +535,25 @@ int main(int argc, char ** argv) {
                 bool parse_ok = true;
                 try {
                     parsed = common_chat_parse(response, false, pp);
-                } catch (const std::exception &) {
+                    fprintf(stderr, "[worker] common_chat_parse OK: tool_calls=%zu content.len=%zu\n", parsed.tool_calls.size(), parsed.content.size()); fflush(stderr);
+                } catch (const std::exception & e) {
+                    fprintf(stderr, "[worker] common_chat_parse THREW: %s\n", e.what()); fflush(stderr);
                     parse_ok = false;
                 }
 
                 // Fallback: Hauhaucs-style XML tool calls that
-                // common_chat_parse doesn't recognize.
-                if (parse_ok && parsed.tool_calls.empty() && !w.tools.empty()) {
+                // common_chat_parse doesn't recognize OR throws on. Run
+                // whenever we end up with no calls AND tools are
+                // registered — `parse_ok` doesn't gate it, since a
+                // throw is exactly when we want to try the fallback.
+                if (parsed.tool_calls.empty() && !w.tools.empty()) {
                     std::string fb_content, fb_reasoning;
                     auto fb_calls = parse_hauhaucs_tool_calls(response, fb_content, fb_reasoning);
+                    fprintf(stderr, "[worker] hauhaucs fallback: %zu calls\n", fb_calls.size()); fflush(stderr);
                     if (!fb_calls.empty()) {
                         parsed.tool_calls       = fb_calls;
                         parsed.content          = fb_content;
+                        parse_ok = true;  // we have valid calls now, take the tool-call branch
                         if (!fb_reasoning.empty() && parsed.reasoning_content.empty()) {
                             parsed.reasoning_content = fb_reasoning;
                         }
@@ -560,6 +586,7 @@ int main(int argc, char ** argv) {
                 // Tool calls present. Push assistant turn carrying them,
                 // then emit each one and await a TOOL_RESULT before
                 // continuing to the next round.
+                fprintf(stderr, "[worker] entering tool-call branch (%zu calls)\n", parsed.tool_calls.size()); fflush(stderr);
                 common_chat_msg asst;
                 asst.role       = "assistant";
                 asst.content    = parsed.content;
@@ -568,6 +595,7 @@ int main(int argc, char ** argv) {
                     asst.reasoning_content = parsed.reasoning_content;
                 }
                 w.history.push_back(asst);
+                fprintf(stderr, "[worker] pushed assistant turn, beginning emit loop\n"); fflush(stderr);
 
                 bool tool_round_aborted = false;
                 for (size_t i = 0; i < parsed.tool_calls.size(); i++) {
@@ -576,12 +604,15 @@ int main(int argc, char ** argv) {
                         ? ("tc" + std::to_string(round) + "-" + std::to_string(i))
                         : tc.id;
 
+                    fprintf(stderr, "[worker] EMIT TOOL_CALL %zu/%zu id=%s name=%s args.len=%zu\n",
+                        i+1, parsed.tool_calls.size(), call_id.c_str(), tc.name.c_str(), tc.arguments.size()); fflush(stderr);
                     emit(("TOOL_CALL " + call_id).c_str());
                     emit(tc.name.c_str());
                     // arguments is JSON; emit raw, then "." terminator
                     fputs(tc.arguments.c_str(), stdout);
                     fputc('\n', stdout);
                     emit(".");
+                    fprintf(stderr, "[worker] TOOL_CALL %zu emitted, awaiting TOOL_RESULT...\n", i+1); fflush(stderr);
 
                     std::string rl = read_line_or_empty();
                     if (rl.empty()) {

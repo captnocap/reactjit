@@ -304,50 +304,70 @@ fn resolveWorkerPathAlloc(allocator: std.mem.Allocator) ![]u8 {
 const LineReader = struct {
     file: std.fs.File,
     buf: [16 * 1024]u8 = undefined,
-    len: usize = 0,
+    head: usize = 0,   // start of next unread byte
+    tail: usize = 0,   // one past last buffered byte
     eof: bool = false,
 
     /// Read one line (without trailing \n). Returns null on EOF / error.
     /// Caller does NOT own the returned slice — it points into self.buf
     /// and is invalidated by the next call.
+    ///
+    /// PRIOR-BUG NOTE: a previous version shifted the buffer down BEFORE
+    /// returning the slice, so the returned bytes were always the NEXT
+    /// line's content (off-by-one tokenization). Only visible when the
+    /// caller examined the slice contents (prefix checks against
+    /// "TOOL_CALL " etc); TOK piece extraction silently produced
+    /// wrong-but-similar text. Now uses head/tail indices and only
+    /// compacts when the buffer fills, keeping the returned slice valid
+    /// until the next call.
     fn next(self: *LineReader) ?[]const u8 {
         while (true) {
-            // Look for newline in current buffer
-            var i: usize = 0;
-            while (i < self.len) : (i += 1) {
+            // Look for newline in unread region
+            var i: usize = self.head;
+            while (i < self.tail) : (i += 1) {
                 if (self.buf[i] == '\n') {
-                    const line = self.buf[0..i];
-                    // Shift remainder down
-                    const remaining = self.len - (i + 1);
-                    if (remaining > 0) {
-                        std.mem.copyForwards(u8, self.buf[0..remaining], self.buf[(i + 1)..self.len]);
-                    }
-                    self.len = remaining;
+                    const line = self.buf[self.head..i];
+                    self.head = i + 1;
                     return line;
                 }
             }
-            if (self.eof) return null;
-            if (self.len == self.buf.len) {
-                // line too long; truncate and surface what we have
-                const line = self.buf[0..self.len];
-                self.len = 0;
-                return line;
-            }
-            // Read more
-            const read = self.file.read(self.buf[self.len..]) catch {
-                self.eof = true;
+
+            if (self.eof) {
+                if (self.head < self.tail) {
+                    const line = self.buf[self.head..self.tail];
+                    self.head = self.tail;
+                    return line;
+                }
                 return null;
+            }
+
+            // No newline yet — make room to read more.
+            if (self.tail == self.buf.len) {
+                if (self.head == 0) {
+                    // Buffer full with no newline → surface as truncated line.
+                    const line = self.buf[0..self.tail];
+                    self.head = self.tail;
+                    return line;
+                }
+                // Compact unread region to start of buffer. This
+                // invalidates any previously-returned slice, but the
+                // contract says it's only valid until the next call —
+                // which is what we are.
+                const remaining = self.tail - self.head;
+                std.mem.copyForwards(u8, self.buf[0..remaining], self.buf[self.head..self.tail]);
+                self.head = 0;
+                self.tail = remaining;
+            }
+
+            const read = self.file.read(self.buf[self.tail..]) catch {
+                self.eof = true;
+                continue;
             };
             if (read == 0) {
                 self.eof = true;
-                if (self.len > 0) {
-                    const line = self.buf[0..self.len];
-                    self.len = 0;
-                    return line;
-                }
-                return null;
+                continue;
             }
-            self.len += read;
+            self.tail += read;
         }
     }
 };
@@ -521,6 +541,13 @@ fn workerMainInner(session: *Session) !void {
                     return;
                 };
 
+                // DEBUG: log every non-TOK line so we can see what Zig
+                // actually receives from the worker after generate ends.
+                if (!std.mem.startsWith(u8, line, "TOK ")) {
+                    const preview_len = @min(line.len, 200);
+                    std.debug.print("[zig-session] CHAT line: '{s}' (len={d})\n", .{ line[0..preview_len], line.len });
+                }
+
                 if (std.mem.eql(u8, line, "DONE")) {
                     try session.pushResult(assistant_buf.items, false);
                     break;
@@ -540,6 +567,7 @@ fn workerMainInner(session: *Session) !void {
                     continue;
                 }
                 if (std.mem.startsWith(u8, line, "TOOL_CALL ")) {
+                    std.debug.print("[zig-session] TOOL_CALL line received: {s}\n", .{line});
                     const id = try session.allocator.dupe(u8, line[10..]);
                     defer session.allocator.free(id);
 
@@ -564,14 +592,17 @@ fn workerMainInner(session: *Session) !void {
                         try args_buf.appendSlice(session.allocator, al);
                     }
 
+                    std.debug.print("[zig-session] pushing tool_call event id={s} name={s} args.len={d}\n", .{ id, name, args_buf.items.len });
                     try session.pushToolCall(id, name, args_buf.items);
 
                     // Block-poll for matching TOOL_RESULT. The JS side
                     // dispatches the tool_call event, runs the handler,
                     // then calls submitToolReply.
+                    std.debug.print("[zig-session] awaiting TOOL_RESULT for id={s}\n", .{id});
                     const reply = try awaitToolReply(session, id);
                     var owned_reply = reply;
                     defer owned_reply.deinit(session.allocator);
+                    std.debug.print("[zig-session] got TOOL_RESULT for id={s} body.len={d}\n", .{ owned_reply.id, owned_reply.body.len });
 
                     const tr_cmd = try std.fmt.allocPrint(
                         session.allocator,
@@ -612,6 +643,7 @@ fn flushPendingTools(session: *Session, stdin_file: std.fs.File, reader: *LineRe
     const json_body = pending orelse "[]";
     defer if (pending) |p| session.allocator.free(p);
 
+    std.debug.print("[zig-session] flushing TOOLS to subprocess ({d} bytes)\n", .{json_body.len});
     const cmd = try std.fmt.allocPrint(session.allocator, "TOOLS\n{s}\n.\n", .{json_body});
     defer session.allocator.free(cmd);
     try stdin_file.writeAll(cmd);
@@ -619,8 +651,12 @@ fn flushPendingTools(session: *Session, stdin_file: std.fs.File, reader: *LineRe
     // Drain the READY (or ERR) ack
     while (true) {
         const line = reader.next() orelse return error.WorkerEofDuringTools;
-        if (std.mem.eql(u8, line, "READY")) return;
+        if (std.mem.eql(u8, line, "READY")) {
+            std.debug.print("[zig-session] TOOLS ack: READY\n", .{});
+            return;
+        }
         if (std.mem.startsWith(u8, line, "ERR ")) {
+            std.debug.print("[zig-session] TOOLS ack: ERR {s}\n", .{line[4..]});
             try session.pushStatus(line[4..], true);
             return;
         }

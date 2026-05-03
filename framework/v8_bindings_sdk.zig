@@ -672,6 +672,11 @@ fn localAiEventToJs(iso: v8.Isolate, ctx: v8.Context, evt: local_ai_runtime.Owne
             setBoolProp(iso, ctx, obj, "is_error", evt.is_error);
         },
         .tool_call => {
+            std.debug.print("[v8] forwarding tool_call event to JS: id={?s} name={?s} args.len={?}\n", .{
+                evt.tool_call_id,
+                evt.tool_call_name,
+                if (evt.tool_call_args) |a| a.len else null,
+            });
             setStrProp(iso, ctx, obj, "kind", "tool_call");
             if (evt.tool_call_id) |value|   setStrProp(iso, ctx, obj, "id", value);
             if (evt.tool_call_name) |value| setStrProp(iso, ctx, obj, "name", value);
@@ -1293,10 +1298,24 @@ fn hostLocalAiClose(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void
 fn hostLocalAiSetTools(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const cx = callbackCtx(info);
-    if (info.length() < 1 or g_local_ai_session == null) return setReturnBool(info, cx.iso, false);
-    const json = jsStringArg(std.heap.page_allocator, info, 0) orelse return setReturnBool(info, cx.iso, false);
+    if (info.length() < 1) {
+        std.debug.print("[v8] __localai_set_tools called with no args\n", .{});
+        return setReturnBool(info, cx.iso, false);
+    }
+    if (g_local_ai_session == null) {
+        std.debug.print("[v8] __localai_set_tools called but no session\n", .{});
+        return setReturnBool(info, cx.iso, false);
+    }
+    const json = jsStringArg(std.heap.page_allocator, info, 0) orelse {
+        std.debug.print("[v8] __localai_set_tools failed to read string arg\n", .{});
+        return setReturnBool(info, cx.iso, false);
+    };
     defer std.heap.page_allocator.free(json);
-    g_local_ai_session.?.setTools(json) catch return setReturnBool(info, cx.iso, false);
+    std.debug.print("[v8] __localai_set_tools called with {d} bytes\n", .{json.len});
+    g_local_ai_session.?.setTools(json) catch {
+        std.debug.print("[v8] __localai_set_tools setTools error\n", .{});
+        return setReturnBool(info, cx.iso, false);
+    };
     setReturnBool(info, cx.iso, true);
 }
 
