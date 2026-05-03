@@ -20,20 +20,32 @@ type Loaded = {
 
 const cache = new Map<string, Loaded>();
 
+function trace(...args: any[]): void {
+  if ((globalThis as any).__TRACE_CARTRIDGE) {
+    try { console.log('[cartridge]', ...args); } catch {}
+  }
+}
+
 export function loadCartridge(path: string): any {
+  trace('loadCartridge enter', path);
   const st = stat(path);
   if (!st) {
     console.error('[cartridge] not found:', path);
     return null;
   }
+  trace('stat ok', path, 'mtime=', st.mtimeMs, 'size=', (st as any).size);
   const hit = cache.get(path);
-  if (hit && hit.mtimeMs === st.mtimeMs) return hit.Component;
+  if (hit && hit.mtimeMs === st.mtimeMs) {
+    trace('cache hit', path);
+    return hit.Component;
+  }
 
   const src = readFile(path);
   if (!src) {
     console.error('[cartridge] read failed:', path);
     return null;
   }
+  trace('readFile ok', path, 'bytes=', src.length);
 
   const slot: { App: any } = { App: null };
   const g: any = globalThis as any;
@@ -43,7 +55,9 @@ export function loadCartridge(path: string): any {
     // Indirect eval — runs the bundle's IIFE at global scope. The bundle's
     // top-level statements execute, the cartridge_entry runs last and writes
     // slot.App.
+    trace('eval start', path);
     (0, eval)(src);
+    trace('eval done', path, 'slot.App is', slot.App ? 'set' : 'NULL');
   } catch (e: any) {
     console.error('[cartridge] eval failed:', path, e?.message || e, e?.stack || '');
     g.__cartridgeLoadSlot = prev;
@@ -57,6 +71,7 @@ export function loadCartridge(path: string): any {
   }
   const loaded: Loaded = { path, mtimeMs: st.mtimeMs, Component: slot.App };
   cache.set(path, loaded);
+  trace('loadCartridge return component', path);
   return slot.App;
 }
 

@@ -216,7 +216,17 @@ export const TextArea: any = (props: any) => h('TextArea', props, props.children
 export const TextEditor: any = (props: any) => h('TextEditor', props, props.children);
 export const Terminal: any = (props: any) => h('Terminal', props, props.children);
 export const terminal: any = Terminal;
-export const Window: any = (props: any) => h('Window', props, props.children);
+export const Window: any = (props: any) => {
+  if ((globalThis as any).__TRACE_WINDOWS) {
+    try {
+      const childCount = Array.isArray(props.children) ? props.children.length : (props.children ? 1 : 0);
+      console.log('[Window] render', JSON.stringify({
+        title: props.title, width: props.width, height: props.height, childCount,
+      }));
+    } catch {}
+  }
+  return h('Window', props, props.children);
+};
 export const window: any = Window;
 export const Notification: any = (props: any) => h('Notification', props, props.children);
 export const notification: any = Notification;
@@ -237,9 +247,15 @@ export const Video: any = ({ src, videoSrc, ...rest }: any) =>
 // the guest subtree like any normal React unmount; the cached module bytes
 // stay in V8 until evictCartridge() is called.
 export const Cartridge: any = ({ src, ...rest }: any) => {
+  if ((globalThis as any).__TRACE_CARTRIDGE) {
+    try { console.log('[Cartridge] render', src); } catch {}
+  }
   if (!src) return null;
   const { loadCartridge } = require('./cartridge_loader');
   const Comp = loadCartridge(src);
+  if ((globalThis as any).__TRACE_CARTRIDGE) {
+    try { console.log('[Cartridge] loadCartridge returned', src, Comp ? 'OK' : 'NULL'); } catch {}
+  }
   if (!Comp) {
     return h('Text', { color: 'red' }, `[cartridge load failed: ${src}]`);
   }
