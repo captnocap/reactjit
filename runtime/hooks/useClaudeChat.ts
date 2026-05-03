@@ -91,27 +91,33 @@ export function useClaudeChat(opts: UseClaudeChatOpts = {}) {
   } | null>(null);
 
   useEffect(() => {
-    if (initRef.current) return;
-    if (!hasHost('__claude_init')) {
-      setError('claude host bindings not registered (framework/v8_bindings_sdk.zig)');
-      phaseRef.current = 'failed';
-      setPhase('failed');
-      return;
+    // First time only: spawn the session. Subsequent re-runs (when opts
+    // re-resolve as Settings/Connection load asynchronously) skip the
+    // init block but MUST still re-arm the poll interval — the previous
+    // run's cleanup cleared it. Without this, the session is alive but
+    // events are never drained and phase stays at 'loading' forever.
+    if (!initRef.current) {
+      if (!hasHost('__claude_init')) {
+        setError('claude host bindings not registered (framework/v8_bindings_sdk.zig)');
+        phaseRef.current = 'failed';
+        setPhase('failed');
+        return;
+      }
+      const cwd = opts.cwd ?? '';
+      const model = opts.model ?? 'claude-opus-4-7';
+      const sid = opts.resumeSession ?? '';
+      const cfg = opts.configDir ?? '';
+      const ok = callHost<boolean>('__claude_init', false, cwd, model, sid, cfg);
+      if (!ok) {
+        setError('claude_init returned false (cwd / config / spawn failure)');
+        phaseRef.current = 'failed';
+        setPhase('failed');
+        return;
+      }
+      initRef.current = true;
+      phaseRef.current = 'loading';
+      setPhase('loading');
     }
-    const cwd = opts.cwd ?? '';
-    const model = opts.model ?? 'claude-opus-4-7';
-    const sid = opts.resumeSession ?? '';
-    const cfg = opts.configDir ?? '';
-    const ok = callHost<boolean>('__claude_init', false, cwd, model, sid, cfg);
-    if (!ok) {
-      setError('claude_init returned false (cwd / config / spawn failure)');
-      phaseRef.current = 'failed';
-      setPhase('failed');
-      return;
-    }
-    initRef.current = true;
-    phaseRef.current = 'loading';
-    setPhase('loading');
 
     const interval = opts.pollMs ?? 100;
     const id = setInterval(() => {
