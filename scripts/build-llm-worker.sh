@@ -48,7 +48,9 @@ echo "[build-llm-worker] g++ -> $OUT"
 # step. Order: common first because it depends on llama, llama on ggml.
 g++ -O2 -std=c++17 \
     -I "$HEADERS" \
+    -I "$LLAMA_DIR/include" \
     -I "$LLAMA_DIR/common" \
+    -I "$LLAMA_DIR/vendor" \
     "$SRC" \
     -L "$LLAMA_BUILD" \
     -Wl,--no-as-needed -lllama-common -Wl,--as-needed \

@@ -33,6 +33,7 @@
 // reverses the escape. This keeps the protocol trivially line-parseable.
 
 #include "llama.h"
+#include "chat.h"   // common_chat_templates_* — full Jinja + per-model tool-call parsers
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -97,16 +98,12 @@ struct WorkerState {
     llama_context * ctx      = nullptr;
     llama_sampler * sampler  = nullptr;
     const llama_vocab * vocab = nullptr;
-    std::vector<llama_chat_message> history;
-    std::vector<char> formatted;
-    int prev_len = 0;
+    common_chat_templates_ptr tmpls;     // initialized in load_model from the model's embedded Jinja
+    std::vector<common_chat_msg> history;
+    size_t prev_len = 0;                 // chars of the most recently rendered prompt (no gen prompt)
     int n_ctx = 4096;
 
     void reset_history() {
-        for (auto & msg : history) {
-            free(const_cast<char *>(msg.role));
-            free(const_cast<char *>(msg.content));
-        }
         history.clear();
         prev_len = 0;
         if (ctx) {
@@ -119,6 +116,7 @@ struct WorkerState {
         if (sampler) llama_sampler_free(sampler);
         if (ctx)     llama_free(ctx);
         if (model)   llama_model_free(model);
+        // tmpls is a unique_ptr — destructor cleans up
     }
 };
 
@@ -161,7 +159,17 @@ static bool load_model(WorkerState & w, const std::string & path) {
     llama_sampler_chain_add(w.sampler, llama_sampler_init_temp(0.8f));
     llama_sampler_chain_add(w.sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
 
-    w.formatted.resize(w.n_ctx);
+    // Initialize the chat-template engine from the model's embedded Jinja.
+    // Empty override = use whatever the GGUF ships. This handles every
+    // chat format llama.cpp upstream supports — Qwen, Hermes, Mistral,
+    // Llama-3, Gemma, DeepSeek, GLM, etc — and is the prereq for the
+    // tool-calling path landing in step 4.
+    w.tmpls = common_chat_templates_init(w.model, "");
+    if (!w.tmpls) {
+        emit_err("common_chat_templates_init failed");
+        return false;
+    }
+
     return true;
 }
 
@@ -263,40 +271,59 @@ int main(int argc, char ** argv) {
             std::string system_prompt = read_block_until_dot();
             std::string user_text     = read_block_until_dot();
 
-            // llama.cpp's apply_template handles a fixed set of named
-            // formats but can't render arbitrary Jinja. The model's
-            // embedded template is full Jinja, so we sniff it for known
-            // marker tokens and pick the closest hardcoded name.
-            const char * embedded = llama_model_chat_template(w.model, nullptr);
-            const char * tmpl_name = "chatml";
-            if (embedded) {
-                if (strstr(embedded, "start_of_turn") || strstr(embedded, "<|turn>")) tmpl_name = "gemma";
-                else if (strstr(embedded, "|im_start|")) tmpl_name = "chatml";
-                else if (strstr(embedded, "[INST]")) tmpl_name = "llama2";
-                else if (strstr(embedded, "<|user|>")) tmpl_name = "phi3";
-            }
-
-            // gemma2/gemma3/gemma4 templates DO NOT support a system role —
-            // they raise "System role not supported". Workaround: prepend
-            // the system text into the first user message.
-            std::string effective_user = user_text;
+            // Push system on first turn (Jinja knows whether the model
+            // actually supports a system role and folds it into user when
+            // not — we no longer need the manual gemma workaround).
             if (w.history.empty() && !system_prompt.empty()) {
-                effective_user = system_prompt + "\n\n" + user_text;
+                common_chat_msg sys_msg;
+                sys_msg.role    = "system";
+                sys_msg.content = system_prompt;
+                w.history.push_back(sys_msg);
             }
-            w.history.push_back({ strdup("user"), strdup(effective_user.c_str()) });
+            common_chat_msg user_msg;
+            user_msg.role    = "user";
+            user_msg.content = user_text;
+            w.history.push_back(user_msg);
 
-            int new_len = llama_chat_apply_template(tmpl_name, w.history.data(), w.history.size(), true, w.formatted.data(), w.formatted.size());
-            if (new_len > (int)w.formatted.size()) {
-                w.formatted.resize(new_len);
-                new_len = llama_chat_apply_template(tmpl_name, w.history.data(), w.history.size(), true, w.formatted.data(), w.formatted.size());
+            // Render full conversation with generation prompt; feed only
+            // the delta past prev_len to llama_decode (KV cache already
+            // holds the earlier turns).
+            common_chat_templates_inputs inputs;
+            inputs.messages              = w.history;
+            inputs.add_generation_prompt = true;
+            inputs.use_jinja             = true;
+            common_chat_params params;
+            try {
+                params = common_chat_templates_apply(w.tmpls.get(), inputs);
+            } catch (const std::exception & e) {
+                emit_err(std::string("chat_templates_apply failed: ") + e.what());
+                continue;
             }
-            if (new_len < 0) { emit_err(std::string("chat_apply_template failed for ") + tmpl_name); continue; }
+            const std::string & full = params.prompt;
+            std::string prompt = w.prev_len <= full.size() ? full.substr(w.prev_len) : full;
 
-            std::string prompt(w.formatted.begin() + w.prev_len, w.formatted.begin() + new_len);
             std::string response = generate(w, prompt, max_tokens);
 
-            w.history.push_back({ strdup("assistant"), strdup(response.c_str()) });
-            w.prev_len = llama_chat_apply_template(tmpl_name, w.history.data(), w.history.size(), false, nullptr, 0);
+            // Append assistant turn and re-render WITHOUT generation prompt
+            // so prev_len marks the boundary the next user turn will append
+            // past. Same pattern the previous llama_chat_apply_template
+            // path used, just via the Jinja-capable API.
+            common_chat_msg asst_msg;
+            asst_msg.role    = "assistant";
+            asst_msg.content = response;
+            w.history.push_back(asst_msg);
+
+            common_chat_templates_inputs inputs2;
+            inputs2.messages              = w.history;
+            inputs2.add_generation_prompt = false;
+            inputs2.use_jinja             = true;
+            try {
+                auto params2 = common_chat_templates_apply(w.tmpls.get(), inputs2);
+                w.prev_len = params2.prompt.size();
+            } catch (const std::exception & e) {
+                emit_err(std::string("chat_templates_apply (post) failed: ") + e.what());
+                w.prev_len = full.size() + response.size(); // best-effort fallback
+            }
 
             emit("DONE");
         } else if (line == "RESET") {
