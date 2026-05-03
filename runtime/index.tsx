@@ -2,15 +2,34 @@
 // globalThis.__hostFlush(json) before evaling this bundle. It also calls
 // globalThis.__dispatchEvent(id, type) when the user presses a Node.
 
+// ── Host-fn no-op stubs ────────────────────────────────────────────────
+// The engine fires `__ifttt_on*` globals at ~1Hz from telemetry/system
+// signals (system_signals.zig). useIFTTT.ts (required below) installs the
+// real handlers, but if anything in the require chain throws or runs late
+// the host eval string `__ifttt_onSystemRam(N,M)` floods stderr with
+// ReferenceErrors before the real shim is ever defined. Pre-defining
+// no-ops here turns the worst-case from "log spam every second forever"
+// into "silently ignored until useIFTTT loads." The real shims
+// overwrite these unconditionally on assignment.
+{
+  const __g: any = globalThis as any;
+  const __noop = () => {};
+  for (const k of [
+    '__ifttt_onKeyDown', '__ifttt_onKeyUp', '__ifttt_onClipboardChange',
+    '__ifttt_onSystemFocus', '__ifttt_onSystemDrop', '__ifttt_onSystemCursor',
+    '__ifttt_onSystemSlowFrame', '__ifttt_onSystemHang',
+    '__ifttt_onSystemRam', '__ifttt_onSystemVram', '__ifttt_onSystemResize',
+  ]) {
+    if (typeof __g[k] !== 'function') __g[k] = __noop;
+  }
+}
+
 // require() because this file mutates React (installAutoHotState wraps useState).
 // ES `import * as React` yields an immutable namespace and breaks the patch.
 const React: any = require('react');
 
-// Side-effect import: useIFTTT installs a top-level set of host-fn shims
-// (__ifttt_onKeyDown, __ifttt_onSystemSlowFrame, etc.) that the engine calls
-// unconditionally from telemetry/system signals. Without this, any cart that
-// doesn't itself call useIFTTT() leaves those globals undefined and the engine
-// throws ReferenceError on every slow frame / key press / focus change.
+// Side-effect import: useIFTTT installs the real top-level set of host-fn
+// shims, replacing the no-ops above with real emit-bus dispatchers.
 require('./hooks/useIFTTT');
 
 // ── Browser API shims ────────────────────────────────────────────────
