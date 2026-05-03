@@ -354,7 +354,71 @@ CHECKLIST:
 
 ---
 
+### Character creator page — `character/page.tsx` — Stub
+
+CHECKLIST:
+- Purpose: `/character` route. Sims-style page where the user sculpts the assistant's voice — visual identity (name, displayName, avatarRef, voiceThumbnailRef, themeId), archetype seed, twelve dial sliders, quirks drawer, three small enums (relationshipStance / initiativeProfile / correctionStyle), boundary-rule Constraint pickers, knowledge-source list. Live preview message updates on every dial change. Save fires `system:character:saved` on the IFTTT bus; the shell subscribes and applies the new theme + classifier set. See `cart/app/docs/character/README.md` for the design corpus and `cart/app/recipes/character-creator.tsx` for the runtime composition.
+- isRoute: TRUE (planned — registered in `index.tsx`'s `ROUTES` table at `mode: 'side'`)
+- Route: `/character`
+- hasDatashape: TRUE
+- Datashape: reads/writes `Character` (`cart/component-gallery/data/character.ts`) via the planned character provider; reads `PersonalityDial`, `CharacterArchetype`, `CharacterQuirk`, `Constraint` catalogs; emits `system:character:saved` on the IFTTT bus
+- exposedDatashapes: `Character`, `CharacterArchetype`, `PersonalityDial`, `CharacterQuirk`, `Constraint`
+- Hooks: `useCRUD` (per shape, namespace `app`); `useIFTTT` for `system:character:saved`; planned `useActiveCharacter()` from `cart/app/character/state.tsx`
+- Conditions:
+  - Empty state (no Character row exists) shows the archetype picker first; once an archetype is picked the dials + quirks panel mounts populated.
+  - Live preview line is gated on `dialValues` changing — debounced to one resolve per ~200ms so the LLM-style preview is plausible cost.
+  - Save button is gated on at least `name` being non-empty.
+- Components: `ArchetypePicker`, `DialPanel`, `QuirkDrawer`, `StanceTriad`, `BoundaryRuleList`, `KnowledgeSourceList`, `LivePreviewLine`, `CharacterCard`
+- Atoms: gallery slider family (`bipolar-slider`, `discrete-slider`, `meter-slider`), `segmented-control`, `choice-list`, `intent-surface` (for the preview), `generic-card`, `preset-card`, `model-card` (for archetype cards), `tooltip-frame` (for dial axis hints), `circular-progress` (organic fit metric)
+- isUsingTheme: TRUE (classifiers only; `themeId` on the saved Character drives the active theme post-save)
+- hasIcons: TRUE
+- Icons: archetype icons (TBD), `Save`, `Trash`, `Plus`, `ChevronRight`
+- hasAnimation: TRUE — fade between archetype cards (Spring on entry, Fade on swap), dial slider tween on programmatic update (when archetype is changed; user-initiated drags are direct), card border-trace on save success
+- Animations: see app.md Animation principles. No new animation primitive.
+- TODO:
+  - Build the `cart/app/character/state.tsx` provider mirroring `cart/app/onboarding/state.jsx` shape (one `useCRUD` per collection, `app` namespace, optimistic cache).
+  - Wire avatar / voice-thumbnail capture pipeline (open thread).
+  - Decide if the live preview is real-LLM or template-based for v1 (template-based gets to feedback faster).
+- PROBLEMS:
+  - The data shapes ship in `cart/component-gallery/data/{character,personality-dial,character-archetype,character-quirk,character-compatibility}.ts` but the page has no implementation yet. Stories render the shapes in the gallery; `/character` is a stub route until the provider + page mount.
+  - Avatar / voice-thumbnail pipeline is unresolved; UI uses placeholders until that lands.
+
+---
+
+### Manifest page — `manifest/page.tsx` — Stub
+
+CHECKLIST:
+- Purpose: `/manifest` route. Personality Survey + manifest viewer. Surfaces the assistant's evolving read of the user (`UserManifest` from `cart/component-gallery/data/user-manifest.ts`), shows pending quiz cards (chat-loom intent trees rendered inline via `runtime/intent/render.RenderIntent`), shows the digest of high-confidence dimensions, surfaces friction alerts from the active `CharacterCompatibility` row, and runs the anomaly-detection re-check inline when a contradiction lands. Organic progress framing per PRD §5 ("still getting to know you" / "practically finishing each other's sentences") — no percentage bars.
+- isRoute: TRUE (planned)
+- Route: `/manifest`
+- hasDatashape: TRUE
+- Datashape: reads/writes `UserManifest`, `QuizSession`, `CharacterCompatibility`; emits `system:quiz:rendered` / `system:quiz:answered` (chat-loom round-trip); subscribes to `manifest:updated`, `manifest:anomaly-detected`
+- exposedDatashapes: `UserManifest`, `ManifestDimensionDef`, `QuizSession`, `CharacterCompatibility`
+- Hooks: `useCRUD`, `useIFTTT`; planned `useActiveManifest()`
+- Conditions:
+  - Quiz feed renders only the most recent unanswered `QuizSession` per visit (debounce); answered sessions roll into the digest.
+  - Anomaly re-check banner mounts only when `manifest:anomaly-detected` fires AND the contradicted dimension was already at confidence > 0.6.
+  - Friction alerts list mounts only when the active CharacterCompatibility row carries non-empty `frictionAlerts[]`.
+- Components: `ManifestDigest`, `QuizCard`, `AnomalyRecheckBanner`, `FrictionAlertList`, `RecommendedAdjustmentRow`, `RenderIntent` (from runtime)
+- Atoms: `generic-card`, `preset-card`, `intent-surface` (the quiz body), `progress` / `circular-progress` (organic), `news-feed-post` (digest entries), `tooltip-frame` (per-dimension confidence hints)
+- isUsingTheme: TRUE (classifiers only)
+- hasIcons: TRUE
+- Icons: `Sparkles` (digest), `Refresh` (recheck), `AlertTriangle` (friction), `ChevronRight`
+- hasAnimation: TRUE — quiz card Spring entry, list-reorder Tween on confidence updates, border-trace on submit success, Fade between digest tabs
+- Animations: see app.md Animation principles. No new primitive.
+- TODO:
+  - Build `cart/app/manifest/state.tsx` provider.
+  - Wire the quiz author turn (calls the model with `comp_quiz_author`); wire the infer turn on submit; persist QuizSession lifecycle.
+  - Implement the compatibility recomputer pure function (planned at `cart/app/character/lib/compute-compatibility.ts`).
+  - Implement the unlock table (planned at `cart/app/character/lib/unlock-table.ts`); subscribe to `system:manifest:dimension-confident`.
+- PROBLEMS:
+  - Same as Character page — data shapes ship; page is a stub. Stories render the shapes in the gallery; `/manifest` route is a placeholder until the provider + page mount.
+
+---
+
 ## Onboarding
+
+The 5-step onboarding seeds **declared** user traits into `User.preferences.accommodations[]` (Step 3 multi-select chips wired through `cart/app/onboarding/traits.js`). The **inferred** counterpart — what the assistant figures out about the user over time through quizzes and conversational moments — lives on `UserManifest` (`cart/component-gallery/data/user-manifest.ts`) and is built post-onboarding by the Personality Survey at `/manifest`. The two coexist and never fold; see [`cart/app/docs/character/03-manifest-as-evolving-read.md`](docs/character/03-manifest-as-evolving-read.md).
 
 ### Onboarding step router — `onboarding/Onboarding.jsx` — Complete
 
@@ -746,9 +810,62 @@ CHECKLIST:
 
 ---
 
+### Character + manifest provider — `character/state.tsx` — Stub
+
+CHECKLIST:
+- Purpose: Mirror of `cart/app/onboarding/state.jsx` for the Character Creator + Personality Survey. One `useCRUD` per collection (`character`, `userManifest`, `quizSession`, `characterCompatibility`) in the same `app` namespace so a dev wipe clears everything cleanly. Holds the in-memory optimistic cache; exposes `useActiveCharacter()`, `useActiveManifest()`, `useCompatibility()`, `useQuizFeed()`. Future code, none today.
+- isRoute: FALSE
+- Route: —
+- hasDatashape: TRUE
+- Datashape: reads/writes `Character`, `UserManifest`, `QuizSession`, `CharacterCompatibility`; emits `system:character:saved`, subscribes to `manifest:updated` / `manifest:anomaly-detected`
+- exposedDatashapes: `Character`, `UserManifest`, `QuizSession`, `CharacterCompatibility`, `CharacterArchetype`, `PersonalityDial`, `CharacterQuirk`, `ManifestDimensionDef`
+- Hooks: `useCRUD`, `useIFTTT`, planned `useActiveCharacter`, `useActiveManifest`, `useCompatibility`, `useQuizFeed`
+- Conditions: bootstrap mirrors onboarding's pattern — read on mount, hydrate cache, follow `Settings.activeCharacterId` (planned field) to active Character.
+- Components: —
+- Atoms: —
+- isUsingTheme: FALSE
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: FALSE
+- Animations: —
+- TODO:
+  - Land the provider file once `cart/app/character/page.tsx` and `cart/app/manifest/page.tsx` are scoped.
+  - Decide grain question (open thread): does Character switch with the active Settings profile, or is it User-grain with per-profile visibility?
+- PROBLEMS: stub — no implementation yet. Data shapes ship in `cart/component-gallery/data/`.
+
+---
+
 ## Planned work
 
 The sections below are *forward-looking* plans, not file entries. They live here so the architecture and the work-not-yet-done are in one place; the per-file index above stays a clean per-file map.
+
+### Character creator page
+
+The data shapes for the Character Creator ship today (`cart/component-gallery/data/{character,personality-dial,character-archetype,character-quirk,character-compatibility}.ts`) but the page implementation is the next phase. Scope:
+
+- **Archetype picker.** Six cards (`Sage / Jester / Protector / Curator / Companion / Critic`), each previewing the archetype's voice with a one-line sample. Picking seeds the dials + quirks; the card border-traces on hover (gallery border-dash pattern).
+- **Dial panel.** Twelve `bipolar-slider` instances, one per `PersonalityDial`. Each dial shows leftLabel / rightLabel / axisDescription on hover via `tooltip-frame`. Mid-range values (0.15..0.85) show a "neutral" badge so the user knows the dial isn't contributing.
+- **Quirks drawer.** Multi-select chip list against `CharacterQuirk`, grouped by category. Locked quirks (per the unlock-table) appear dimmed with a badge listing the trigger.
+- **Stance / initiative / correction triad.** Three `segmented-control` instances, one per enum.
+- **Boundary rules picker.** A `choice-list` against the active settings' `Constraint` rows; the user picks which boundaries this character carries. New boundaries can be added inline (creates a new Constraint row scoped to the active settings).
+- **Knowledge sources.** A list of file/url/inline locators with add/remove affordances; pipeline TBD (see open threads).
+- **Live preview message.** A short sample reply rendered through `intent-surface` (or template-based for v1) that updates on every dial change. Debounced.
+- **Save → fires `system:character:saved`.** The shell subscribes and applies the new theme + classifier set per the character-creator recipe's event hook.
+
+Composition path: the runtime side is already declared by [`cart/app/recipes/character-creator.tsx`](recipes/character-creator.tsx). The page just authors / edits the `Character` row; saving fires the event hook the recipe declares.
+
+### Personality Survey page
+
+Same shape — data ships today, page is next. Scope:
+
+- **Manifest digest panel.** High-confidence dimensions surfaced as small cards (`generic-card` shape with `news-feed-post` density). Confidence visualized through organic affordances (saturated-vs-faded, "still getting to know you" copy) — no percentage bars per PRD §5.
+- **Quiz feed.** When the engine has a fresh `QuizSession`, a card mounts here with the chat-loom intent tree rendered inline via `runtime/intent/render.RenderIntent`. Submitting fires `system:quiz:answered`; the cart runs the infer turn and the manifest updates.
+- **"Still getting to know you" status row.** One-line organic-metaphor strip indicating how complete the read is (e.g. "We've talked through 6 of 9 lenses on you" — never a percent).
+- **Anomaly recheck banner.** When `manifest:anomaly-detected` fires, a one-line nudge offers a re-check quiz on that specific dimension.
+- **Friction panel.** When the active `CharacterCompatibility` row carries non-empty `frictionAlerts[]`, a side panel surfaces them with the recommended adjustments. Tapping an adjustment applies it to the active Character.
+- **Privacy controls.** Per-dimension visibility (visible / anonymized / hidden) per the manifest privacy thread (see open threads).
+
+Quiz LLM round-trip uses the `comp_quiz_author` + `comp_quiz_infer` compositions declared by [`cart/app/recipes/personality-quiz-engine.tsx`](recipes/personality-quiz-engine.tsx).
 
 ### Side menu + activity host (remaining work on the GOLDEN shell)
 
@@ -942,7 +1059,11 @@ These need a coordinated touch — not localized to a single file.
 - **Skipped-mode runtime branch** — when `User.onboarding.status === 'skipped'`, the app should run in a degraded mode. State.jsx persists the status correctly today, but IndexPage still treats `complete=true` as one homogenous render path. Add a third branch (alongside onboarding / completed-home) that prompts inline for missing onboarded data when skipped users hit features that need it.
 - **Deferred clarification flow re-arm** — see the deferred-clarify section above. Now that persistence is live, a `clarification` substate on `User.onboarding` (or a sibling field) is a clean place to land `{status, firedAt, answers}` so the notification doesn't refire across reloads.
 - **Goal popover copy** — Step5's tooltip text lives inline in `Step5.jsx` (`GOAL_TOOLTIP`). Move to a content / i18n layer once one exists; today there's no other natural home for it.
-- **Local chat path verification** — `framework/local_ai_runtime.zig` was just refactored from runtime dlopen to link-time `extern "c"` (mirrors `framework/embed.zig`). Needs a clean rebuild + an end-to-end run of `cart/manifest_gate/` to confirm gemma-4 finishes loading on Vulkan instead of cancelling at the offload boundary. Once that's green, the new `cart/app/recipes/gemma-line-gate-for-claude-edits.{md,ts}` recipe stops being aspirational and gets a "validated" line; until then it's a design doc.
+- **Local chat path verification** — RESOLVED via the subprocess pivot. The link-time `extern "c"` rewrite hit a different wall (struct-ABI mismatch with whichever llama.cpp the linked .so was built against, plus the wgpu/Vulkan VkInstance fight reappeared once the cart actually got far enough to load tensors). Replaced with an out-of-process inference worker — see "Local chat: subprocess pivot" in Recently landed. The recipe at `cart/app/recipes/gemma-line-gate-for-claude-edits.{md,ts}` is still aspirational; rewriting it against the subprocess path is the next concrete step.
+- **Avatar + voice-thumbnail pipeline (Character)** — `Character.avatarRef` and `Character.voiceThumbnailRef` are opaque locators. Three viable paths (local-file upload, external URL, generated-from-prompt); the data shape is stable across all three so the pick can be deferred. UI uses placeholders until one lands. See `cart/app/docs/character/99-open-questions.md`.
+- **Character grain across profiles** — Character is profile-grain via `Settings.activeCharacterId` (planned field). Open whether a character should be visible across profiles or per-profile. Leaning: User-owned (already true via `character.userId`), per-profile *exposed* via a `Settings.sharedCharacterIds[]` opt-in. Deferred until multi-profile lands.
+- **Manifest privacy tier** — PRD §6 calls for per-dimension visibility ('visible' / 'anonymized' / 'hidden' / 'deletable'). Sketch: extend `Privacy` (`cart/component-gallery/data/privacy.ts`) with a `manifest` namespace mirroring the `tools` / `filesystem` shape; `src_user-manifest-snapshot` reads the tier and skips hidden dimensions. Deferred to a Privacy revision; data shapes here don't depend on the answer.
+- **Token registry @character / @manifest** — once the routes land, add the `@character` and `@manifest` route tokens to `cart/app/tokens.ts` so the input strip dispatches to them. Trivial — gated on the routes existing.
 
 ### Recently landed
 
@@ -951,6 +1072,20 @@ A short rolling log so cross-file work doesn't keep getting re-planned. Trim ent
 - **Onboarding "lock-in" pass** (2026-04-29) — `state.jsx` writes through `useCRUD` (namespace `app`) into the gallery data graph: User (`user_local`), Settings (`settings_default`), Privacy (`privacy_default`), Workspace (`ws_local`), plus per-completion Connection + Goal rows. `User.onboarding.{status, step, startedAt, completedAt, skippedAt, tourStatus}` all persist.
 - **Three-state shell + input morph** (commits `3bad2f07d` → `6aa1cd24c`, 2026-05-01) — A/B/C state machine, route+focal driver axes, smoke-and-mirrors variant flip, GOLDEN regression list. Canonical reference: **Animation principles → Input-strip shell morph (GOLDEN)**. `git log --grep GOLDEN`.
 - **HUD / iframe split + settings sub-nav promotion** (commits `25910df18` (Phase A) → `0e49af62f` (Phase B), 2026-05-02) — fixed the `/settings` morph-flash regression. Phase A: bar bg → `theme:transparent`, routes wrapper drops `paddingBottom`, pages own internal `paddingBottom` via the new `useHudInsets()` store in `cart/app/shell.tsx`. Phase B: `SettingsNav` lifts out of the page tree and renders inside `S.AppSideMenuInput` at the top of the assistant rail, reading active section from a new `useSettingsSection()` shell store. Canonical reference: **Animation principles → HUD / iframe split**. Covers `cart/app/{index.tsx,shell.tsx,page.tsx,about/page.jsx,settings/page.jsx,sweatshop/page.tsx}`.
+- **Local chat: subprocess pivot — full GPU inference inside cart/app** (commits `ea3e1654d` → `d2b1a3981`, 2026-05-02) — the in-process llama.cpp link-time path (entry just below) hit two compounding walls: (a) struct-ABI mismatch with whichever upstream commit our prebuilt `libllama_ffi.so` was built against — `llama_model_default_params()`'s 72-byte return struct shape was drifting under us, leaving garbage in `progress_callback` that triggered a `cancelled model load` mid-offload; (b) once we got past the struct issue, the original wgpu/Vulkan `VkInstance` fight was still there and killed the offload at the buffer-allocation boundary anyway. Pivoted to running inference in a separate process so each side gets its own `VkInstance` (see `framework/ffi/llm_worker.cpp`). Pieces:
+  - `framework/ffi/llm_worker.cpp` — small C++ subprocess that loads a `.gguf` on Vulkan, talks to the cart over a line-delimited LOAD/CHAT/READY/TOK/DONE/ERR protocol on stdin/stdout. Sniffs the model's embedded Jinja chat template for known markers (gemma / chatml / llama2 / phi3) since llama.cpp's `apply_template` doesn't render full Jinja.
+  - `framework/ffi/llama_headers/` — vendored `llama.h` + `ggml*.h` + `gguf.h` from llama.cpp upstream. Knows gemma4, qwen3.6, every current arch.
+  - `framework/local_ai_runtime.zig` — rewritten (old version preserved as `_old.zig`). Public API (`Session`, `SessionOptions`, `SubmitOptions`, `EventKind`, `OwnedEvent`) is identical so `framework/v8_bindings_sdk.zig`, `framework/qjs_runtime.zig`, and `useLocalChat` need zero changes. Worker spawn sets `LD_LIBRARY_PATH=<exe_dir>/lib + dev fallback` so the bundled libs resolve.
+  - `framework/v8_bindings_sdk.zig` — pre-existing field-name mismatch fixed: hook reads `evt.kind` / `evt.text`; binding was setting `"type"` / `"result"`. Was masked while the in-process load failed silently; surfaced once events actually flowed.
+  - `runtime/hooks/useLocalChat.ts` — model swap now tears down + respawns; empty model is inert (lets `useAssistantChat` always call this hook unconditionally).
+  - `cart/app/chat/useAssistantChat.ts` — routes to `useLocalChat` when the active `Connection.kind === 'local-runtime'`. The `.gguf` path comes from `Connection.credentialRef.locator` (LocalForm already captures the typed path there). Both hooks always called per rules-of-hooks; the inactive one short-circuits.
+  - `scripts/ship` — when `WANT_SDK` is on (which `useLocalChat` triggers), copies `rjit-llm-worker` + `libllama.so` + `libggml{,-base,-cpu,-vulkan}.so` from `deps/llama.cpp-fresh/build/bin` into the cart payload. Self-extracting wrapper unpacks them next to `app.bin` and the cart's other libs. No external runtime install required.
+  - `cart/llm_lab/` — minimal test cart for the subprocess path. Pick Gemma 4 E4B or Qwen 3.6 27B, hit Ask, watch tokens stream into the OUTPUT panel.
+  - `deps/llama.cpp-fresh/` — fresh upstream clone (gitignored), built locally via cmake with `-DGGML_VULKAN=ON -DBUILD_SHARED_LIBS=ON`. Knows current archs the older copies in `love2d/llama.cpp` and `deps/llama.cpp.zig` predate.
+  - `sdk/dependency-registry.json` — `useLocalChat` trigger moved from the `embed` gate to the `sdk` gate (chat path no longer needs `libllama_ffi.so` linked at build).
+  - Confirmed end-to-end on AMD Radeon RX 7900 XTX: 43/43 layers offloaded to GPU via Vulkan, tokens stream back through pipes to the cart UI without fighting wgpu's `VkInstance`. Switching models in `cart/llm_lab` tears down + respawns cleanly.
+  - The existing Step2 'I have local models' tile already commits as `kind='local-runtime'` (state.jsx remap at line 470), so onboarding flows that pick a `.gguf` path now drive the cart/app `AssistantChat` through this subprocess by default — no UI change needed.
+  - Open: the in-process path entry below is now historical context, not a live target. Replace mention of `framework/llama_exports.zig` in the gemma recipe with the subprocess wire protocol once the recipe is rewritten.
 - **Local chat hook (`useLocalChat`) + manifest-gate cart + extern-link refactor** (2026-05-02) — net-new generation path through the framework's Vulkan llama runtime, alongside the existing embedding path. Pieces:
   - `runtime/hooks/useLocalChat.ts` — wraps `__localai_init` / `_send` / `_poll` / `_close` with React state. Exposes `phase` (`init` / `loading` / `loaded` / `generating` / `idle` / `failed`), a `pulse` heartbeat counter, `lastStatus`, and `streaming` (assistant tokens accumulated mid-`ask`). Defaults `persistAcrossUnmount: true` so dev hot-reload doesn't tear down the session and cancel the model load. New 4th arg to `__localai_init` plumbs `n_ctx` through (Zig-side `hostLocalAiInit` in `framework/v8_bindings_sdk.zig`).
   - `cart/manifest_gate/{index.tsx,cart.json}` — Round-2 of the line-manifest benchmark. Reads `experiments/manifest_check/target.py` + `manifest.md` via `runtime/hooks/fs`, walks claims sequentially, asks Gemma-4 for a `TRUE`/`FALSE` verdict per line, writes the preamble to `experiments/manifest_check/results/round2_preamble.txt`. UI: pulsing heartbeat dot, phase label, live token-stream panel, active-row highlight in the verdicts list. Triggers `has-embed=true` at ship time via the `useLocalChat` import (registered in `sdk/dependency-registry.json` as a second trigger of the existing `embed` gate).
