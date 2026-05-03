@@ -54,7 +54,10 @@ export default function App() {
 
   useEffect(() => { setBrowsePort(BROWSE_PORT); }, []);
   const tools = useMemo(() => createBrowseTools() as any, []);
-  const chat = useLocalChat({ model: MODEL, tools, nCtx: 8192 });
+  // Big context — extracted page content from browser_extract is fat,
+  // and a multi-turn agent loop blows past 8k after one or two pages.
+  // 65k is comfortable on 12GB+ VRAM with this Q8 model.
+  const chat = useLocalChat({ model: MODEL, tools, nCtx: 65536 });
 
   // Mirror tool calls into the transcript as they happen
   useEffect(() => {

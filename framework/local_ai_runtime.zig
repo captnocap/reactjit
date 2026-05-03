@@ -479,7 +479,13 @@ fn workerMainInner(session: *Session) !void {
     defer session.allocator.free(resolved_path);
 
     {
-        const cmd = try std.fmt.allocPrint(session.allocator, "LOAD {s}\n", .{resolved_path});
+        // Protocol: LOAD <n_ctx> <abs_path>. Worker parses n_ctx as the
+        // max context window (KV cache size). Without this the worker
+        // would hardcode 4096 and the first multi-turn chat would hit
+        // "context exceeded" — even though the user's GPU can handle
+        // much more. Backward-compat: worker falls back to 4096 if no
+        // numeric prefix is present.
+        const cmd = try std.fmt.allocPrint(session.allocator, "LOAD {d} {s}\n", .{ session.options.n_ctx, resolved_path });
         defer session.allocator.free(cmd);
         try stdin_file.writeAll(cmd);
     }

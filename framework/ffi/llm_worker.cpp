@@ -303,8 +303,9 @@ struct WorkerState {
 
 // ── load + generate ─────────────────────────────────────────────────
 
-static bool load_model(WorkerState & w, const std::string & path) {
-    fprintf(stderr, "[worker] load_model entry: path=%s\n", path.c_str()); fflush(stderr);
+static bool load_model(WorkerState & w, const std::string & path, int n_ctx) {
+    fprintf(stderr, "[worker] load_model entry: path=%s n_ctx=%d\n", path.c_str(), n_ctx); fflush(stderr);
+    if (n_ctx > 0) w.n_ctx = n_ctx;
 
     llama_model_params mp = llama_model_default_params();
     mp.n_gpu_layers = 99;
@@ -436,12 +437,34 @@ int main(int argc, char ** argv) {
         }
 
         if (line.rfind("LOAD ", 0) == 0) {
-            std::string path = line.substr(5);
+            // New protocol: "LOAD <n_ctx> <path>" — n_ctx as base-10 int,
+            // then space, then absolute path (path may contain spaces).
+            // Backward compat: if the first arg isn't numeric, treat the
+            // whole rest as path with n_ctx = 0 (use default).
+            std::string args = line.substr(5);
+            int load_n_ctx = 0;
+            std::string path;
+            size_t sp = args.find(' ');
+            bool parsed_n_ctx = false;
+            if (sp != std::string::npos) {
+                try {
+                    load_n_ctx = std::stoi(args.substr(0, sp));
+                    parsed_n_ctx = true;
+                } catch (...) {
+                    parsed_n_ctx = false;
+                }
+            }
+            if (parsed_n_ctx) {
+                path = args.substr(sp + 1);
+            } else {
+                path = args;
+                load_n_ctx = 0;
+            }
             if (w.model) {
                 emit_err("LOAD twice not supported");
                 continue;
             }
-            if (load_model(w, path)) {
+            if (load_model(w, path, load_n_ctx)) {
                 emit("READY");
             }
         } else if (line == "TOOLS") {
