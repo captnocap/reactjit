@@ -311,6 +311,10 @@ pub const Node = struct {
     computed: LayoutRect = .{},
     text: ?[]const u8 = null,
     font_size: u16 = 16,
+    /// Small runtime font-family id. 0 = default face. The JS host maps
+    /// common CSS family names to these ids; the GPU text atlas selects the
+    /// matching FreeType face during measure and paint.
+    font_family_id: u8 = 0,
     /// CSS font-weight (100..900). 400 = regular, 700 = bold. Anything ≥600
     /// renders with the bold face when one is loaded; otherwise regular.
     font_weight: u16 = 400,
@@ -508,7 +512,7 @@ pub const Node = struct {
     _cache_ih: f32 = -1,
     _cache_ih_avail: f32 = -1,
 };
-pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool, bold: bool) TextMetrics;
+pub const MeasureTextFn = *const fn (text: []const u8, font_size: u16, font_family_id: u8, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool, bold: bool) TextMetrics;
 pub const MeasureImageFn = *const fn (path: []const u8) ImageDims;
 
 // ── Module state ───────────────────────────────────
@@ -715,6 +719,7 @@ const TextCacheEntry = struct {
     text_ptr: usize = 0,
     text_len: usize = 0,
     font_size: u16 = 0,
+    font_family_id: u8 = 0,
     font_weight: u16 = 0,
     max_width_bits: u32 = 0,
     letter_spacing_bits: u32 = 0,
@@ -727,7 +732,7 @@ const TextCacheEntry = struct {
 
 var textCache: [TEXT_CACHE_SIZE]TextCacheEntry = [_]TextCacheEntry{.{}} ** TEXT_CACHE_SIZE;
 
-fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, font_weight: u16, max_width_bits: u32, letter_spacing_bits: u32, line_height_bits: u32, max_lines: u16, no_wrap: bool) usize {
+fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, font_family_id: u8, font_weight: u16, max_width_bits: u32, letter_spacing_bits: u32, line_height_bits: u32, max_lines: u16, no_wrap: bool) usize {
     // FNV-1a style hash
     var h: usize = 0x811c9dc5;
     h ^= text_ptr;
@@ -735,6 +740,8 @@ fn textCacheHash(text_ptr: usize, text_len: usize, font_size: u16, font_weight: 
     h ^= text_len;
     h *%= 0x01000193;
     h ^= font_size;
+    h *%= 0x01000193;
+    h ^= font_family_id;
     h *%= 0x01000193;
     h ^= font_weight;
     h *%= 0x01000193;
@@ -762,11 +769,11 @@ fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
     const ls_bits: u32 = @bitCast(@as(f32, node.letter_spacing));
     const lh_bits: u32 = @bitCast(@as(f32, node.line_height));
     const bold = node.font_weight >= 600;
-    const idx = textCacheHash(text_ptr, text_len, node.font_size, node.font_weight, mw_bits, ls_bits, lh_bits, node.number_of_lines, node.no_wrap);
+    const idx = textCacheHash(text_ptr, text_len, node.font_size, node.font_family_id, node.font_weight, mw_bits, ls_bits, lh_bits, node.number_of_lines, node.no_wrap);
 
     const entry = &textCache[idx];
     if (entry.valid and entry.text_ptr == text_ptr and entry.text_len == text_len and
-        entry.font_size == node.font_size and entry.font_weight == node.font_weight and
+        entry.font_size == node.font_size and entry.font_family_id == node.font_family_id and entry.font_weight == node.font_weight and
         entry.max_width_bits == mw_bits and
         entry.letter_spacing_bits == ls_bits and entry.line_height_bits == lh_bits and
         entry.max_lines == node.number_of_lines and entry.no_wrap == node.no_wrap)
@@ -774,11 +781,12 @@ fn measureNodeTextW(node: *Node, maxWidth: f32) TextMetrics {
         return entry.result;
     }
 
-    const result = measureFn.?(txt, node.font_size, maxWidth, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap, bold);
+    const result = measureFn.?(txt, node.font_size, node.font_family_id, maxWidth, node.letter_spacing, node.line_height, node.number_of_lines, node.no_wrap, bold);
     entry.* = .{
         .text_ptr = text_ptr,
         .text_len = text_len,
         .font_size = node.font_size,
+        .font_family_id = node.font_family_id,
         .font_weight = node.font_weight,
         .max_width_bits = mw_bits,
         .letter_spacing_bits = ls_bits,
@@ -1054,7 +1062,7 @@ fn computeMinContentW(node: *Node) f32 {
             const wordStart = i;
             while (i < node.text.?.len and node.text.?[@intCast(i)] != ' ' and node.text.?[@intCast(i)] != '\n') : (i += 1) {}
             const word = node.text.?[@intCast(wordStart)..@intCast(i)];
-            const m = measureFn.?(word, node.font_size, 0, node.letter_spacing, node.line_height, node.number_of_lines, false, node.font_weight >= 600);
+            const m = measureFn.?(word, node.font_size, node.font_family_id, 0, node.letter_spacing, node.line_height, node.number_of_lines, false, node.font_weight >= 600);
             if (m.width > maxWordW) {
                 maxWordW = m.width;
             }
@@ -1260,7 +1268,11 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
     const justify = s.justify_content;
     const @"align" = s.align_items;
     const mainSize = if (isRow) innerW else innerH;
-    const MAX_CHILDREN = 512;
+    // Stack-allocated per-flex-call child measurement arrays. 11 arrays at
+    // MAX_CHILDREN entries (~52 bytes/child) per recursion frame. 2048 ×
+    // 52 ≈ 104KB / frame; ample for a stress-test grid (1000 cells in one
+    // flexWrap row) without blowing 8MB threads at deep nesting.
+    const MAX_CHILDREN = 2048;
     var childBasis: [MAX_CHILDREN]f32 = undefined;
     var childGrow: [MAX_CHILDREN]f32 = undefined;
     var childShrink: [MAX_CHILDREN]f32 = undefined;

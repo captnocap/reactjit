@@ -31,7 +31,12 @@ pub const ImageQuad = extern struct {
 // Constants & State
 // ════════════════════════════════════════════════════════════════════════
 
-pub const MAX_IMAGE_QUADS = 256;
+// Image-quad pool shared by `<Image>` blits, render-to-texture composites
+// (StaticSurface, Filter), blend2d-rasterized SVG fills, and effect-fill
+// quads. 256 was a long-standing default that capped real-world pages once
+// they had ~50 cards × multiple images each. Bumped to 2048 — ~64KB BSS
+// (g_quads + g_bind_groups arrays).
+pub const MAX_IMAGE_QUADS = 2048;
 
 var g_quads: [MAX_IMAGE_QUADS]ImageQuad = undefined;
 var g_bind_groups: [MAX_IMAGE_QUADS]?*wgpu.BindGroup = .{null} ** MAX_IMAGE_QUADS;

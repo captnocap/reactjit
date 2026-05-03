@@ -56,6 +56,7 @@ pub const setLineHeightOverride = text.setLineHeightOverride;
 pub const setLetterSpacing = text.setLetterSpacing;
 pub const setBold = text.setBold;
 pub const setBoldFace = text.setBoldFace;
+pub const setFontFamily = text.setFontFamily;
 pub fn getInlineSlotCount() u8 {
     return text.g_inline_slot_count;
 }
@@ -495,7 +496,11 @@ const ZERO_SCISSOR_SEGMENT = ScissorSegment{
     .image_start = 0,
 };
 
-const MAX_SCISSOR_SEGMENTS = 768;
+// Scissor history for clipped subtrees (overflow: hidden, ScrollView,
+// StaticSurface capture). Each push + pop adds entries; at 1000 cells with
+// `<Icon>` Boxes (overflow: hidden) the prior 768 was exhausted before the
+// last row drew. 4096 covers stress-grid cardinality with headroom.
+const MAX_SCISSOR_SEGMENTS = 4096;
 var g_scissor_segments: [MAX_SCISSOR_SEGMENTS]ScissorSegment = undefined;
 var g_scissor_count: usize = 0;
 
@@ -693,8 +698,15 @@ const StaticSurfaceCapture = struct {
     filter_h: f32 = 0,
 };
 
-const MAX_STATIC_SURFACES = 512;
-const MAX_STATIC_CAPTURES = 512;
+// Cached-texture pool. Each entry holds one wgpu.Texture + view + sampler
+// + bind group. Bumped from 512 so a typical settings/dashboard page (40+
+// model cards × possibly nested cached subtrees) doesn't fall through to
+// the uncached paint path mid-page once the pool fills.
+const MAX_STATIC_SURFACES = 2048;
+// Per-frame capture queue (subset of surfaces that recapture this frame).
+// Same bound — initial mount of a 1000-card grid would otherwise drop
+// captures past the 513th card.
+const MAX_STATIC_CAPTURES = 2048;
 var g_static_entries: [MAX_STATIC_SURFACES]StaticSurfaceEntry = [_]StaticSurfaceEntry{.{}} ** MAX_STATIC_SURFACES;
 var g_static_captures: [MAX_STATIC_CAPTURES]StaticSurfaceCapture = [_]StaticSurfaceCapture{.{}} ** MAX_STATIC_CAPTURES;
 var g_static_capture_count: usize = 0;
