@@ -414,7 +414,12 @@ export function flushToHost(): void {
     const t2 = (globalThis as any).performance?.now?.() ?? Date.now();
     transportFlush(payload);
     const t3 = (globalThis as any).performance?.now?.() ?? Date.now();
-    if (payload.length > 100000 || (t3 - t0) > 50) {
+    // Diagnostic gate: log only when the flush is BOTH unusually large
+    // AND unusually slow (the interesting case — payload size driving
+    // bridge cost). Big-but-fast and slow-but-small flushes are noise,
+    // and animation-driven content updates spammed this log every frame
+    // because the per-frame UPDATE batch easily clears 100KB on its own.
+    if (payload.length > 500000 && (t3 - t0) > 100) {
       const gh: any = globalThis as any;
       if (typeof gh.__hostLog === 'function') {
         try { gh.__hostLog(0, `[flush-timing] pending=${pendingN} coalesced=${coalesced.length} bytes=${payload.length} coalesce=${(t1-t0).toFixed(1)}ms stringify=${(t2-t1).toFixed(1)}ms bridge=${(t3-t2).toFixed(1)}ms total=${(t3-t0).toFixed(1)}ms`); } catch {}

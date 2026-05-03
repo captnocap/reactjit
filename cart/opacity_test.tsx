@@ -19,19 +19,20 @@
 // scaled. Watch the telemetry's paint number after each toggle.
 
 import { useState } from 'react';
-import { Box, Pressable, Image, Text } from '@reactjit/runtime/primitives';
+import { Box, Pressable, Image, Text, StaticSurface } from '@reactjit/runtime/primitives';
 import { Icon } from '@reactjit/runtime/icons/Icon';
 import { Eye } from '@reactjit/runtime/icons/icons';
 import { PROVIDER_ICONS } from './component-gallery/components/model-card/providerIcons.generated';
 
-type Feature = 'opacity' | 'text' | 'image' | 'icons' | 'press';
-const FEATURES: Feature[] = ['opacity', 'text', 'image', 'icons', 'press'];
+type Feature = 'opacity' | 'text' | 'image' | 'icons' | 'press' | 'static';
+const FEATURES: Feature[] = ['opacity', 'text', 'image', 'icons', 'press', 'static'];
 const FEATURE_LABEL: Record<Feature, string> = {
   opacity: 'OPACITY',
   text:    'TEXT',
   image:   'IMAGE',
   icons:   'ICONS',
   press:   'PRESS',
+  static:  'STATIC',
 };
 
 const COUNTS = [60, 252, 600, 1000];
@@ -41,7 +42,7 @@ const COUNTS = [60, 252, 600, 1000];
 const SAMPLE_IMAGE = PROVIDER_ICONS['openai'] || Object.values(PROVIDER_ICONS)[0];
 
 type EnabledMap = Record<Feature, boolean>;
-const EMPTY_ENABLED: EnabledMap = { opacity: false, text: false, image: false, icons: false, press: false };
+const EMPTY_ENABLED: EnabledMap = { opacity: false, text: false, image: false, icons: false, press: false, static: false };
 
 function Cell({ i, on }: { i: number; on: EnabledMap }) {
   const dim = on.opacity;
@@ -59,8 +60,8 @@ function Cell({ i, on }: { i: number; on: EnabledMap }) {
     opacity: dim ? 0.45 : 1,
   };
 
-  const inner = (
-    <Box style={cellStyle}>
+  const body = (
+    <>
       {on.image && (
         <Image source={SAMPLE_IMAGE} style={{ width: 16, height: 16 }} />
       )}
@@ -70,7 +71,20 @@ function Cell({ i, on }: { i: number; on: EnabledMap }) {
       {on.text && (
         <Text style={{ fontSize: 10, color: '#bdbdc4' }}>n{i}</Text>
       )}
-    </Box>
+    </>
+  );
+
+  // STATIC mode: wrap each cell in a <StaticSurface staticKey="cell:N">.
+  // The framework captures the cell's contents to a GPU texture once and
+  // blits it on every subsequent frame. With the subtree-mutation
+  // invalidation patch, stable keys auto-recapture on any descendant
+  // change — so toggling a feature still updates correctly.
+  const inner = on.static ? (
+    <StaticSurface staticKey={`cell:${i}`} style={cellStyle}>
+      {body}
+    </StaticSurface>
+  ) : (
+    <Box style={cellStyle}>{body}</Box>
   );
 
   if (on.press) {
