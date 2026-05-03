@@ -15,8 +15,14 @@
 //
 //   parent → worker (one command per line):
 //     LOAD <abs_path_to_gguf>\n
+//     TOOLS\n<json_array_of_{name,description,parameters}>\n.\n
+//                         — register tool schemas; persists across CHATs
+//                            until next TOOLS or RESET. Empty array clears.
 //     CHAT <max_tokens>\n<system_prompt>\n<user_text>\n.\n
-//     RESET\n             — drop chat history, keep model loaded
+//     TOOL_RESULT <id>\n<result_text>\n.\n
+//                         — sent in response to a worker-emitted TOOL_CALL
+//                            during an active CHAT
+//     RESET\n             — drop chat history + tools, keep model loaded
 //     PING\n              — round-trip health check
 //     QUIT\n              — shut down cleanly
 //
@@ -24,7 +30,10 @@
 //     READY\n             — model loaded, ready for CHAT
 //     TOK <text>\n        — one token piece (text may contain spaces;
 //                            newlines inside are escaped as \n)
-//     DONE\n              — generation complete
+//     TOOL_CALL <id>\n<name>\n<arguments_json>\n.\n
+//                         — model wants to call a tool. Worker pauses
+//                            generation and waits for TOOL_RESULT.
+//     DONE\n              — generation complete (no further tool calls)
 //     PONG\n              — response to PING
 //     ERR <message>\n     — fatal-ish error
 //
@@ -34,6 +43,7 @@
 
 #include "llama.h"
 #include "chat.h"   // common_chat_templates_* — full Jinja + per-model tool-call parsers
+#include "nlohmann/json.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -41,6 +51,8 @@
 #include <string>
 #include <sstream>
 #include <vector>
+
+using json = nlohmann::ordered_json;
 
 // ── small helpers ───────────────────────────────────────────────────
 
@@ -100,11 +112,13 @@ struct WorkerState {
     const llama_vocab * vocab = nullptr;
     common_chat_templates_ptr tmpls;     // initialized in load_model from the model's embedded Jinja
     std::vector<common_chat_msg> history;
+    std::vector<common_chat_tool> tools; // registered via TOOLS command; persists until RESET
     size_t prev_len = 0;                 // chars of the most recently rendered prompt (no gen prompt)
     int n_ctx = 4096;
 
     void reset_history() {
         history.clear();
+        tools.clear();
         prev_len = 0;
         if (ctx) {
             llama_memory_clear(llama_get_memory(ctx), true);
@@ -263,6 +277,37 @@ int main(int argc, char ** argv) {
             if (load_model(w, path)) {
                 emit("READY");
             }
+        } else if (line == "TOOLS") {
+            std::string body = read_block_until_dot();
+            w.tools.clear();
+            if (body.empty()) {
+                // explicit clear is also valid
+            } else {
+                try {
+                    auto j = json::parse(body);
+                    if (!j.is_array()) {
+                        emit_err("TOOLS body must be a JSON array");
+                        continue;
+                    }
+                    for (auto & t : j) {
+                        common_chat_tool tool;
+                        tool.name        = t.value("name", "");
+                        tool.description = t.value("description", "");
+                        // parameters is an object — re-serialize so the
+                        // template engine receives canonical JSON.
+                        if (t.contains("parameters")) {
+                            tool.parameters = t["parameters"].dump();
+                        } else {
+                            tool.parameters = "{}";
+                        }
+                        w.tools.push_back(tool);
+                    }
+                } catch (const std::exception & e) {
+                    emit_err(std::string("TOOLS parse failed: ") + e.what());
+                    continue;
+                }
+            }
+            emit("READY");
         } else if (line.rfind("CHAT ", 0) == 0) {
             if (!w.model) { emit_err("CHAT before LOAD"); continue; }
             int max_tokens = 0;
@@ -285,47 +330,145 @@ int main(int argc, char ** argv) {
             user_msg.content = user_text;
             w.history.push_back(user_msg);
 
-            // Render full conversation with generation prompt; feed only
-            // the delta past prev_len to llama_decode (KV cache already
-            // holds the earlier turns).
-            common_chat_templates_inputs inputs;
-            inputs.messages              = w.history;
-            inputs.add_generation_prompt = true;
-            inputs.use_jinja             = true;
-            common_chat_params params;
-            try {
-                params = common_chat_templates_apply(w.tmpls.get(), inputs);
-            } catch (const std::exception & e) {
-                emit_err(std::string("chat_templates_apply failed: ") + e.what());
-                continue;
+            // Tool-call loop. Each iteration:
+            //  1. render history (+ tools, +gen prompt) → prompt
+            //  2. generate response (streamed via TOK)
+            //  3. parse — if no tool calls, push assistant msg, exit
+            //  4. else: emit TOOL_CALL events, await TOOL_RESULT,
+            //     append assistant (with tool_calls) and tool turns,
+            //     loop for next assistant turn
+            const size_t MAX_TOOL_ROUNDS = 8;
+            size_t round = 0;
+            bool aborted = false;
+            for (; round < MAX_TOOL_ROUNDS; round++) {
+                common_chat_templates_inputs inputs;
+                inputs.messages              = w.history;
+                inputs.tools                 = w.tools;
+                inputs.add_generation_prompt = true;
+                inputs.use_jinja             = true;
+                common_chat_params params;
+                try {
+                    params = common_chat_templates_apply(w.tmpls.get(), inputs);
+                } catch (const std::exception & e) {
+                    emit_err(std::string("chat_templates_apply failed: ") + e.what());
+                    aborted = true;
+                    break;
+                }
+                const std::string & full = params.prompt;
+                std::string prompt = w.prev_len <= full.size() ? full.substr(w.prev_len) : full;
+
+                std::string response = generate(w, prompt, max_tokens);
+
+                // Parse model output. If no tools were registered (or the
+                // model didn't emit a call), parsed.tool_calls stays empty
+                // and we treat this as a normal assistant turn.
+                common_chat_parser_params pp(params);
+                common_chat_msg parsed;
+                bool parse_ok = true;
+                try {
+                    parsed = common_chat_parse(response, false, pp);
+                } catch (const std::exception &) {
+                    parse_ok = false;
+                }
+
+                if (!parse_ok || parsed.tool_calls.empty()) {
+                    common_chat_msg asst;
+                    asst.role    = "assistant";
+                    asst.content = parse_ok ? parsed.content : response;
+                    if (parse_ok && !parsed.reasoning_content.empty()) {
+                        asst.reasoning_content = parsed.reasoning_content;
+                    }
+                    w.history.push_back(asst);
+
+                    common_chat_templates_inputs inp_post;
+                    inp_post.messages              = w.history;
+                    inp_post.tools                 = w.tools;
+                    inp_post.add_generation_prompt = false;
+                    inp_post.use_jinja             = true;
+                    try {
+                        auto p_post = common_chat_templates_apply(w.tmpls.get(), inp_post);
+                        w.prev_len = p_post.prompt.size();
+                    } catch (const std::exception &) {
+                        w.prev_len = full.size() + response.size();
+                    }
+                    break;
+                }
+
+                // Tool calls present. Push assistant turn carrying them,
+                // then emit each one and await a TOOL_RESULT before
+                // continuing to the next round.
+                common_chat_msg asst;
+                asst.role       = "assistant";
+                asst.content    = parsed.content;
+                asst.tool_calls = parsed.tool_calls;
+                if (!parsed.reasoning_content.empty()) {
+                    asst.reasoning_content = parsed.reasoning_content;
+                }
+                w.history.push_back(asst);
+
+                bool tool_round_aborted = false;
+                for (size_t i = 0; i < parsed.tool_calls.size(); i++) {
+                    auto & tc = parsed.tool_calls[i];
+                    std::string call_id = tc.id.empty()
+                        ? ("tc" + std::to_string(round) + "-" + std::to_string(i))
+                        : tc.id;
+
+                    emit(("TOOL_CALL " + call_id).c_str());
+                    emit(tc.name.c_str());
+                    // arguments is JSON; emit raw, then "." terminator
+                    fputs(tc.arguments.c_str(), stdout);
+                    fputc('\n', stdout);
+                    emit(".");
+
+                    std::string rl = read_line_or_empty();
+                    if (rl.empty()) {
+                        emit_err("EOF waiting for TOOL_RESULT");
+                        tool_round_aborted = true;
+                        aborted = true;
+                        break;
+                    }
+                    if (rl.rfind("TOOL_RESULT ", 0) != 0) {
+                        emit_err(std::string("expected TOOL_RESULT, got: ") + rl);
+                        tool_round_aborted = true;
+                        aborted = true;
+                        break;
+                    }
+                    std::string result_id   = rl.substr(12);
+                    std::string result_body = read_block_until_dot();
+
+                    common_chat_msg tool_msg;
+                    tool_msg.role         = "tool";
+                    tool_msg.tool_call_id = result_id;
+                    tool_msg.content      = result_body;
+                    w.history.push_back(tool_msg);
+                }
+                if (tool_round_aborted) break;
+
+                // Update prev_len so the next iteration's render delta
+                // covers only the new turn boundary.
+                common_chat_templates_inputs inp_mid;
+                inp_mid.messages              = w.history;
+                inp_mid.tools                 = w.tools;
+                inp_mid.add_generation_prompt = false;
+                inp_mid.use_jinja             = true;
+                try {
+                    auto p_mid = common_chat_templates_apply(w.tmpls.get(), inp_mid);
+                    w.prev_len = p_mid.prompt.size();
+                } catch (const std::exception &) {
+                    // Best-effort — leave prev_len; next render's delta
+                    // computation will cope with a small overshoot.
+                }
             }
-            const std::string & full = params.prompt;
-            std::string prompt = w.prev_len <= full.size() ? full.substr(w.prev_len) : full;
-
-            std::string response = generate(w, prompt, max_tokens);
-
-            // Append assistant turn and re-render WITHOUT generation prompt
-            // so prev_len marks the boundary the next user turn will append
-            // past. Same pattern the previous llama_chat_apply_template
-            // path used, just via the Jinja-capable API.
-            common_chat_msg asst_msg;
-            asst_msg.role    = "assistant";
-            asst_msg.content = response;
-            w.history.push_back(asst_msg);
-
-            common_chat_templates_inputs inputs2;
-            inputs2.messages              = w.history;
-            inputs2.add_generation_prompt = false;
-            inputs2.use_jinja             = true;
-            try {
-                auto params2 = common_chat_templates_apply(w.tmpls.get(), inputs2);
-                w.prev_len = params2.prompt.size();
-            } catch (const std::exception & e) {
-                emit_err(std::string("chat_templates_apply (post) failed: ") + e.what());
-                w.prev_len = full.size() + response.size(); // best-effort fallback
+            if (round == MAX_TOOL_ROUNDS) {
+                emit_err("tool-call loop hit MAX_TOOL_ROUNDS");
             }
-
-            emit("DONE");
+            if (!aborted) emit("DONE");
+        } else if (line.rfind("TOOL_RESULT ", 0) == 0) {
+            // Out-of-band TOOL_RESULT (no active tool-call awaited). Drain
+            // its body so we don't leave dangling lines for the next CHAT
+            // and surface the protocol mistake to the parent.
+            (void)read_block_until_dot();
+            emit_err("unexpected TOOL_RESULT outside CHAT tool loop");
         } else if (line == "RESET") {
             w.reset_history();
             emit("READY");
