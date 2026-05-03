@@ -41,10 +41,17 @@ fi
 mkdir -p "$(dirname "$OUT")"
 
 echo "[build-llm-worker] g++ -> $OUT"
+# llama-common is upstream's umbrella for chat.cpp + minja Jinja + the
+# per-model tool-call parsers (Qwen / Hermes / Mistral / Llama-3 / etc).
+# Linked unconditionally so common_chat_templates_apply / common_chat_parse_*
+# are available; whether llm_worker.cpp actually CALLS them is a separate
+# step. Order: common first because it depends on llama, llama on ggml.
 g++ -O2 -std=c++17 \
     -I "$HEADERS" \
+    -I "$LLAMA_DIR/common" \
     "$SRC" \
     -L "$LLAMA_BUILD" \
+    -Wl,--no-as-needed -lllama-common -Wl,--as-needed \
     -lllama -lggml \
     -Wl,-rpath,"$LLAMA_BUILD" \
     -o "$OUT"
