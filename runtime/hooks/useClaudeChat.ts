@@ -115,8 +115,15 @@ export function useClaudeChat(opts: UseClaudeChatOpts = {}) {
         return;
       }
       initRef.current = true;
-      phaseRef.current = 'loading';
-      setPhase('loading');
+      // Successful __claude_init means the subprocess is spawned and its
+      // stdin is open — we can send immediately. The CLI doesn't emit a
+      // `system` event until the first user turn arrives, so waiting for
+      // it before unlocking ask() would deadlock the chat (queued send
+      // never drains; system never arrives without a send). Treat init
+      // success as 'loaded' directly; a real `system` event later just
+      // refines lastStatus.
+      phaseRef.current = 'loaded';
+      setPhase('loaded');
     }
 
     const interval = opts.pollMs ?? 100;
