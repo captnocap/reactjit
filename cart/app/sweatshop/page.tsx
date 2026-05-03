@@ -1,79 +1,91 @@
-// Sweatshop activity — placeholder. Demonstrates the shell's activity
-// mode (state B: docked input on the side, activity in the main view)
-// and the focus mechanism (state C: input takes focal mode via
-// setInputFocal — activity stays visible, input slides back to a
-// full-width bar).
+// Composer — the canvas surface.
 //
-// Click any worker tile to focal the input; click "release" to dock it
-// back. The actual worker chat is a future iteration; for now this is
-// just enough surface to exercise the shell's B↔C transitions.
+// Per docs/02-canvas-and-substrates.md: the canvas is the *open scene*. No
+// chat box at the bottom, no fixed layout. Three palette tiers (capabilities,
+// domain nodes, rules/effects) compose freely. Composition is structural;
+// useIFTTT is reactive. Both coexist.
+//
+// This file is a placeholder. The real canvas lands here when the substrate
+// surfaces are ready. For now: prove data continuity (the goal node knows
+// what the user typed at onboarding) and lay out the tier hint.
 
-import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
-import { useInputFocal, useHudInsets } from '../shell';
+import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
+import { useUser, useLatestGoal } from './data';
 
-const WORKERS = ['weft', 'warp', 'shuttle', 'loom', 'reed', 'heddle'];
+const TIERS = [
+  { id: 'capability', label: 'Capability palette', hint: 'runtime/hooks/* — sensors, sources, effects' },
+  { id: 'domain',     label: 'Domain nodes',       hint: 'component-gallery shapes — Goal, Connection, Workspace' },
+  { id: 'rules',      label: 'Rules & effects',    hint: 'useIFTTT — reactive substrate over the structure' },
+];
 
-export default function SweatshopPage() {
-  const [focal, setFocal] = useInputFocal();
-  const insets = useHudInsets();
+function GoalNode() {
+  const goal = useLatestGoal();
+  const text = goal.data[0]?.statement ?? '(no goal set)';
   return (
-    <Box style={{
-      flexGrow: 1,
-      paddingLeft: 32, paddingRight: 32,
-      paddingTop: 32, paddingBottom: 32 + insets.bottom,
-      gap: 20,
-      flexDirection: 'column',
+    <Col style={{
+      backgroundColor: 'theme:surface',
+      borderColor: 'theme:line',
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 16,
+      gap: 8,
+      width: 360,
     }}>
-      <Box style={{ flexDirection: 'column', gap: 4 }}>
-        <Text style={{ fontSize: 22, fontWeight: 700, color: 'theme:ink' }}>
-          Sweatshop
+      <Text size={11} color="theme:inkMuted" bold={true}>GOAL</Text>
+      <Text size={16} color="theme:ink">{text}</Text>
+      <Text size={10} color="theme:inkMuted">review socket — pinned to the run</Text>
+    </Col>
+  );
+}
+
+function TierHint({ label, hint }: { label: string; hint: string }) {
+  return (
+    <Col style={{
+      backgroundColor: 'theme:surfaceSubtle',
+      borderColor: 'theme:lineSoft',
+      borderWidth: 1,
+      borderRadius: 8,
+      padding: 12,
+      gap: 4,
+      flexGrow: 1,
+    }}>
+      <Text size={11} color="theme:ink" bold={true}>{label}</Text>
+      <Text size={10} color="theme:inkMuted">{hint}</Text>
+    </Col>
+  );
+}
+
+export default function ComposerPage() {
+  const user = useUser();
+  const name = user.data?.displayName ?? '';
+  return (
+    <Col style={{ flexGrow: 1, padding: 24, gap: 24, backgroundColor: 'theme:bg' }}>
+      <Row style={{ alignItems: 'baseline', gap: 12 }}>
+        <Text size={20} color="theme:ink" bold={true}>Canvas</Text>
+        <Text size={11} color="theme:inkMuted">
+          {name ? `${name}'s open scene` : 'open scene — nothing required, everything composes'}
         </Text>
-        <Text style={{ fontSize: 13, color: 'theme:inkDim' }}>
-          Placeholder activity. Click a worker to focal the input
-          (state C — input slides to full-width); click release to dock
-          it back into the side panel (state B).
-        </Text>
+      </Row>
+
+      <Box style={{
+        flexGrow: 1,
+        borderColor: 'theme:lineSoft',
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderRadius: 12,
+        padding: 32,
+        backgroundColor: 'theme:bg',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <GoalNode />
       </Box>
 
-      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {WORKERS.map((w) => (
-          <Pressable key={w} onPress={() => setFocal(true)}>
-            <Box style={{
-              paddingLeft: 16, paddingRight: 16,
-              paddingTop: 14, paddingBottom: 14,
-              minWidth: 120, minHeight: 80,
-              borderRadius: 8,
-              backgroundColor: 'theme:bg2',
-              borderWidth: 1, borderColor: 'theme:rule',
-            }}>
-              <Text style={{ fontSize: 14, fontWeight: 700, color: 'theme:ink' }}>
-                {w}
-              </Text>
-              <Text style={{ fontSize: 11, color: 'theme:inkDim', marginTop: 8 }}>
-                worker
-              </Text>
-            </Box>
-          </Pressable>
+      <Row style={{ gap: 12 }}>
+        {TIERS.map((t) => (
+          <TierHint key={t.id} label={t.label} hint={t.hint} />
         ))}
-      </Box>
-
-      {focal ? (
-        <Pressable onPress={() => setFocal(false)}>
-          <Box style={{
-            paddingLeft: 14, paddingRight: 14,
-            paddingTop: 6, paddingBottom: 6,
-            borderRadius: 6,
-            backgroundColor: 'theme:bg2',
-            borderWidth: 1, borderColor: 'theme:rule',
-            alignSelf: 'flex-start',
-            marginTop: 8,
-          }}>
-            <Text style={{ fontSize: 12, color: 'theme:inkDim' }}>
-              ← release input (back to docked)
-            </Text>
-          </Box>
-        </Pressable>
-      ) : null}
-    </Box>
+      </Row>
+    </Col>
   );
 }
