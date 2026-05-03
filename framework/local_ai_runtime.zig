@@ -344,6 +344,38 @@ fn workerMainInner(session: *Session) !void {
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Inherit;
 
+    // Build LD_LIBRARY_PATH so the worker finds libllama.so + ggml
+    // siblings. In a shipped cart they're bundled in the same lib/
+    // dir as the cart's libs (next to the worker). In dev they live
+    // under deps/llama.cpp-fresh/build/bin. We prepend both, then
+    // anything already on LD_LIBRARY_PATH.
+    var env_map = std.process.getEnvMap(session.allocator) catch std.process.EnvMap.init(session.allocator);
+    defer env_map.deinit();
+
+    var ld_paths = std.ArrayList(u8){};
+    defer ld_paths.deinit(session.allocator);
+
+    const worker_dir = std.fs.path.dirname(worker_path) orelse worker_path;
+    const sibling_lib = try std.fs.path.join(session.allocator, &.{ worker_dir, "lib" });
+    defer session.allocator.free(sibling_lib);
+    try ld_paths.appendSlice(session.allocator, sibling_lib);
+
+    // Dev fallback (the cmake build output).
+    const dev_lib = "/home/siah/creative/reactjit/deps/llama.cpp-fresh/build/bin";
+    if (std.fs.cwd().access(dev_lib, .{})) |_| {
+        try ld_paths.append(session.allocator, ':');
+        try ld_paths.appendSlice(session.allocator, dev_lib);
+    } else |_| {}
+
+    if (env_map.get("LD_LIBRARY_PATH")) |existing| {
+        if (existing.len > 0) {
+            try ld_paths.append(session.allocator, ':');
+            try ld_paths.appendSlice(session.allocator, existing);
+        }
+    }
+    env_map.put("LD_LIBRARY_PATH", ld_paths.items) catch {};
+    child.env_map = &env_map;
+
     child.spawn() catch |err| {
         const msg = try std.fmt.allocPrint(session.allocator, "spawn {s} failed: {s}", .{ worker_path, @errorName(err) });
         defer session.allocator.free(msg);

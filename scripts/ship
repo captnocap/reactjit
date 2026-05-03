@@ -598,6 +598,38 @@ rm -rf "$TMP_DIR"
 mkdir -p "$LIB_DIR"
 cp "$BUILD_BIN" "$TMP_DIR/app.bin"
 
+# ── llama.cpp inference subprocess (rjit-llm-worker) ───────────────────
+# Carts that import useLocalChat get the worker binary + libllama.so +
+# the four ggml siblings bundled. The worker runs llama.cpp inference
+# in its own process so the renderer's wgpu/Vulkan never fights with
+# llama's ggml-vulkan over the VkInstance. See framework/ffi/llm_worker.cpp
+# and framework/local_ai_runtime.zig for the full architecture.
+if [[ "$WANT_SDK" == "1" ]]; then
+    LLM_WORKER_SRC="$RJIT_HOME/zig-out/bin/rjit-llm-worker"
+    LLM_LIB_DIR="$RJIT_HOME/deps/llama.cpp-fresh/build/bin"
+    if [[ -f "$LLM_WORKER_SRC" ]] && [[ -d "$LLM_LIB_DIR" ]]; then
+        cp "$LLM_WORKER_SRC" "$TMP_DIR/rjit-llm-worker"
+        chmod +x "$TMP_DIR/rjit-llm-worker"
+        # Copy real files for the SONAMEs the worker NEEDS, and add a
+        # symlink at the SONAME if upstream named the file with a version
+        # suffix (libllama.so.0.0.1 etc). We only need the .so and .so.0
+        # forms for runtime resolution.
+        for so_pattern in libllama libggml libggml-base libggml-cpu libggml-vulkan; do
+            for f in "$LLM_LIB_DIR/${so_pattern}.so"*; do
+                [[ -e "$f" ]] || continue
+                soname=$(basename "$f")
+                # Resolve symlink to real file, copy real file with the
+                # symlink's name so any naming layer works.
+                real=$(readlink -f "$f")
+                cp "$real" "$LIB_DIR/$soname"
+            done
+        done
+        echo "[ship]   bundled rjit-llm-worker + libllama.so + ggml-vulkan backend"
+    else
+        echo "[ship]   WARNING: useLocalChat needs $LLM_WORKER_SRC + $LLM_LIB_DIR — skipping local-runtime bundle"
+    fi
+fi
+
 if [[ -n "$ICON_SOURCE" ]]; then
     mkdir -p "$SHARE_DIR/icons" "$SHARE_DIR/applications"
     cp "$ICON_SOURCE" "$SHARE_DIR/icons/$ICON_FILE"

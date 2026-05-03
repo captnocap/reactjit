@@ -71,6 +71,10 @@ export function useLocalChat(opts: UseLocalChatOpts) {
 
   useEffect(() => {
     if (initRef.current) return;
+    // Empty model = inert. Lets useAssistantChat always call this hook
+    // unconditionally and only spawn the worker when local-runtime is
+    // the picked connection (rules of hooks: can't conditionally call).
+    if (!opts.model || opts.model.length === 0) return;
     if (!hasHost('__localai_init')) {
       setError('local_ai host bindings not registered (framework/v8_bindings_sdk.zig)');
       return;

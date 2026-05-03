@@ -5,20 +5,22 @@
 // the same { phase, streaming, ask, ... } shape regardless of which
 // backend is driving — call sites stay backend-agnostic.
 //
-// v1: Claude only.
-//   - claude-code-cli  → Claude SDK CLI subprocess (uses configDir)
-//   - anthropic-api-key → Claude SDK CLI subprocess (no configDir)
-// Other connection kinds (kimi-api-key, openai-api-key, local-runtime)
-// fall through to Claude defaults today; their dedicated branches land
-// when their hook implementations exist (see app.md line 1010).
+// Routing:
+//   - claude-code-cli   → useClaudeChat (with configDir)
+//   - anthropic-api-key → useClaudeChat (no configDir)
+//   - local-runtime     → useLocalChat (subprocess llama.cpp on Vulkan;
+//                          model field IS the absolute .gguf path)
+//   - kimi-api-key / openai-api-key → fall through to Claude defaults
+//                          (dedicated hooks land later)
 //
-// Both Claude kinds share the same V8 host bindings
-// (__claude_init / __claude_send / __claude_poll / __claude_close), so
-// the only piece that varies between them at v1 is whether configDir
-// is forwarded into __claude_init.
+// Rules-of-hooks: we always call BOTH useClaudeChat and useLocalChat
+// every render and pick the surface to return based on `kind`. The
+// inactive hook spins idle — for useLocalChat that means an empty
+// model path, which short-circuits the worker spawn.
 
 import { useCRUD } from '@reactjit/runtime/hooks';
 import { useClaudeChat } from '@reactjit/runtime/hooks/useClaudeChat';
+import { useLocalChat } from '@reactjit/runtime/hooks/useLocalChat';
 import { callHost, hasHost } from '@reactjit/runtime/ffi';
 
 const NS = 'app';
@@ -72,5 +74,28 @@ export function useAssistantChat() {
   const model = (settings && settings.defaultModelId) || 'claude-opus-4-7';
   const cwd = processCwd();
 
-  return useClaudeChat({ cwd, model, configDir: cfgDir });
+  // For local-runtime the .gguf path lives on Connection.credentialRef.locator
+  // (LocalForm captures the absolute path there; defaultModelId only holds
+  // the basename). Always call useLocalChat (rules of hooks); empty model
+  // short-circuits the worker spawn so the non-active path costs nothing.
+  const localPath =
+    kind === 'local-runtime' && conn?.credentialRef?.locator
+      ? String(conn.credentialRef.locator)
+      : '';
+  const localChat = useLocalChat({ model: localPath, nCtx: 4096 });
+  const claudeChat = useClaudeChat({ cwd, model, configDir: cfgDir });
+
+  if (kind === 'local-runtime' && localPath) {
+    // Normalize useLocalChat's surface to match useClaudeChat's keys
+    // that AssistantChatProvider consumes.
+    return {
+      phase: localChat.phase,
+      streaming: localChat.streaming,
+      ask: localChat.ask,
+      ready: localChat.ready,
+      error: localChat.error,
+      lastStatus: localChat.lastStatus,
+    } as any;
+  }
+  return claudeChat;
 }
