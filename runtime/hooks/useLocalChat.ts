@@ -36,6 +36,13 @@ import { callHost, hasHost } from '../ffi';
 
 export type LocalChatPhase = 'init' | 'loading' | 'loaded' | 'generating' | 'idle' | 'failed';
 
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: { type: 'object'; properties: Record<string, any>; required?: string[] };
+  execute: (args: any) => any | Promise<any>;
+}
+
 export interface UseLocalChatOpts {
   model: string;
   sessionId?: string;
@@ -47,11 +54,21 @@ export interface UseLocalChatOpts {
   /** When true, leaves the session alive across cart unmount (dev hot-reload
    *  friendly — avoids re-loading the model on every edit). Default true. */
   persistAcrossUnmount?: boolean;
+  /** Tool schemas + executors. Re-registers automatically when the array
+   *  identity changes — so cart code that builds the array inside the
+   *  component should useMemo it. Tools persist across asks until cleared. */
+  tools?: ToolDefinition[];
 }
 
 export interface AskOpts {
   pollMs?: number;
   timeoutMs?: number;
+}
+
+export interface ToolCallEvent {
+  id: string;
+  name: string;
+  args: any;
 }
 
 export function useLocalChat(opts: UseLocalChatOpts) {
@@ -68,6 +85,11 @@ export function useLocalChat(opts: UseLocalChatOpts) {
     resolve: null,
     reject: null,
   });
+  // Live tool registry — kept on a ref so the poll loop sees the latest
+  // executors without resubscribing every render. Synced with opts.tools
+  // via the useEffect below.
+  const toolsRef = useRef<Record<string, ToolDefinition>>({});
+  const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([]);
 
   useEffect(() => {
     if (initRef.current) return;
@@ -139,6 +161,43 @@ export function useLocalChat(opts: UseLocalChatOpts) {
             phaseRef.current = 'generating';
             setPhase('generating');
           }
+        } else if (evt.kind === 'tool_call') {
+          // Worker has paused generation waiting for our reply. Run the
+          // registered handler async — fire-and-forget; when it resolves
+          // we ship the result back via __localai_send_tool_result and
+          // the worker resumes streaming TOK lines.
+          const id   = String(evt.id || '');
+          const name = String(evt.name || '');
+          let parsedArgs: any = {};
+          try { parsedArgs = evt.args ? JSON.parse(evt.args) : {}; } catch { parsedArgs = { _raw: evt.args }; }
+          setToolCalls((prev) => [...prev, { id, name, args: parsedArgs }]);
+
+          const handler = toolsRef.current[name];
+          const replyResult = (val: any) => {
+            const body = (() => {
+              if (typeof val === 'string') return val;
+              try { return JSON.stringify(val); } catch { return String(val); }
+            })();
+            callHost<boolean>('__localai_send_tool_result', false, id, body);
+          };
+          const replyError = (err: any) => {
+            replyResult({ error: err instanceof Error ? err.message : String(err) });
+          };
+
+          if (!handler) {
+            replyError(`unknown tool: ${name}`);
+          } else {
+            try {
+              const r = handler.execute(parsedArgs);
+              if (r && typeof (r as any).then === 'function') {
+                (r as Promise<any>).then(replyResult, replyError);
+              } else {
+                replyResult(r);
+              }
+            } catch (e: any) {
+              replyError(e);
+            }
+          }
         } else if (evt.kind === 'result') {
           const out = typeof evt.text === 'string' && evt.text.length > 0 ? evt.text : ab.buf;
           if (ab.resolve) {
@@ -168,6 +227,26 @@ export function useLocalChat(opts: UseLocalChatOpts) {
       setError(null);
     };
   }, [opts.model]);
+
+  // Sync the tool registry + push schemas into the worker whenever the
+  // opts.tools array identity changes. The worker holds the schemas
+  // sticky across asks until next set_tools or close.
+  useEffect(() => {
+    const map: Record<string, ToolDefinition> = {};
+    if (opts.tools) for (const t of opts.tools) map[t.name] = t;
+    toolsRef.current = map;
+    if (!hasHost('__localai_set_tools')) return;
+    if (!opts.tools || opts.tools.length === 0) {
+      callHost<boolean>('__localai_set_tools', false, '[]');
+      return;
+    }
+    const schema = opts.tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    }));
+    callHost<boolean>('__localai_set_tools', false, JSON.stringify(schema));
+  }, [opts.tools]);
 
   function ask(text: string, _askOpts: AskOpts = {}): Promise<string> {
     if (!hasHost('__localai_send')) {
@@ -202,6 +281,10 @@ export function useLocalChat(opts: UseLocalChatOpts) {
     streaming,
     ask,
     isAvailable,
+    /** Tool calls observed during the most recent / current ask. Reset
+     *  here is the cart's responsibility (use clearToolCalls). */
+    toolCalls,
+    clearToolCalls: () => setToolCalls([]),
     /** Convenience: ready === phase past 'loading' and not erroring. */
     ready: phase === 'loaded' || phase === 'generating' || phase === 'idle',
   };
