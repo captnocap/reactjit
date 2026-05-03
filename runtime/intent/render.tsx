@@ -4,7 +4,7 @@
  * reach into the gallery directory directly.
  */
 import type { Node } from './parser';
-import { IntentSurface } from '../../cart/component-gallery/components/intent-surface/IntentSurface';
+import { IntentSurface } from '../../cart/app/gallery/components/intent-surface/IntentSurface';
 
 interface RenderProps {
   nodes: Node[];

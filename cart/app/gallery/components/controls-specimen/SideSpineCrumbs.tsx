@@ -7,7 +7,7 @@ export type SideSpineCrumbsProps = {
   crumbs?: string[];
 };
 
-const DEFAULT_CRUMBS = ['cart', 'component-gallery', 'controls-specimen', 'AxisReadout.tsx'];
+const DEFAULT_CRUMBS = ['cart', 'app', 'gallery', 'controls-specimen', 'AxisReadout.tsx'];
 
 export function SideSpineCrumbs({
   spineLabel = 'SPEC · FS',

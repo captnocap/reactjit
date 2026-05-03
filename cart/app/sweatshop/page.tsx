@@ -14,7 +14,7 @@ import { useUser, useLatestGoal } from './data';
 
 const TIERS = [
   { id: 'capability', label: 'Capability palette', hint: 'runtime/hooks/* — sensors, sources, effects' },
-  { id: 'domain',     label: 'Domain nodes',       hint: 'component-gallery shapes — Goal, Connection, Workspace' },
+  { id: 'domain',     label: 'Domain nodes',       hint: '../gallery shapes — Goal, Connection, Workspace' },
   { id: 'rules',      label: 'Rules & effects',    hint: 'useIFTTT — reactive substrate over the structure' },
 ];
 

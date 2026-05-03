@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import './components.cls';
 import { callHost } from '@reactjit/runtime/ffi';
-import { TooltipRoot } from '../shared/tooltip/Tooltip';
+import { TooltipRoot } from '@reactjit/runtime/tooltip/Tooltip';
 import {
   useFuzzySearch,
   type FuzzyMode,
@@ -9,10 +9,12 @@ import {
   type FuzzySearchOptions,
   type FuzzySearchResult,
 } from '@reactjit/runtime/hooks/useFuzzySearch';
-import { Box, Col, Pressable, Row, ScrollView, Text, TextInput } from '@reactjit/runtime/primitives';
+import { Box, Col, Pressable, Row, ScrollView, StaticSurface, Text, TextInput } from '@reactjit/runtime/primitives';
 import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import { ChevronDown, ChevronRight, Maximize, Minimize, X } from '@reactjit/runtime/icons/icons';
-import { Route, Router, useNavigate } from '@reactjit/runtime/router';
+import { Route, Router, useNavigate, useRoute } from '@reactjit/runtime/router';
+import { GalleryDisplayContainer } from './components/gallery-display-container/GalleryDisplayContainer';
+import { ChartAnimationProvider } from './lib/useSpring';
 import { findGalleryThemeOption, useGalleryTheme } from './gallery-theme';
 import { gallerySections } from './registry';
 import { COLORS, PAGE_SURFACE } from './surface';
@@ -84,6 +86,42 @@ type Selection = {
   variantId: string;
 };
 
+type NextGalleryRouteId = 'data' | 'atoms' | 'components' | 'tokens';
+
+const NEXT_GALLERY_ROUTES: Array<{ id: NextGalleryRouteId; label: string; path: string }> = [
+  { id: 'data', label: 'Data', path: '/data' },
+  { id: 'atoms', label: 'Atoms', path: '/atoms' },
+  { id: 'components', label: 'Components', path: '/components' },
+  { id: 'tokens', label: 'Tokens', path: '/tokens' },
+];
+
+const NEXT_GALLERY_ROUTE_PREFIX: Record<NextGalleryRouteId, string> = {
+  data: 'D',
+  atoms: 'A',
+  components: 'C',
+  tokens: 'T',
+};
+
+const NEXT_GALLERY_GRID_CARD = {
+  width: 250,
+  height: 250,
+  topbarHeight: 22,
+  stagePadding: 12,
+  gap: 14,
+  pagePadding: 18,
+};
+
+const NEXT_GALLERY_FILTER_COLUMNS = 16;
+const NEXT_GALLERY_FILTER_TAB_WIDTH = '6.25%';
+const NEXT_GALLERY_FILTER_ROW_HEIGHT = 34;
+
+const NEXT_GALLERY_PREVIEW_CANVAS: Record<NextGalleryRouteId, { width: number; height: number }> = {
+  data: { width: 520, height: 360 },
+  atoms: { width: 420, height: 360 },
+  components: { width: 720, height: 420 },
+  tokens: { width: 720, height: 420 },
+};
+
 const KIND_TITLES: Record<GallerySectionKind, string> = {
   'top-level': 'Top-Level',
   atom: 'Atoms',
@@ -120,9 +158,19 @@ const THEME_CLASSIFIER_TITLES: Record<GalleryThemeClassifierKind, string> = {
 
 const COMPOSITION_PREVIEW_LIMIT = 6;
 const COMPOSITION_SCROLL_HEIGHT = 220;
-const GALLERY_ROUTER_HOT_KEY = 'component-gallery:route';
+const GALLERY_ROUTER_HOT_KEY = '.:route';
 const ROUTE_DEFAULT_VARIANT = 'overview';
 const CHIP_RADIUS = 6;
+const USE_EMPTY_GALLERY_SHELL = true;
+
+function getThemeStringToken(
+  tokens: Record<string, GalleryThemeTokenValue> | undefined,
+  path: string,
+  fallback: string
+): string {
+  const value = tokens?.[path];
+  return typeof value === 'string' ? value : fallback;
+}
 
 function flattenStories(sections: GallerySection[]): StoryEntry[] {
   const entries: StoryEntry[] = [];
@@ -169,8 +217,7 @@ function getTextInputValue(value: any): string {
 }
 
 function initialGalleryRoutePath(): string {
-  const first = flattenStories(gallerySections)[0];
-  return first ? storyRoutePath(first) : '/';
+  return '/data';
 }
 
 function countStoriesByKind(stories: StoryEntry[], kind: GallerySectionKind): number {
@@ -248,6 +295,41 @@ function getStoryTypeLabel(entry: StoryEntry): string {
   if (isThemeStory(entry.story)) return 'Theme System';
   if (isDataStory(entry.story)) return 'Data Shape';
   return KIND_TITLES[getSectionKind(entry.section)];
+}
+
+function getNextGalleryCategory(entry: StoryEntry): NextGalleryRouteId {
+  if (isDataStory(entry.story)) return 'data';
+  if (isThemeStory(entry.story)) return 'tokens';
+  if (getSectionKind(entry.section) === 'top-level') return 'components';
+  return 'atoms';
+}
+
+function getNextGalleryEntries(stories: StoryEntry[], categoryId: NextGalleryRouteId): StoryEntry[] {
+  return stories.filter((entry) => getNextGalleryCategory(entry) === categoryId);
+}
+
+function getNextGalleryRouteMeta(categoryId: NextGalleryRouteId) {
+  return NEXT_GALLERY_ROUTES.find((route) => route.id === categoryId) || NEXT_GALLERY_ROUTES[0];
+}
+
+function formatNextGalleryCode(categoryId: NextGalleryRouteId, index: number): string {
+  return `${NEXT_GALLERY_ROUTE_PREFIX[categoryId]}${index + 1}`;
+}
+
+function formatNextGalleryTabLabel(title: string): string {
+  return title
+    .replace(/\bMenu\s+A\d+\b/gi, 'Menu')
+    .replace(/\bA\d+\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getGridPreviewScale(categoryId: NextGalleryRouteId): number {
+  const canvas = NEXT_GALLERY_PREVIEW_CANVAS[categoryId];
+  const availableWidth = NEXT_GALLERY_GRID_CARD.width - NEXT_GALLERY_GRID_CARD.stagePadding * 2;
+  const availableHeight =
+    NEXT_GALLERY_GRID_CARD.height - NEXT_GALLERY_GRID_CARD.topbarHeight - NEXT_GALLERY_GRID_CARD.stagePadding * 2;
+  return Math.min(1, availableWidth / canvas.width, availableHeight / canvas.height);
 }
 
 function getTagTone(tag: GalleryCanonicalTag): string {
@@ -538,7 +620,37 @@ function WindowButton({
   );
 }
 
-function TitleBar() {
+function TitleBar({
+  searchValue,
+  onSearchChange,
+  searchPlaceholder = 'Search gallery',
+}: {
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+} = {}) {
+  const galleryTheme = useGalleryTheme();
+  const activeThemeIndex = galleryTheme.options.findIndex((option) => option.id === galleryTheme.activeThemeId);
+  const tokens = galleryTheme.active?.tokensByPath;
+  const swatchColor = getThemeStringToken(tokens, 'accent.accentHot', COLORS.accent);
+  const swatchBorder = getThemeStringToken(tokens, 'rules.ruleBright', COLORS.borderStrong);
+  const cycleTheme = () => {
+    if (galleryTheme.options.length <= 1) {
+      console.log('[gallery-theme:chrome] cycle ignored', { optionCount: galleryTheme.options.length });
+      return;
+    }
+    const currentIndex = activeThemeIndex >= 0 ? activeThemeIndex : 0;
+    const nextIndex = (currentIndex + 1) % galleryTheme.options.length;
+    const nextOption = galleryTheme.options[nextIndex];
+    console.log('[gallery-theme:chrome] cycle', {
+      current: galleryTheme.options[currentIndex]?.id,
+      next: nextOption?.id,
+      currentIndex,
+      nextIndex,
+    });
+    if (nextOption) galleryTheme.setTheme(nextOption.id);
+  };
+
   return (
     <Row
       windowDrag={true}
@@ -555,26 +667,66 @@ function TitleBar() {
       }}
     >
       <Row style={{ alignItems: 'center', gap: 10, flexGrow: 1, flexBasis: 0 }}>
-        <Box
+        <Pressable
+          onPress={cycleTheme}
           style={{
             width: 18,
             height: 18,
             borderRadius: 5,
-            backgroundColor: COLORS.accent,
+            backgroundColor: swatchColor,
             borderWidth: 1,
-            borderColor: COLORS.borderStrong,
+            borderColor: swatchBorder,
           }}
         />
         <Col style={{ gap: 1 }}>
           <Text style={{ fontSize: 12, fontWeight: 'bold', color: COLORS.text }}>Component Gallery</Text>
-          <Text style={{ fontSize: 9, color: COLORS.faint }}>cart/component-gallery</Text>
+          <Text style={{ fontSize: 9, color: COLORS.faint }}>cart/app/gallery</Text>
         </Col>
       </Row>
+
+      {onSearchChange ? (
+        <Row
+          windowDrag={false}
+          style={{
+            width: 360,
+            height: 26,
+            alignItems: 'center',
+            gap: 8,
+            paddingLeft: 9,
+            paddingRight: 8,
+            borderRadius: 7,
+            backgroundColor: COLORS.panelBg,
+            borderWidth: 1,
+            borderColor: COLORS.border,
+          }}
+        >
+          <Text style={{ width: 34, fontSize: 9, fontWeight: 'bold', color: COLORS.faint }}>Find</Text>
+          <TextInput
+            value={searchValue || ''}
+            onChangeText={(value: any) => onSearchChange(getTextInputValue(value))}
+            placeholder={searchPlaceholder}
+            fontSize={11}
+            color={COLORS.text}
+            style={{
+              height: 20,
+              flexGrow: 1,
+              flexBasis: 0,
+              minWidth: 0,
+              paddingLeft: 0,
+              paddingRight: 0,
+              backgroundColor: COLORS.panelBg,
+              fontSize: 11,
+              fontFamily: 'monospace',
+              color: COLORS.text,
+            }}
+          />
+        </Row>
+      ) : null}
 
       <Row style={{ alignItems: 'center', gap: 6 }}>
         <WindowButton icon={Minimize} onPress={windowMinimize} tone={COLORS.warning} />
         <WindowButton icon={Maximize} onPress={windowMaximize} tone={COLORS.success} />
-        <WindowButton icon={X} onPress={windowClose} tone="#ff7a72" />
+        <WindowButton icon={X} onPress={windowClose} tone="theme:atch" />
       </Row>
     </Row>
   );
@@ -605,19 +757,23 @@ function GalleryThemeToggle({
   label,
   activeLabel,
   disabled,
-  onPrevious,
-  onNext,
+  swatchBackground,
+  swatchBorder,
+  swatchColor,
+  onCycle,
 }: {
   label: string;
   activeLabel: string;
   disabled?: boolean;
-  onPrevious: () => void;
-  onNext: () => void;
+  swatchBackground: string;
+  swatchBorder: string;
+  swatchColor: string;
+  onCycle: () => void;
 }) {
   return (
     <Row
       style={{
-        width: 248,
+        width: 224,
         height: 48,
         alignItems: 'center',
         gap: 8,
@@ -633,10 +789,21 @@ function GalleryThemeToggle({
         <Text style={{ fontSize: 9, color: COLORS.muted }}>{label}</Text>
         <Text style={{ fontSize: 11, fontWeight: 'bold', color: COLORS.text }}>{activeLabel}</Text>
       </Col>
-      <Row style={{ gap: 6 }}>
-        <NavActionButton label="Prev" disabled={disabled} onPress={onPrevious} />
-        <NavActionButton label="Next" disabled={disabled} onPress={onNext} />
-      </Row>
+      <Box
+        style={{
+          width: 24,
+          height: 30,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 7,
+          backgroundColor: swatchBackground,
+          borderWidth: 1,
+          borderColor: swatchBorder,
+        }}
+      >
+        <Box style={{ width: 10, height: 10, borderRadius: 99, backgroundColor: swatchColor }} />
+      </Box>
+      <NavActionButton label="Theme" disabled={disabled} onPress={onCycle} />
     </Row>
   );
 }
@@ -943,7 +1110,7 @@ function EmptyPreview() {
       <Text style={{ fontSize: 18, fontWeight: 'bold', color: PAGE_SURFACE.textColor }}>
         No gallery stories registered
       </Text>
-      <Text style={{ fontSize: 12, color: PAGE_SURFACE.mutedTextColor }}>cart/component-gallery</Text>
+      <Text style={{ fontSize: 12, color: PAGE_SURFACE.mutedTextColor }}>cart/app/gallery</Text>
     </Col>
   );
 }
@@ -1139,6 +1306,27 @@ function formatJsonPrimitive(value: unknown): string {
   return String(value);
 }
 
+function describeJsonPreviewLeaf(value: unknown): string {
+  if (typeof value === 'string') {
+    if (/^https?:\/\//i.test(value)) return 'url';
+    if (/^#/.test(value)) return 'ref';
+    if (value.length > 18) return 'string';
+    return value;
+  }
+  if (value === null) return 'null';
+  return typeof value;
+}
+
+function getJsonSchemaPreviewFields(value: unknown): Array<[string, unknown]> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const objectValue = value as Record<string, unknown>;
+  const properties = objectValue.properties;
+  if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+    return Object.entries(properties as Record<string, unknown>);
+  }
+  return Object.entries(objectValue);
+}
+
 function formatJsonContainerOpen(value: Record<string, unknown> | unknown[]): string {
   return Array.isArray(value) ? '[' : '{';
 }
@@ -1175,6 +1363,31 @@ function getJsonNodeCollapsedState(
 }
 
 const JSON_TREE_MAX_DEPTH = 64;
+const JSON_PREVIEW_MAX_DEPTH = 3;
+const JSON_PREVIEW_MAX_ROWS = 12;
+
+type JsonPreviewRow = {
+  key: string;
+  depth: number;
+  label?: string;
+  value: string;
+  container: boolean;
+  required?: boolean;
+  kind?: JsonSchemaPreviewKind;
+};
+
+type JsonSchemaPreviewKind =
+  | 'array'
+  | 'object'
+  | 'map'
+  | 'enum'
+  | 'ref'
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'choice'
+  | 'unknown';
 
 function JsonTreeNode({
   name,
@@ -1416,6 +1629,234 @@ function JsonDataPanel({
           )}
         </ScrollView>
       </Box>
+    </Col>
+  );
+}
+
+function jsonRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getJsonSchemaFieldNode(value: unknown): Record<string, unknown> | null {
+  const root = jsonRecord(value);
+  if (!root) return null;
+  if (root.type === 'array') return jsonRecord(root.items) || root;
+  return root;
+}
+
+function getJsonSchemaProperties(value: unknown): Array<[string, unknown]> {
+  const node = getJsonSchemaFieldNode(value);
+  if (!node) return [];
+  const properties = node.properties;
+  if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+    return Object.entries(properties as Record<string, unknown>);
+  }
+  return getJsonSchemaPreviewFields(node).filter(([key]) => key !== '$schema' && key !== 'title' && key !== 'type');
+}
+
+function getJsonSchemaRequired(value: unknown): Set<string> {
+  const node = getJsonSchemaFieldNode(value);
+  const required = Array.isArray(node?.required) ? node?.required : [];
+  return new Set(required.filter((item): item is string => typeof item === 'string'));
+}
+
+function getRefTail(value: string): string {
+  const tail = value.split('/').filter(Boolean).pop() || value;
+  return tail.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+}
+
+function classifySchemaNode(value: unknown): JsonSchemaPreviewKind {
+  const node = jsonRecord(value);
+  if (!node) {
+    const leaf = describeJsonPreviewLeaf(value);
+    if (leaf === 'boolean') return 'boolean';
+    if (leaf === 'number') return 'number';
+    if (leaf === 'string' || leaf === 'url' || leaf === 'ref') return 'string';
+    return 'unknown';
+  }
+
+  if (typeof node.$ref === 'string') return 'ref';
+  if (Array.isArray(node.enum)) return 'enum';
+  if (Array.isArray(node.oneOf) || Array.isArray(node.anyOf) || Array.isArray(node.allOf)) return 'choice';
+
+  const type = typeof node.type === 'string' ? node.type : '';
+  if (type === 'array') return 'array';
+
+  const properties = node.properties;
+  const propertyCount =
+    properties && typeof properties === 'object' && !Array.isArray(properties)
+      ? Object.keys(properties as Record<string, unknown>).length
+      : 0;
+  if (type === 'object' || propertyCount > 0) return node.additionalProperties && propertyCount === 0 ? 'map' : 'object';
+  if (type === 'string') return 'string';
+  if (type === 'number') return 'number';
+  if (type === 'integer') return 'integer';
+  if (type === 'boolean') return 'boolean';
+  return 'unknown';
+}
+
+function describeSchemaNode(value: unknown): string {
+  const node = jsonRecord(value);
+  if (!node) return describeJsonPreviewLeaf(value);
+
+  if (typeof node.$ref === 'string') return `ref ${getRefTail(node.$ref)}`;
+  if (Array.isArray(node.enum)) {
+    const shown = node.enum.slice(0, 3).map((item) => String(item)).join('|');
+    return `enum ${shown}${node.enum.length > 3 ? '|...' : ''}`;
+  }
+  if (Object.prototype.hasOwnProperty.call(node, 'const')) return `const ${describeJsonPreviewLeaf(node.const)}`;
+  if (Array.isArray(node.oneOf)) return `oneOf ${node.oneOf.length}`;
+  if (Array.isArray(node.anyOf)) return `anyOf ${node.anyOf.length}`;
+  if (Array.isArray(node.allOf)) return `allOf ${node.allOf.length}`;
+
+  const type = typeof node.type === 'string' ? node.type : '';
+  if (type === 'array') {
+    return `array ${describeSchemaNode(node.items || 'unknown')}`;
+  }
+
+  const properties = node.properties;
+  const propertyCount =
+    properties && typeof properties === 'object' && !Array.isArray(properties)
+      ? Object.keys(properties as Record<string, unknown>).length
+      : 0;
+  if (type === 'object' || propertyCount > 0) {
+    if (propertyCount > 0) return `object ${propertyCount}f`;
+    return node.additionalProperties ? 'map' : 'object';
+  }
+
+  if (type) {
+    const format = typeof node.format === 'string' ? `:${node.format}` : '';
+    const min = typeof node.minimum === 'number' ? node.minimum : null;
+    const max = typeof node.maximum === 'number' ? node.maximum : null;
+    const range = min != null || max != null ? ` ${min ?? '*'}-${max ?? '*'}` : '';
+    return `${type}${format}${range}`;
+  }
+
+  return describeJsonValue(node);
+}
+
+function schemaKindColor(kind: JsonSchemaPreviewKind | undefined): string {
+  if (kind === 'array') return COLORS.compose;
+  if (kind === 'object') return COLORS.accent;
+  if (kind === 'map') return COLORS.warning;
+  if (kind === 'enum') return COLORS.warning;
+  if (kind === 'ref') return COLORS.muted;
+  if (kind === 'boolean') return COLORS.success;
+  if (kind === 'number' || kind === 'integer') return COLORS.warning;
+  if (kind === 'choice') return COLORS.compose;
+  return PAGE_SURFACE.textColor;
+}
+
+function schemaKindLabel(kind: JsonSchemaPreviewKind | undefined): string {
+  if (!kind || kind === 'unknown') return '';
+  return kind;
+}
+
+function getNestedSchemaProperties(value: unknown): Array<[string, unknown]> {
+  const node = jsonRecord(value);
+  if (!node) return [];
+  const nested = node.type === 'array' ? jsonRecord(node.items) : node;
+  const properties = nested?.properties;
+  if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+    return Object.entries(properties as Record<string, unknown>);
+  }
+  return [];
+}
+
+function collectSchemaPreviewRows(value: unknown): { rows: JsonPreviewRow[]; totalTopFields: number; requiredCount: number; rootType: string } {
+  const rows: JsonPreviewRow[] = [];
+  const topFields = getJsonSchemaProperties(value);
+  const required = getJsonSchemaRequired(value);
+  const root = jsonRecord(value);
+  const rootType = root?.type === 'array' ? 'array<object>' : typeof root?.type === 'string' ? root.type : 'schema';
+
+  for (const [fieldName, fieldValue] of topFields) {
+    if (rows.length >= JSON_PREVIEW_MAX_ROWS) break;
+    rows.push({
+      key: fieldName,
+      depth: 0,
+      label: fieldName,
+      value: describeSchemaNode(fieldValue),
+      container: getNestedSchemaProperties(fieldValue).length > 0,
+      required: required.has(fieldName),
+      kind: classifySchemaNode(fieldValue),
+    });
+
+    if (rows.length >= JSON_PREVIEW_MAX_ROWS) break;
+    const nested = getNestedSchemaProperties(fieldValue).slice(0, 2);
+    for (const [childName, childValue] of nested) {
+      if (rows.length >= JSON_PREVIEW_MAX_ROWS) break;
+      rows.push({
+        key: `${fieldName}.${childName}`,
+        depth: 1,
+        label: childName,
+        value: describeSchemaNode(childValue),
+        container: false,
+        kind: classifySchemaNode(childValue),
+      });
+    }
+  }
+
+  return { rows, totalTopFields: topFields.length, requiredCount: required.size, rootType };
+}
+
+function JsonSchemaPreview({ value }: { value: unknown }) {
+  const preview = collectSchemaPreviewRows(value);
+
+  return (
+    <Col style={{ width: '100%', height: '100%', padding: 7, gap: 2, backgroundColor: PAGE_SURFACE.backgroundColor, overflow: 'hidden' }}>
+      <Row style={{ width: '100%', minHeight: 13, alignItems: 'center', gap: 5 }}>
+        <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: COLORS.accent }}>schema</Text>
+        <Text numberOfLines={1} style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, fontFamily: 'monospace', fontSize: 8, color: PAGE_SURFACE.mutedTextColor }}>
+          {`${preview.rootType} · ${preview.totalTopFields} fields · ${preview.requiredCount} req`}
+        </Text>
+      </Row>
+      {preview.rows.map((row) => {
+        const kind = schemaKindLabel(row.kind);
+        const annotation = row.value && row.value !== kind ? ` · ${row.value}` : kind ? ` · ${kind}` : '';
+        return (
+          <Row
+            key={row.key}
+            style={{
+              width: '100%',
+              minHeight: 13,
+              alignItems: 'center',
+              gap: 4,
+              paddingLeft: row.depth * 9,
+            }}
+          >
+            <Box
+              style={{
+                width: 5,
+                height: 8,
+                borderRadius: 2,
+                backgroundColor: schemaKindColor(row.kind),
+                opacity: row.depth > 0 ? 0.72 : 1,
+              }}
+            />
+            <Text
+              numberOfLines={1}
+              style={{
+                flexGrow: 1,
+                flexBasis: 0,
+                minWidth: 0,
+                fontFamily: 'monospace',
+                fontSize: 8,
+                lineHeight: 11,
+                fontWeight: row.required ? 'bold' : 'normal',
+                color: schemaKindColor(row.kind),
+              }}
+            >
+              {`${row.required ? '*' : row.depth > 0 ? '-' : ''}${row.label}${annotation}`}
+            </Text>
+          </Row>
+        );
+      })}
+      {preview.totalTopFields > preview.rows.filter((row) => row.depth === 0).length ? (
+        <Text style={{ paddingLeft: 12, fontFamily: 'monospace', fontSize: 8, color: PAGE_SURFACE.mutedTextColor }}>
+          {`+${preview.totalTopFields - preview.rows.filter((row) => row.depth === 0).length} fields`}
+        </Text>
+      ) : null}
     </Col>
   );
 }
@@ -1946,6 +2387,541 @@ function ThemeStoryPreview({
   );
 }
 
+function getNextGalleryRouteId(path: string): NextGalleryRouteId | null {
+  if (path === '/') return 'data';
+  for (const route of NEXT_GALLERY_ROUTES) {
+    if (path === route.path || path.startsWith(`${route.path}/`)) return route.id;
+  }
+  return null;
+}
+
+function NextGalleryRouteBar({
+  backgroundColor,
+  panelColor,
+  panelRaisedColor,
+  borderColor,
+  textColor,
+  mutedTextColor,
+  accentColor,
+}: {
+  backgroundColor: string;
+  panelColor: string;
+  panelRaisedColor: string;
+  borderColor: string;
+  textColor: string;
+  mutedTextColor: string;
+  accentColor: string;
+}) {
+  const nav = useNavigate();
+  const route = useRoute();
+  const activeRouteId = getNextGalleryRouteId(route.path);
+
+  return (
+    <Row
+      style={{
+        width: '100%',
+        height: 34,
+        alignItems: 'center',
+        backgroundColor: panelColor,
+        borderBottomWidth: 1,
+        borderBottomColor: borderColor,
+      }}
+    >
+      {NEXT_GALLERY_ROUTES.map((item) => {
+        const active = activeRouteId === item.id;
+        return (
+          <Pressable
+            key={item.id}
+            onPress={() => nav.push(item.path)}
+            style={{
+              width: '25%',
+              height: '100%',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: active ? panelRaisedColor : panelColor,
+              borderRightWidth: item.id === 'tokens' ? 0 : 1,
+              borderRightColor: borderColor,
+              borderBottomWidth: active ? 2 : 0,
+              borderBottomColor: accentColor,
+            }}
+          >
+            <Box
+              style={{
+                position: 'absolute',
+                left: 12,
+                right: 12,
+                top: 5,
+                height: 1,
+                backgroundColor: active ? accentColor : borderColor,
+              }}
+            />
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: active ? 'bold' : 'normal',
+                color: active ? textColor : mutedTextColor,
+                letterSpacing: 0.6,
+              }}
+            >
+              {item.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </Row>
+  );
+}
+
+function NextGalleryIndividualTabs({
+  categoryId,
+  entries,
+  totalCount,
+  selectedStoryId,
+  onSelect,
+  panelColor,
+  panelRaisedColor,
+  borderColor,
+  textColor,
+  mutedTextColor,
+  accentColor,
+}: {
+  categoryId: NextGalleryRouteId;
+  entries: StoryEntry[];
+  totalCount: number;
+  selectedStoryId: string;
+  onSelect: (storyId: string) => void;
+  panelColor: string;
+  panelRaisedColor: string;
+  borderColor: string;
+  textColor: string;
+  mutedTextColor: string;
+  accentColor: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    setExpanded(false);
+  }, [categoryId, entries.length, totalCount]);
+
+  const allTabs = [
+    {
+      id: 'all',
+      storyId: 'all',
+      label: `All ${entries.length}/${totalCount}`,
+    },
+    ...entries.map((entry) => ({
+      id: entry.story.id,
+      storyId: entry.story.id,
+      label: formatNextGalleryTabLabel(entry.story.title),
+    })),
+  ];
+  const needsExpand = allTabs.length > NEXT_GALLERY_FILTER_COLUMNS;
+  const collapsedVisibleCount = needsExpand ? NEXT_GALLERY_FILTER_COLUMNS - 1 : NEXT_GALLERY_FILTER_COLUMNS;
+  const visibleTabs = expanded || !needsExpand ? allTabs : allTabs.slice(0, collapsedVisibleCount);
+  const hiddenCount = Math.max(0, allTabs.length - collapsedVisibleCount);
+  const renderTab = (tab: { id: string; storyId: string; label: string }) => {
+    const active = selectedStoryId === tab.storyId;
+    return (
+      <Pressable
+        key={tab.id}
+        onPress={() => onSelect(tab.storyId)}
+        style={{
+          width: NEXT_GALLERY_FILTER_TAB_WIDTH,
+          height: NEXT_GALLERY_FILTER_ROW_HEIGHT,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: active ? panelRaisedColor : panelColor,
+          borderRightWidth: 1,
+          borderRightColor: borderColor,
+          borderBottomWidth: active ? 2 : 0,
+          borderBottomColor: accentColor,
+        }}
+      >
+        <Box
+          style={{
+            position: 'absolute',
+            left: 8,
+            right: 8,
+            top: 5,
+            height: 1,
+            backgroundColor: active ? accentColor : borderColor,
+          }}
+        />
+        <Text
+          numberOfLines={1}
+          style={{
+            fontSize: 10,
+            fontWeight: active ? 'bold' : 'normal',
+            color: active ? textColor : mutedTextColor,
+            letterSpacing: 0.4,
+          }}
+        >
+          {tab.label}
+        </Text>
+      </Pressable>
+    );
+  };
+
+  return (
+    <Col
+      style={{
+        width: '100%',
+        backgroundColor: panelColor,
+        borderBottomWidth: 1,
+        borderBottomColor: borderColor,
+      }}
+    >
+      <Row
+        style={{
+          width: '100%',
+          minHeight: NEXT_GALLERY_FILTER_ROW_HEIGHT,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
+        {visibleTabs.map(renderTab)}
+        {needsExpand ? (
+          <Pressable
+            onPress={() => setExpanded((value) => !value)}
+            style={{
+              width: NEXT_GALLERY_FILTER_TAB_WIDTH,
+              height: NEXT_GALLERY_FILTER_ROW_HEIGHT,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: expanded ? panelRaisedColor : panelColor,
+              borderRightWidth: 1,
+              borderRightColor: borderColor,
+              borderBottomWidth: expanded ? 2 : 0,
+              borderBottomColor: accentColor,
+            }}
+          >
+            <Box
+              style={{
+                position: 'absolute',
+                left: 8,
+                right: 8,
+                top: 5,
+                height: 1,
+                backgroundColor: expanded ? accentColor : borderColor,
+              }}
+            />
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 10,
+                fontWeight: 'bold',
+                color: expanded ? textColor : mutedTextColor,
+                letterSpacing: 0.4,
+              }}
+            >
+              {expanded ? 'Less' : `More +${hiddenCount}`}
+            </Text>
+          </Pressable>
+        ) : null}
+      </Row>
+    </Col>
+  );
+}
+
+function NextGallerySummaryCard({
+  entry,
+  categoryId,
+  index,
+  onSelect,
+}: {
+  entry: StoryEntry;
+  categoryId: NextGalleryRouteId;
+  index: number;
+  onSelect: () => void;
+}) {
+  const canvas = NEXT_GALLERY_PREVIEW_CANVAS[categoryId];
+  const scale = getGridPreviewScale(categoryId);
+  const stagePadding = NEXT_GALLERY_GRID_CARD.stagePadding;
+  const variant = getStoryVariants(entry.story)[0] || null;
+  return (
+    <Pressable onPress={onSelect}>
+      <GalleryDisplayContainer
+        code={formatNextGalleryCode(categoryId, index)}
+        title={entry.story.title}
+        meta={getSourceName(entry.story.source)}
+        ratio="compact"
+        stagePadding={stagePadding}
+        center
+      >
+        {variant ? (
+          <StaticSurface
+            staticKey={`gallery-preview:${entry.story.id}`}
+            introFrames={30}
+            style={{
+              width: canvas.width * scale,
+              height: canvas.height * scale,
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            <Box
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: canvas.width,
+                height: canvas.height,
+                overflow: 'hidden',
+                transform: { scaleX: scale, scaleY: scale, originX: 0, originY: 0 },
+              }}
+            >
+              <ChartAnimationProvider disabled>
+                {variant.render()}
+              </ChartAnimationProvider>
+            </Box>
+          </StaticSurface>
+        ) : (
+          isDataStory(entry.story) ? (
+            <JsonSchemaPreview value={entry.story.schema} />
+          ) : (
+            <Col style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 12, fontWeight: 'bold', color: PAGE_SURFACE.textColor }}>{getStoryTypeLabel(entry)}</Text>
+              <Text numberOfLines={2} style={{ fontSize: 9, color: PAGE_SURFACE.mutedTextColor }}>
+                {entry.story.summary || entry.story.source}
+              </Text>
+            </Col>
+          )
+        )}
+      </GalleryDisplayContainer>
+    </Pressable>
+  );
+}
+
+function NextGalleryDetailCard({
+  entry,
+  categoryId,
+  index,
+  dataStoriesBySource,
+  activeThemeId,
+  onApplyTheme,
+  onSelectReference,
+}: {
+  entry: StoryEntry;
+  categoryId: NextGalleryRouteId;
+  index: number;
+  dataStoriesBySource: Map<string, StoryEntry>;
+  activeThemeId: string;
+  onApplyTheme: (id: string) => void;
+  onSelectReference: (entry: StoryEntry) => void;
+}) {
+  const story = entry.story;
+  const variant = getStoryVariants(story)[0] || null;
+  const centered = !isDataStory(story) && !isThemeStory(story);
+
+  return (
+    <GalleryDisplayContainer
+      code={formatNextGalleryCode(categoryId, index)}
+      title={story.title}
+      meta={getSourceName(story.source)}
+      ratio="wide"
+      width="100%"
+      height={620}
+      stagePadding={centered ? 18 : 12}
+      center={centered}
+    >
+      {isDataStory(story) ? (
+        <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
+          <DataStoryPreview story={story} dataStoriesBySource={dataStoriesBySource} onSelectReference={onSelectReference} />
+        </ScrollView>
+      ) : isThemeStory(story) ? (
+        <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
+          <ThemeStoryPreview story={story} activeThemeId={activeThemeId} onApplyTheme={onApplyTheme} />
+        </ScrollView>
+      ) : variant ? (
+        variant.render()
+      ) : (
+        <EmptyPreview />
+      )}
+    </GalleryDisplayContainer>
+  );
+}
+
+function NextGalleryCollection({
+  categoryId,
+  entries,
+  allEntries,
+  selectedStoryId,
+  dataStoriesBySource,
+  activeThemeId,
+  onApplyTheme,
+  onSelectStory,
+}: {
+  categoryId: NextGalleryRouteId;
+  entries: StoryEntry[];
+  allEntries: StoryEntry[];
+  selectedStoryId: string;
+  dataStoriesBySource: Map<string, StoryEntry>;
+  activeThemeId: string;
+  onApplyTheme: (id: string) => void;
+  onSelectStory: (categoryId: NextGalleryRouteId, storyId: string) => void;
+}) {
+  const selectedEntry =
+    selectedStoryId === 'all' ? null : entries.find((entry) => entry.story.id === selectedStoryId) || null;
+
+  if (entries.length === 0) {
+    return (
+      <Col style={{ width: '100%', padding: 18, gap: 8 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: PAGE_SURFACE.textColor }}>No matches</Text>
+        <Text style={{ fontSize: 11, color: PAGE_SURFACE.mutedTextColor }}>Adjust the chrome search or switch filters.</Text>
+      </Col>
+    );
+  }
+
+  if (selectedEntry) {
+    return (
+      <Col style={{ width: '100%', padding: 18 }}>
+        <NextGalleryDetailCard
+          entry={selectedEntry}
+          categoryId={categoryId}
+          index={Math.max(0, allEntries.findIndex((entry) => entry.story.id === selectedEntry.story.id))}
+          dataStoriesBySource={dataStoriesBySource}
+          activeThemeId={activeThemeId}
+          onApplyTheme={onApplyTheme}
+          onSelectReference={(entry) => onSelectStory('data', entry.story.id)}
+        />
+      </Col>
+    );
+  }
+
+  return (
+    <Row style={{ width: '100%', gap: NEXT_GALLERY_GRID_CARD.gap, flexWrap: 'wrap', alignItems: 'flex-start', padding: NEXT_GALLERY_GRID_CARD.pagePadding }}>
+      {entries.map((entry) => (
+        <NextGallerySummaryCard
+          key={entry.story.id}
+          entry={entry}
+          categoryId={categoryId}
+          index={Math.max(0, allEntries.findIndex((candidate) => candidate.story.id === entry.story.id))}
+          onSelect={() => onSelectStory(categoryId, entry.story.id)}
+        />
+      ))}
+    </Row>
+  );
+}
+
+function NextComponentGalleryShell({ selection }: { selection: Selection | null }) {
+  const galleryTheme = useGalleryTheme();
+  const route = useRoute();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedByCategory, setSelectedByCategory] = useState<Record<NextGalleryRouteId, string>>({
+    data: 'all',
+    atoms: 'all',
+    components: 'all',
+    tokens: 'all',
+  });
+  const tokens = galleryTheme.active?.tokensByPath;
+  const backgroundColor = getThemeStringToken(tokens, 'surfaces.bg', COLORS.appBg);
+  const panelColor = getThemeStringToken(tokens, 'surfaces.bg1', COLORS.railBg);
+  const panelRaisedColor = getThemeStringToken(tokens, 'surfaces.bg2', COLORS.panelBg);
+  const borderColor = getThemeStringToken(tokens, 'rules.ruleBright', COLORS.borderStrong);
+  const textColor = getThemeStringToken(tokens, 'ink.ink', COLORS.text);
+  const mutedTextColor = getThemeStringToken(tokens, 'ink.inkDim', COLORS.muted);
+  const accentColor = getThemeStringToken(tokens, 'accent.accentHot', COLORS.accent);
+  const activeCategoryId = getNextGalleryRouteId(route.path) || 'data';
+  const activeRouteMeta = getNextGalleryRouteMeta(activeCategoryId);
+  const routeLabel = selection ? `${selection.storyId}/${selection.variantId}` : route.path;
+  const stories = useMemo(() => sortStoryEntries(flattenStories(gallerySections)), []);
+  const categoryEntries = useMemo(() => getNextGalleryEntries(stories, activeCategoryId), [activeCategoryId, stories]);
+  const storyFuzzyOptions = useMemo<FuzzySearchOptions<StoryEntry>>(
+    () => ({
+      mode: NAV_SEARCH_MODE,
+      getCandidates: getSearchCandidates,
+      sort: (left: FuzzySearchResult<StoryEntry>, right: FuzzySearchResult<StoryEntry>) => {
+        if (right.score !== left.score) return right.score - left.score;
+        return left.item.story.title.localeCompare(right.item.story.title);
+      },
+    }),
+    []
+  );
+  const searchedMatches = useFuzzySearch(categoryEntries, searchQuery, storyFuzzyOptions);
+  const searchedEntries = useMemo(() => searchedMatches.map((match) => match.item), [searchedMatches]);
+  const dataStoriesBySource = useMemo(() => {
+    const entries = new Map<string, StoryEntry>();
+    for (const entry of stories) {
+      if (!isDataStory(entry.story)) continue;
+      if (!entries.has(entry.story.source)) entries.set(entry.story.source, entry);
+    }
+    return entries;
+  }, [stories]);
+  const selectedStoryId = selectedByCategory[activeCategoryId] || 'all';
+  const collectionEntries =
+    selectedStoryId === 'all' ? searchedEntries : searchedEntries.filter((entry) => entry.story.id === selectedStoryId);
+  const selectStoryFilter = (categoryId: NextGalleryRouteId, storyId: string) => {
+    setSelectedByCategory((current) => ({ ...current, [categoryId]: storyId }));
+  };
+
+  return (
+    <Col
+      style={{
+        width: '100%',
+        height: '100%',
+        backgroundColor,
+      }}
+    >
+      <TitleBar
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder={`Search ${activeRouteMeta.label.toLowerCase()}`}
+      />
+      <NextGalleryRouteBar
+        backgroundColor={backgroundColor}
+        panelColor={panelColor}
+        panelRaisedColor={panelRaisedColor}
+        borderColor={borderColor}
+        textColor={textColor}
+        mutedTextColor={mutedTextColor}
+        accentColor={accentColor}
+      />
+      <NextGalleryIndividualTabs
+        categoryId={activeCategoryId}
+        entries={searchedEntries}
+        totalCount={categoryEntries.length}
+        selectedStoryId={selectedStoryId}
+        onSelect={(storyId) => selectStoryFilter(activeCategoryId, storyId)}
+        panelColor={panelColor}
+        panelRaisedColor={panelRaisedColor}
+        borderColor={borderColor}
+        textColor={textColor}
+        mutedTextColor={mutedTextColor}
+        accentColor={accentColor}
+      />
+      <Box
+        style={{
+          width: '100%',
+          flexGrow: 1,
+          flexBasis: 0,
+          backgroundColor,
+        }}
+      >
+        <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
+          <NextGalleryCollection
+            categoryId={activeCategoryId}
+            entries={collectionEntries}
+            allEntries={categoryEntries}
+            selectedStoryId={selectedStoryId}
+            dataStoriesBySource={dataStoriesBySource}
+            activeThemeId={galleryTheme.activeThemeId}
+            onApplyTheme={galleryTheme.setTheme}
+            onSelectStory={selectStoryFilter}
+          />
+          <Box style={{ height: 28 }} />
+          <Text style={{ fontSize: 9, fontFamily: 'monospace', color: mutedTextColor }}>
+            {`theme ${galleryTheme.active?.label || galleryTheme.activeThemeId || 'none'} · route ${routeLabel}`}
+          </Text>
+        </ScrollView>
+      </Box>
+    </Col>
+  );
+}
+
+function ActiveComponentGalleryShell({ selection }: { selection: Selection | null }) {
+  if (USE_EMPTY_GALLERY_SHELL) return <NextComponentGalleryShell selection={selection} />;
+  return <ComponentGalleryShell selection={selection} />;
+}
+
 function ComponentGalleryShell({ selection }: { selection: Selection | null }) {
   const galleryTheme = useGalleryTheme();
   const nav = useNavigate();
@@ -2076,6 +3052,10 @@ function ComponentGalleryShell({ selection }: { selection: Selection | null }) {
   const activeNavIndex = active.entry
     ? visibleStories.findIndex((entry) => entry.story.id === active.entry!.story.id)
     : -1;
+  const activeThemeTokens = galleryTheme.active?.tokensByPath;
+  const activeThemeAccent = getThemeStringToken(activeThemeTokens, 'accent.accentHot', COLORS.accent);
+  const activeThemeSurface = getThemeStringToken(activeThemeTokens, 'surfaces.bg2', COLORS.panelBg);
+  const activeThemeInk = getThemeStringToken(activeThemeTokens, 'ink.ink', COLORS.text);
   const hasActiveFilters = kindFilter !== 'all' || groupFilter !== 'all' || tagFilter !== 'all';
   const activeFilterCount = (kindFilter !== 'all' ? 1 : 0) + (groupFilter !== 'all' ? 1 : 0) + (tagFilter !== 'all' ? 1 : 0);
   const filterSummary = useMemo(() => {
@@ -2131,10 +3111,24 @@ function ComponentGalleryShell({ selection }: { selection: Selection | null }) {
   };
 
   const cycleGalleryTheme = (delta: number) => {
-    if (galleryTheme.options.length === 0) return;
+    if (galleryTheme.options.length === 0) {
+      console.log('[gallery-theme:shell] cycle ignored: no theme options');
+      return;
+    }
     const currentIndex = activeGalleryThemeIndex >= 0 ? activeGalleryThemeIndex : 0;
     const nextIndex = (currentIndex + delta + galleryTheme.options.length) % galleryTheme.options.length;
-    galleryTheme.setTheme(galleryTheme.options[nextIndex].id);
+    const currentOption = galleryTheme.options[currentIndex];
+    const nextOption = galleryTheme.options[nextIndex];
+    console.log('[gallery-theme:shell] cycle', {
+      delta,
+      currentIndex,
+      nextIndex,
+      current: currentOption?.id,
+      next: nextOption?.id,
+      activeThemeId: galleryTheme.activeThemeId,
+      optionCount: galleryTheme.options.length,
+    });
+    if (nextOption) galleryTheme.setTheme(nextOption.id);
   };
 
   return (
@@ -2155,16 +3149,18 @@ function ComponentGalleryShell({ selection }: { selection: Selection | null }) {
         >
           <Col style={{ gap: 4 }}>
             <Text style={{ fontSize: 19, fontWeight: 'bold', color: COLORS.text }}>Component Gallery</Text>
-            <Text style={{ fontSize: 11, color: COLORS.muted }}>cart/component-gallery</Text>
+            <Text style={{ fontSize: 11, color: COLORS.muted }}>cart/app/gallery</Text>
           </Col>
           <Row style={{ gap: 10, alignItems: 'center' }}>
             {galleryTheme.options.length > 0 ? (
               <GalleryThemeToggle
-                label="File Theme"
+                label="Runtime Theme"
                 activeLabel={galleryTheme.active?.label || 'Unassigned'}
                 disabled={galleryTheme.options.length <= 1}
-                onPrevious={() => cycleGalleryTheme(-1)}
-                onNext={() => cycleGalleryTheme(1)}
+                swatchBackground={activeThemeSurface}
+                swatchBorder={activeThemeInk}
+                swatchColor={activeThemeAccent}
+                onCycle={() => cycleGalleryTheme(1)}
               />
             ) : null}
             <Metric label="stories" value={String(stories.length)} tone={COLORS.accent} />
@@ -2455,7 +3451,7 @@ function ComponentGalleryShell({ selection }: { selection: Selection | null }) {
                   {active.entry ? active.entry.story.title : PAGE_SURFACE.label}
                 </Text>
                 <Text style={{ fontSize: 10, color: COLORS.muted }}>
-                  {active.entry ? active.entry.story.source : 'cart/component-gallery'}
+                  {active.entry ? active.entry.story.source : 'cart/app/gallery'}
                 </Text>
                 {active.entry && (
                   <Row
@@ -2614,19 +3610,31 @@ function ComponentGalleryRoutes() {
     <>
       <Route path="/stories/:storyId/:variantId">
         {(params: any) => (
-          <ComponentGalleryShell selection={routeSelection(params.storyId, params.variantId)} />
+          <ActiveComponentGalleryShell selection={routeSelection(params.storyId, params.variantId)} />
         )}
       </Route>
       <Route path="/stories/:storyId">
         {(params: any) => (
-          <ComponentGalleryShell selection={routeSelection(params.storyId, ROUTE_DEFAULT_VARIANT)} />
+          <ActiveComponentGalleryShell selection={routeSelection(params.storyId, ROUTE_DEFAULT_VARIANT)} />
         )}
       </Route>
+      <Route path="/data">
+        <ActiveComponentGalleryShell selection={null} />
+      </Route>
+      <Route path="/atoms">
+        <ActiveComponentGalleryShell selection={null} />
+      </Route>
+      <Route path="/components">
+        <ActiveComponentGalleryShell selection={null} />
+      </Route>
+      <Route path="/tokens">
+        <ActiveComponentGalleryShell selection={null} />
+      </Route>
       <Route path="/">
-        <ComponentGalleryShell selection={null} />
+        <ActiveComponentGalleryShell selection={null} />
       </Route>
       <Route fallback>
-        <ComponentGalleryShell selection={null} />
+        <ActiveComponentGalleryShell selection={null} />
       </Route>
     </>
   );

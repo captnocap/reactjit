@@ -30,8 +30,8 @@ import {
   Sparkles, Cloud, Bot, Key, HardDrive,
   Pencil, Trash2, Plus, X,
 } from '@reactjit/runtime/icons/icons';
-import { ProviderIcon } from '../../../component-gallery/components/model-card/ProviderIcon';
-import { PROVIDER_ICONS } from '../../../component-gallery/components/model-card/providerIcons.generated';
+import { ProviderIcon } from '../../gallery/components/model-card/ProviderIcon';
+import { PROVIDER_ICONS } from '../../gallery/components/model-card/providerIcons.generated';
 import { Section, Field, Input, PillRow, SETTINGS_ID } from '../shared';
 import { useSettingsCtx } from '../page';
 

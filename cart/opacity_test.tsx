@@ -22,7 +22,7 @@ import { useState } from 'react';
 import { Box, Pressable, Image, Text, StaticSurface } from '@reactjit/runtime/primitives';
 import { Icon } from '@reactjit/runtime/icons/Icon';
 import { Eye } from '@reactjit/runtime/icons/icons';
-import { PROVIDER_ICONS } from './component-gallery/components/model-card/providerIcons.generated';
+import { PROVIDER_ICONS } from './app/gallery/components/model-card/providerIcons.generated';
 
 type Feature = 'opacity' | 'text' | 'image' | 'icons' | 'press' | 'static';
 const FEATURES: Feature[] = ['opacity', 'text', 'image', 'icons', 'press', 'static'];

@@ -1,7 +1,7 @@
 // scripts/gallery-component.js — v8cli version of scripts/gallery-component.
 //
 // Generates a gallery component/data pair and registers the story in:
-//   cart/component-gallery/stories/index.ts
+//   cart/app/gallery/stories/index.ts
 //
 // Usage:
 //   scripts/gallery-component <Name> [component-or-data-file] [--format component|data|theme] [--kind atom|top-level] [--group "Group Name"] [--tags "header,button"] [--composed-of "pathA,pathB"] [--storage "sqlite-document,json-file"] [--template assistant-event|worker-quest|...]
@@ -110,7 +110,7 @@ function relativePath(from, to) {
 const scriptPath = __hostArgv[0] || '';
 const scriptDir = dirname(normalizePath(scriptPath ? resolve(__cwd(), scriptPath) : joinPath(__cwd(), 'scripts')));
 const repoRoot = dirname(scriptDir);
-const galleryDir = joinPath(repoRoot, 'cart', 'component-gallery');
+const galleryDir = joinPath(repoRoot, 'cart', 'app', 'gallery');
 const storiesDir = joinPath(galleryDir, 'stories');
 const storyIndexPath = joinPath(storiesDir, 'index.ts');
 const themeSystemsDir = joinPath(galleryDir, 'themes');
@@ -1089,7 +1089,7 @@ function inspectDataShape(rawShape) {
   const shapePath = joinPath(galleryDir, 'data', shapeSlug + '.ts');
   if (!existsPath(shapePath)) {
     fail(
-      `data shape not found: ${toRepoRelative(shapePath)} — pass --data-shape <slug> for an existing file in cart/component-gallery/data/`
+      `data shape not found: ${toRepoRelative(shapePath)} — pass --data-shape <slug> for an existing file in cart/app/gallery/data/`
     );
   }
   const source = __readFile(shapePath);
@@ -1260,7 +1260,7 @@ function parseArgs(argv) {
   if (format === 'component') {
     if (!dataShapeArg) {
       fail(
-        '--data-shape <slug> is required for --format component. Pass an existing data-shape slug from cart/component-gallery/data/ (e.g. --data-shape goal). Components must bind to a real shape — they do not get to invent fields.'
+        '--data-shape <slug> is required for --format component. Pass an existing data-shape slug from cart/app/gallery/data/ (e.g. --data-shape goal). Components must bind to a real shape — they do not get to invent fields.'
       );
     }
     dataShape = inspectDataShape(dataShapeArg);
@@ -1557,7 +1557,7 @@ if (!indexSource.includes(sectionLine)) {
 }
 
 if (!indexSource.includes(importLine) || !indexSource.includes(sectionLine)) {
-  fail('missing registry markers in cart/component-gallery/stories/index.ts');
+  fail('missing registry markers in cart/app/gallery/stories/index.ts');
 }
 
 if (!__writeFile(storyIndexPath, indexSource)) {
@@ -1599,7 +1599,7 @@ if (format === 'theme') {
   }
 
   if (!themeIndexSource.includes(themeImportLine) || !themeIndexSource.includes(themeEntryLine)) {
-    fail('missing registry markers in cart/component-gallery/themes/index.ts');
+    fail('missing registry markers in cart/app/gallery/themes/index.ts');
   }
 
   if (!__writeFile(themeIndexPath, themeIndexSource)) {

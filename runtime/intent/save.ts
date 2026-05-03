@@ -10,7 +10,7 @@ import type { Node } from './parser';
 import { printIntentCart } from './printer';
 import { writeFile, mkdir, exists } from '../hooks/fs';
 
-const INTENT_SURFACE_DIR = 'cart/component-gallery/components/intent-surface';
+const INTENT_SURFACE_DIR = 'cart/app/gallery/components/intent-surface';
 
 export interface SaveResult {
   ok: boolean;
@@ -53,7 +53,7 @@ function parentOf(path: string): string {
  * Compute the relative import path from `from` (a directory) to `to` (a directory).
  * Both are repo-relative paths with forward slashes.
  *
- *   relativePath('cart/lifted', 'cart/component-gallery/components/intent-surface')
+ *   relativePath('cart/lifted', 'cart/app/gallery/components/intent-surface')
  *     === '../component-gallery/components/intent-surface'
  */
 function relativePath(fromDir: string, toDir: string): string {

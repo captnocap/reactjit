@@ -461,7 +461,7 @@ function injectFlexDirectionForTag(tagName, styleStatics) {
 
 // ── Cockpit theme tokens (for resolving 'theme:NAME' in cls files) ──
 //
-// Mirrors cart/component-gallery/themes/cockpit/theme-classifier.ts after
+// Mirrors cart/app/gallery/themes/cockpit/theme-classifier.ts after
 // the gallery-theme.ts flattening (radius.sm → radiusSm, spacing.x4 →
 // spaceX4, type.body → typeBody, etc.). Used by parseClsFile to resolve
 // classifier values written as 'theme:NAME' strings into their literal

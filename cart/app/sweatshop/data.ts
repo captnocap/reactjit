@@ -12,11 +12,11 @@
 // we own the reads.
 
 import { useCRUD } from '@reactjit/runtime/hooks';
-import type { User } from '../../../component-gallery/data/user';
-import type { Settings } from '../../../component-gallery/data/settings';
-import type { Connection } from '../../../component-gallery/data/connection';
-import type { Goal } from '../../../component-gallery/data/goal';
-import type { Workspace } from '../../../component-gallery/data/workspace';
+import type { User } from '../gallery/data/user';
+import type { Settings } from '../gallery/data/settings';
+import type { Connection } from '../gallery/data/connection';
+import type { Goal } from '../gallery/data/goal';
+import type { Workspace } from '../gallery/data/workspace';
 
 const NS = 'app';
 const passthrough = { parse: (v: unknown) => v as any };

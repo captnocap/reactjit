@@ -1,41 +1,30 @@
 // Persistent supervisor-input strip — pinned to the bottom of the app
 // chrome once onboarding completes. Visually a CommandComposer (gallery
-// shape: route/target chips up top, prompt area + action rail in the
-// middle, branch chip + shortcut hints in the footer). The static prompt
-// segments are swapped for a live <TextInput> so the surface is actually
-// editable; the rest of the composer is the gallery's components/styling
-// verbatim.
+// shape: optional attachment chips up top, prompt area + send action in
+// the middle, shortcut hints in the footer). The static
+// prompt segments are swapped for a live <TextInput> so the surface is
+// actually editable; the rest of the composer is the gallery's
+// components/styling verbatim.
 //
-// Today: tier-1 only. Submit parses @-tokens against `tokens.ts` and
-// fires `app:navigate` on the IFTTT bus for each route token. Anything
-// else is dropped — the router-model + supervisor-session wiring lands
-// in follow-up commits, and will plug into the same `submit()` path.
+// Submit parses @-tokens against `tokens.ts` and fires `app:navigate` on
+// the IFTTT bus for each route token. Non-routing text is forwarded to
+// the assistant chat path from the same `submit()` path.
 
 import { useState, useRef } from 'react';
 import { TextInput } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
-import { useRoute } from '@reactjit/runtime/router';
 import { useBreakpoint } from '@reactjit/runtime/theme';
 import { busEmit } from '@reactjit/runtime/hooks/useIFTTT';
-import { CommandComposerHeader } from '../component-gallery/components/command-composer/CommandComposerHeader';
-import { CommandComposerFooter } from '../component-gallery/components/command-composer/CommandComposerFooter';
-import { CommandComposerChip } from '../component-gallery/components/command-composer/CommandComposerChip';
+import { CommandComposerHeader } from './gallery/components/command-composer/CommandComposerHeader';
+import { CommandComposerFooter } from './gallery/components/command-composer/CommandComposerFooter';
+import { CommandComposerChip } from './gallery/components/command-composer/CommandComposerChip';
 import type {
   CommandComposer,
   CommandComposerChip as CommandComposerChipData,
-} from '../component-gallery/data/command-composer';
+} from './gallery/data/command-composer';
 import { resolveTokens, TokenMatch } from './tokens';
 import { askAssistant } from './chat/store';
 
-// Static envelope — none of these change per-keystroke. When the router
-// model lands, `route` swaps to the live model name; `target` swaps to
-// whichever app currently owns focus.
-const ROUTE_CHIP: CommandComposerChipData = {
-  id: 'route', prefix: '@', label: 'tier-1 only', tone: 'muted',
-};
-const TARGET_CHIP: CommandComposerChipData = {
-  id: 'target', prefix: '+', label: 'nav', tone: 'muted',
-};
 const LEFT_SHORTCUTS = [
   { id: 'tag-file', key: '@', label: 'tag file' },
   { id: 'variable', key: '{}', label: 'variable' },
@@ -55,12 +44,10 @@ function tokenToChip(m: TokenMatch): CommandComposerChipData {
 }
 
 export function InputStrip() {
-  const route = useRoute();
   const bp = useBreakpoint();
-  // At `sm` the composer drops its routing/attached header and shortcut
-  // footer — those are secondary affordances (model identity, hint legend)
-  // that just describe the space. The required surface is the prompt
-  // input + send rail; everything else tucks away.
+  // At `sm` the composer drops its optional attachment header and shortcut
+  // footer. The required surface is the prompt input + send rail;
+  // everything else tucks away.
   const compact = bp === 'sm';
   const [draft, setDraft] = useState('');
   const draftRef = useRef('');
@@ -86,30 +73,26 @@ export function InputStrip() {
     draftRef.current = '';
   };
 
-  const branchChip: CommandComposerChipData = {
-    id: 'branch', prefix: '⌁', label: route.path, tone: 'success',
-  };
+  const attachments: CommandComposerChipData[] = [];
+  const hasAttachments = attachments.length > 0;
 
   // Build a CommandComposer row for the gallery's Header / Footer to
   // consume. The middle section is composed manually below so we can
   // host a live <TextInput>; `prompt` here is a no-op slot.
   const row: CommandComposer = {
     id: 'app-input-strip',
-    routingLabel: 'ROUTING',
-    route: ROUTE_CHIP,
-    target: TARGET_CHIP,
     attachLabel: 'ATTACHED',
-    attachments: [],
+    attachments,
     prompt: [],
-    branch: branchChip,
+    branch: { id: 'branch', label: '', tone: 'success' },
     leftShortcuts: LEFT_SHORTCUTS,
     executeShortcut: EXECUTE_SHORTCUT,
-    modeGlyph: '¶',
+    modeGlyph: '',
     sendLabel: 'SEND',
   };
 
   return (
-    <S.CommandComposerFrame>
+    <S.CommandComposerFrame style={compact || hasAttachments ? {} : { minHeight: 166 }}>
       {compact ? null : <CommandComposerHeader row={row} />}
 
       <S.CommandComposerMain>
@@ -139,12 +122,8 @@ export function InputStrip() {
           </S.CommandComposerPromptFlow>
         </S.CommandComposerPromptRows>
 
-        <S.CommandComposerActionRow>
-          <CommandComposerChip chip={branchChip} />
+        <S.CommandComposerActionRow style={{ justifyContent: 'flex-end' }}>
           <S.CommandComposerShortcutGroup>
-            <S.CommandComposerIconButton>
-              <S.CommandComposerIconText>{row.modeGlyph}</S.CommandComposerIconText>
-            </S.CommandComposerIconButton>
             <S.CommandComposerSend onPress={submit}>
               <S.CommandComposerActionText>{row.sendLabel}</S.CommandComposerActionText>
             </S.CommandComposerSend>

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
-import { FlowEditor } from '../../component-gallery/components/flow-editor/FlowEditor';
-import { FLOW_EDITOR_DEFAULT_THEME } from '../../component-gallery/components/flow-editor/flowEditorTheme';
-import { FLOW_EDITOR_DEMO_EDGES, FLOW_EDITOR_DEMO_NODES } from '../../component-gallery/components/flow-editor/demoFlow';
-import { useFlowEditorState } from '../../component-gallery/components/flow-editor/useFlowEditorState';
-import type { FlowEdge, FlowNode } from '../../component-gallery/components/flow-editor/types';
+import { FlowEditor } from '../gallery/components/flow-editor/FlowEditor';
+import { FLOW_EDITOR_DEFAULT_THEME } from '../gallery/components/flow-editor/flowEditorTheme';
+import { FLOW_EDITOR_DEMO_EDGES, FLOW_EDITOR_DEMO_NODES } from '../gallery/components/flow-editor/demoFlow';
+import { useFlowEditorState } from '../gallery/components/flow-editor/useFlowEditorState';
+import type { FlowEdge, FlowNode } from '../gallery/components/flow-editor/types';
 
 function cloneNodes(nodes: FlowNode[]): FlowNode[] {
   return nodes.map((node) => ({ ...node }));

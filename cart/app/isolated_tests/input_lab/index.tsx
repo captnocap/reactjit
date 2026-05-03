@@ -15,13 +15,13 @@
 // clicks are handled — the chat snapshots its current visual position so it
 // reverses cleanly without snapping back to the previous target.
 
-import '../../../component-gallery/components.cls';
+import '../../gallery/components.cls';
 import { useEffect, useRef, useState } from 'react';
 import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import { Router } from '@reactjit/runtime/router';
 import { installBrowserShims } from '@reactjit/runtime/hooks';
 import { TooltipRoot } from '@reactjit/runtime/tooltip/Tooltip';
-import { applyGalleryTheme, getActiveGalleryThemeId } from '../../../component-gallery/gallery-theme';
+import { applyGalleryTheme, getActiveGalleryThemeId } from '../../gallery/gallery-theme';
 import { EASINGS } from '@reactjit/runtime/easing';
 import { InputStrip } from '../../InputStrip';
 

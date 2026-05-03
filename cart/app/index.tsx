@@ -1,5 +1,5 @@
-import '../component-gallery/components.cls';
-import { APP_BOTTOM_BAR_H } from '../component-gallery/components.cls';
+import './gallery/components.cls';
+import { APP_BOTTOM_BAR_H } from './gallery/components.cls';
 import { useEffect, useRef, useState } from 'react';
 import { EASINGS } from '@reactjit/runtime/easing';
 import { Box, Pressable } from '@reactjit/runtime/primitives';
@@ -7,16 +7,17 @@ import { Route, Router, useNavigate, useRoute } from '@reactjit/runtime/router';
 import { installBrowserShims } from '@reactjit/runtime/hooks';
 import { useBreakpoint, useActiveVariant, setVariant } from '@reactjit/runtime/theme';
 import { TooltipRoot } from '@reactjit/runtime/tooltip/Tooltip';
-import { Home, Info, Maximize, Minimize, Settings, X } from '@reactjit/runtime/icons/icons';
+import { Home, Info, Maximize, Minimize, Settings, User2, X } from '@reactjit/runtime/icons/icons';
 import { callHost } from '@reactjit/runtime/ffi';
-import { applyGalleryTheme, getActiveGalleryThemeId, useGalleryTheme } from '../component-gallery/gallery-theme';
+import { applyGalleryTheme, getActiveGalleryThemeId, useGalleryTheme } from './gallery/gallery-theme';
 import { classifiers as S } from '@reactjit/core';
 import { useIFTTT } from '@reactjit/runtime/hooks/useIFTTT';
-import IndexPage from './page';
-import AboutPage from './about/page';
-import SettingsPage, { SettingsNav } from './settings/page';
+import IndexPage from './page.tsx';
+import AboutPage from './about/page.tsx';
+import SettingsPage, { SettingsNav } from './settings/page.tsx';
 import SweatshopPage from './sweatshop/page';
-import { OnboardingProvider, useOnboarding } from './onboarding/state';
+import CharacterPage from './character/page';
+import { OnboardingProvider, useOnboarding } from './onboarding/state.tsx';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
 import { useInputFocal, setHudInsets, RAIL_SUBNAV_MAX_FRAC } from './shell';
@@ -38,6 +39,7 @@ const ROUTES: Array<{ path: string; label: string; icon: number[][]; mode: Route
   { path: '/settings',          label: 'Settings',  icon: Settings, mode: 'side' },
   { path: '/about',             label: 'About',     icon: Info,     mode: 'full' },
   { path: '/activity/sweatshop', label: 'Sweatshop', icon: Settings, mode: 'side' },
+  { path: '/character',          label: 'Character', icon: User2,    mode: 'side' },
 ];
 
 function NavLink({ path, label, icon }: { path: string; label: string; icon: number[][] }) {
@@ -316,12 +318,14 @@ function ShellBody() {
   // when this value actually changes (same-mode route navigations
   // stay in the same `headingTo` and don't fire the morph).
   const route = useRoute();
-  const routeMode: RouteMode = ROUTES.find((r) => r.path === route.path)?.mode ?? 'full';
+  const routeMode: RouteMode = route.path.startsWith('/settings')
+    ? 'side'
+    : ROUTES.find((r) => r.path === route.path)?.mode ?? 'full';
   // Some routes have an in-page sub-nav that's been promoted to the
   // HUD (settings: Profile/Preferences/…). The sub-nav stacks at the
   // top of the assistant rail — same column as the chat — so the rail
   // reads as one continuous left chrome instead of a separate slot.
-  const isSettings = route.path === '/settings';
+  const isSettings = route.path.startsWith('/settings');
   const [focal, setFocal] = useInputFocal();
   const headingTo = deriveHeadingTo(routeMode, focal);
   const chatShape = deriveChatShape(headingTo);
@@ -514,8 +518,14 @@ function ShellBody() {
                 <Route path="/settings">
                   <SettingsPage />
                 </Route>
+                <Route path="/settings/customize">
+                  <SettingsPage />
+                </Route>
                 <Route path="/activity/sweatshop">
                   <SweatshopPage />
+                </Route>
+                <Route path="/character">
+                  <CharacterPage />
                 </Route>
               </Box>
               {/* SideMenuInput — absolute overlay on the left.

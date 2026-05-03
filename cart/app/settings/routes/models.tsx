@@ -22,22 +22,33 @@
 //   source:       'remote-list'|'gguf-walk'|'manual'
 
 import { useMemo, useState } from 'react';
-import { Box, Pressable } from '@reactjit/runtime/primitives';
+import { Box, Pressable, StaticSurface } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import { Icon } from '@reactjit/runtime/icons/Icon';
 import {
   Eye, Brain, Wrench, Globe, Code, FileText,
   Star, RefreshCw, Pencil,
 } from '@reactjit/runtime/icons/icons';
-import { ProviderIcon } from '../../../component-gallery/components/model-card/ProviderIcon';
-import { PROVIDER_ICONS } from '../../../component-gallery/components/model-card/providerIcons.generated';
+import { ProviderIcon } from '../../gallery/components/model-card/ProviderIcon';
+import { PROVIDER_ICONS } from '../../gallery/components/model-card/providerIcons.generated';
 import { Section, Field, Input, PillRow } from '../shared';
 import { useSettingsCtx } from '../page';
 import { fetchModelsFor, upsertRows, type Modality, type ModelRow } from '../lib/fetch';
+import {
+  lookupModel,
+  ALL_CAPABILITIES,
+  ALL_MODALITIES,
+  MODALITY_LABEL,
+  type Capability,
+  type RegistryHit,
+} from '../lib/modelRegistry';
+import {
+  effortLevelsFor,
+  latestOpusId,
+  supports1M,
+} from '../../claude-models';
 
-type Capability = 'vision' | 'reasoning' | 'tools' | 'search' | 'code' | 'files';
-
-const ALL_CAPS: Capability[] = ['vision', 'reasoning', 'tools', 'search', 'code', 'files'];
+const ALL_CAPS: Capability[] = ALL_CAPABILITIES;
 
 const CAP_CONFIG: Record<Capability, { icon: number[][]; color: string; label: string; hint: string }> = {
   vision:    { icon: Eye,      color: 'theme:tool',  label: 'Vision',    hint: 'Image input' },
@@ -48,8 +59,8 @@ const CAP_CONFIG: Record<Capability, { icon: number[][]; color: string; label: s
   files:     { icon: FileText, color: 'theme:atch',  label: 'Files',     hint: 'File analysis' },
 };
 
-// Heuristic — first capabilities for a fresh model row based on its remoteId.
-// User can toggle anything afterwards.
+// Fallback heuristic for capabilities of UNKNOWN (registry-miss) models.
+// Registry hits never reach this — their capabilities are lab-defined.
 function inferCaps(remoteId: string, modality: Modality): Capability[] {
   if (modality !== 'text') return [];
   const s = remoteId.toLowerCase();
@@ -61,16 +72,14 @@ function inferCaps(remoteId: string, modality: Modality): Capability[] {
   return Array.from(caps);
 }
 
-function capsOf(m: ModelRow): Capability[] {
+function capsOf(m: ModelRow, hit: RegistryHit | null): Capability[] {
+  if (hit?.capabilities) return hit.capabilities;
   const v = (m as any).capabilities;
   if (Array.isArray(v)) return v.filter((c: any): c is Capability => ALL_CAPS.includes(c));
   return inferCaps(m.remoteId, m.modality);
 }
 
-const MODALITIES: Modality[] = ['text', 'embed', 'voice', 'image', 'tts'];
-const MODALITY_LABEL: Record<Modality, string> = {
-  text: 'Text', embed: 'Embedding', voice: 'Voice', image: 'Image', tts: 'TTS',
-};
+const MODALITIES: Modality[] = ALL_MODALITIES;
 
 type FetchState = { status: 'idle' | 'busy' | 'ok' | 'fail'; message: string };
 const IDLE: FetchState = { status: 'idle', message: '' };
@@ -112,6 +121,75 @@ function CapabilityButton({ cap, active, onToggle }: {
   );
 }
 
+// Inert capability badge for registry-defined models. Same visual
+// affordance as the active CapabilityButton minus the toggle — the
+// tooltip explains why it can't be unset.
+function LockedCapabilityBadge({ cap, labLabel }: { cap: Capability; labLabel: string }) {
+  const cfg = CAP_CONFIG[cap];
+  return (
+    <Pressable onPress={() => {}} tooltip={`${cfg.label} — ${cfg.hint} · defined by ${labLabel}`}>
+      <Box style={{
+        width: 26, height: 26,
+        borderRadius: 6,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: 'theme:bg1',
+        borderWidth: 1, borderColor: cfg.color,
+      }}>
+        <Icon icon={cfg.icon} size={13} color={cfg.color} strokeWidth={2} />
+      </Box>
+    </Pressable>
+  );
+}
+
+// Combined "type · context-window options" pill. For Anthropic 1M-capable
+// families we surface the alternate 200k context (you select via the
+// Anthropic API header), so a single Claude Opus 4.7 row reads
+// "Text · 200k / 1M" without needing two rows.
+function TypeContextBadge({
+  mod, ctxLabel, tooltip,
+}: { mod: Modality; ctxLabel: string; tooltip: string }) {
+  return (
+    <Pressable onPress={() => {}} tooltip={tooltip}>
+      <Box style={{
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        alignSelf: 'flex-start',
+        paddingLeft: 10, paddingRight: 12, paddingTop: 4, paddingBottom: 4,
+        borderRadius: 999,
+        backgroundColor: 'theme:bg1',
+        borderWidth: 1, borderColor: 'theme:rule',
+      }}>
+        <S.Caption>{MODALITY_LABEL[mod]}</S.Caption>
+        {ctxLabel ? (
+          <>
+            <S.Caption>·</S.Caption>
+            <S.Caption>{ctxLabel}</S.Caption>
+          </>
+        ) : null}
+      </Box>
+    </Pressable>
+  );
+}
+
+// One inert effort tier badge. Effort tiers come from
+// claude-models.effortLevelsFor — currently Anthropic-only (Sonnet/Opus
+// via API or Claude Code CLI). When OpenAI's Codex CLI lands as a
+// connection kind, extend effortLevelsFor (or add a parallel helper)
+// to cover gpt-5-codex variants.
+function EffortBadge({ level }: { level: string }) {
+  return (
+    <Pressable onPress={() => {}} tooltip={`Effort tier: ${level}`}>
+      <Box style={{
+        paddingLeft: 8, paddingRight: 9, paddingTop: 3, paddingBottom: 3,
+        borderRadius: 4,
+        backgroundColor: 'theme:bg1',
+        borderWidth: 1, borderColor: 'theme:rule',
+      }}>
+        <S.Caption>{level}</S.Caption>
+      </Box>
+    </Pressable>
+  );
+}
+
 // ─── Model card ──────────────────────────────────────────────────────
 
 function fmtCtx(n?: number): string {
@@ -128,19 +206,35 @@ function fmtCtx(n?: number): string {
 // flex box (the text engine doesn't break inside a non-whitespace token).
 function clip(s: string, max: number): string {
   if (!s) return '';
-  if (s.length <= max) return s;
-  // Mid-path ellipsis for paths so both ends stay legible.
-  if (s.includes('/')) {
-    const head = Math.max(6, Math.floor((max - 3) * 0.4));
-    const tail = max - 3 - head;
-    return `${s.slice(0, head)}…${s.slice(-tail)}`;
-  }
-  return `${s.slice(0, max - 1)}…`;
+  // Path-shaped ids: drop the directory, keep the filename. Every gguf in a
+  // folder shares the prefix, so the prefix is noise.
+  const slash = s.lastIndexOf('/');
+  const visible = slash >= 0 ? s.slice(slash + 1) : s;
+  if (visible.length <= max) return visible;
+  return `${visible.slice(0, max - 1)}…`;
 }
 
-function ModelCard({ m, providerIconId, onToggleFav, onRename, onChangeModality, onToggleCap }: {
+// Build the "200k / 1M" label for the type+context badge. Anthropic
+// Opus/Sonnet expose both 200k (default) and 1M (header opt-in), so we
+// surface that pair when the family supports it. Everything else is a
+// single number from the registry (or the fetched value).
+function ctxLabel(hit: RegistryHit | null, m: ModelRow): string {
+  const ctx = hit?.contextLength ?? m.contextLength;
+  if (!ctx) return '';
+  if (hit?.lab === 'anthropic' && supports1M(m.remoteId) && ctx >= 1_000_000) {
+    return `200k / ${fmtCtx(ctx)}`;
+  }
+  return fmtCtx(ctx);
+}
+
+function ModelCard({
+  m, providerIconId, connectionLabel, opusLatestId,
+  onToggleFav, onRename, onChangeModality, onToggleCap,
+}: {
   m: ModelRow;
   providerIconId?: string;
+  connectionLabel: string;
+  opusLatestId: string | null;
   onToggleFav: () => void;
   onRename: (next: string) => void;
   onChangeModality: (next: Modality) => void;
@@ -148,37 +242,112 @@ function ModelCard({ m, providerIconId, onToggleFav, onRename, onChangeModality,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.displayName);
-  const caps = capsOf(m);
-  const subtext = m.contextLength ? `${fmtCtx(m.contextLength)} ctx · ${fmtAge(m.lastSeenIso)}` : fmtAge(m.lastSeenIso);
+
+  // Registry hit decides icon + locks modality/capabilities/ctx.
+  // Connection iconId is the fallback (e.g., for unrecognised local
+  // .gguf files, custom proprietary endpoints, brand-new models the
+  // registry doesn't know yet).
+  const hit = useMemo(() => lookupModel(m.remoteId), [m.remoteId]);
+  const effectiveIcon = (hit?.iconId && PROVIDER_ICONS[hit.iconId]) ? hit.iconId : providerIconId;
+  const effectiveMod: Modality = hit?.modality ?? m.modality;
+  const caps = capsOf(m, hit);
+
+  const isText = effectiveMod === 'text';
+  const modalityLocked = !!hit;
+  const capsLocked = !!hit?.capabilities;
+
+  // Effort tiers — currently only Anthropic Sonnet/Opus expose them.
+  // Returns [] for Haiku, non-Claude, or registry-miss rows; in all
+  // those cases the effort row simply doesn't render.
+  const efforts = useMemo(
+    () => effortLevelsFor(m.remoteId, opusLatestId),
+    [m.remoteId, opusLatestId],
+  );
+
+  const ctx = ctxLabel(hit, m);
+  const ctxTooltip = hit?.contextLength
+    ? `Modality: ${MODALITY_LABEL[effectiveMod]} · context window: ${ctx} (defined by ${hit.labLabel})`
+    : `Modality: ${MODALITY_LABEL[effectiveMod]}${ctx ? ` · context window: ${ctx}` : ''}`;
 
   return (
-    <Box style={{
+    // StaticSurface = the outer flex-item; participates in the wrap row's
+    // sizing/positioning. Visual styling (bg/border/padding/gap) lives on
+    // the inner Box so it gets painted INTO the cached texture, not onto
+    // the texture-quad host that just composites it.
+    <StaticSurface staticKey={`model:${m.id}`} style={{
       width: 240, maxWidth: 240,
       flexShrink: 0, flexGrow: 0,
-      flexDirection: 'column',
-      paddingTop: 14, paddingBottom: 12, paddingLeft: 14, paddingRight: 14,
-      gap: 8,
-      borderRadius: 'theme:radiusLg',
-      borderWidth: 1, borderColor: m.favorite ? 'theme:accent' : 'theme:rule',
-      backgroundColor: 'theme:bg1',
-      overflow: 'hidden',
     }}>
-      {/* Header — provider icon + favorite */}
-      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        {providerIconId && PROVIDER_ICONS[providerIconId] ? (
-          <ProviderIcon providerId={providerIconId} size={32} />
+      <Box style={{
+        flexGrow: 1,
+        flexDirection: 'column',
+        paddingTop: 12, paddingBottom: 12, paddingLeft: 14, paddingRight: 14,
+        gap: 8,
+        borderRadius: 'theme:radiusLg',
+        borderWidth: 1, borderColor: m.favorite ? 'theme:accent' : 'theme:rule',
+        backgroundColor: 'theme:bg2',
+        overflow: 'hidden',
+      }}>
+      {/* Row 1 — icon | name+from | star */}
+      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+        {effectiveIcon && PROVIDER_ICONS[effectiveIcon] ? (
+          <ProviderIcon providerId={effectiveIcon} size={32} />
+        ) : hit ? (
+          // Lab without an icon yet — show the first letter so the
+          // user still sees who built it.
+          <Box style={{
+            width: 32, height: 32, borderRadius: 8,
+            alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'theme:paper',
+            borderWidth: 1, borderColor: 'theme:rule',
+          }}>
+            <S.Subheading>{(hit.labLabel[0] || '?').toUpperCase()}</S.Subheading>
+          </Box>
         ) : (
           <Box style={{
             width: 32, height: 32, borderRadius: 8,
-            backgroundColor: 'theme:bg2',
+            backgroundColor: 'theme:bg1',
             borderWidth: 1, borderColor: 'theme:rule',
           }} />
         )}
+
+        {/* Name + "from {connection}" subline. */}
+        <Box style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, flexDirection: 'column', gap: 2 }}>
+          {editing ? (
+            <Box style={{ flexDirection: 'column', gap: 6 }}>
+              <Input value={draft} onChange={setDraft} placeholder={m.remoteId} />
+              <Box style={{ flexDirection: 'row', gap: 6 }}>
+                <S.Button onPress={() => { onRename(draft.trim() || m.remoteId); setEditing(false); }}>
+                  <S.ButtonLabel>Save</S.ButtonLabel>
+                </S.Button>
+                <S.ButtonOutline onPress={() => { setDraft(m.displayName); setEditing(false); }}>
+                  <S.ButtonOutlineLabel>Cancel</S.ButtonOutlineLabel>
+                </S.ButtonOutline>
+              </Box>
+            </Box>
+          ) : (
+            <>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Box style={{ flexShrink: 1, minWidth: 0 }}>
+                  <S.Subheading noWrap>{clip(m.displayName, 20)}</S.Subheading>
+                </Box>
+                <Pressable
+                  onPress={() => { setDraft(m.displayName); setEditing(true); }}
+                  tooltip={`Rename · current: ${m.displayName}`}
+                >
+                  <Icon icon={Pencil} size={10} color="theme:inkDim" strokeWidth={2} />
+                </Pressable>
+              </Box>
+              <S.Caption noWrap>from {connectionLabel}</S.Caption>
+            </>
+          )}
+        </Box>
+
         <Pressable onPress={onToggleFav} tooltip={m.favorite ? 'Unfavorite' : 'Favorite'}>
           <Box style={{
             width: 26, height: 26, borderRadius: 13,
             alignItems: 'center', justifyContent: 'center',
-            backgroundColor: 'theme:bg2',
+            backgroundColor: 'theme:bg1',
           }}>
             <Icon
               icon={Star}
@@ -190,47 +359,40 @@ function ModelCard({ m, providerIconId, onToggleFav, onRename, onChangeModality,
         </Pressable>
       </Box>
 
-      {/* Name (click to rename) */}
-      {editing ? (
-        <Box style={{ flexDirection: 'column', gap: 6 }}>
-          <Input value={draft} onChange={setDraft} placeholder={m.remoteId} />
-          <Box style={{ flexDirection: 'row', gap: 6 }}>
-            <S.Button onPress={() => { onRename(draft.trim() || m.remoteId); setEditing(false); }}>
-              <S.ButtonLabel>Save</S.ButtonLabel>
-            </S.Button>
-            <S.ButtonOutline onPress={() => { setDraft(m.displayName); setEditing(false); }}>
-              <S.ButtonOutlineLabel>Cancel</S.ButtonOutlineLabel>
-            </S.ButtonOutline>
-          </Box>
-        </Box>
+      {/* Row 2 — type + context badge for known models, or PillRow for
+          unknown rows where the user might need to fix the modality. */}
+      {modalityLocked ? (
+        <TypeContextBadge mod={effectiveMod} ctxLabel={ctx} tooltip={ctxTooltip} />
       ) : (
-        <Pressable onPress={() => { setDraft(m.displayName); setEditing(true); }} tooltip={`${m.displayName} — click to rename`}>
-          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, width: '100%' }}>
-            <Box style={{ flexShrink: 1, minWidth: 0 }}>
-              <S.Subheading noWrap>{clip(m.displayName, 22)}</S.Subheading>
-            </Box>
-            <Icon icon={Pencil} size={10} color="theme:inkDimmer" strokeWidth={2} />
-          </Box>
-        </Pressable>
+        <PillRow<Modality>
+          options={MODALITIES}
+          labels={MODALITY_LABEL}
+          value={m.modality}
+          onChange={onChangeModality}
+        />
       )}
-      <S.Caption noWrap>{clip(m.remoteId, 30)}</S.Caption>
-      <S.Caption noWrap>{subtext}</S.Caption>
 
-      {/* Modality pills */}
-      <PillRow<Modality>
-        options={MODALITIES}
-        labels={MODALITY_LABEL}
-        value={m.modality}
-        onChange={onChangeModality}
-      />
+      {/* Row 3 — effort tiers. Only renders for Anthropic Sonnet/Opus
+          today (Haiku has none, non-Claude returns []). */}
+      {efforts.length > 0 && (
+        <Box style={{ flexDirection: 'row', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+          {efforts.map((lvl) => <EffortBadge key={lvl} level={lvl} />)}
+        </Box>
+      )}
 
-      {/* Capability badges (text models only) */}
-      {m.modality === 'text' && (
-        <Box style={{
-          flexDirection: 'row', gap: 6, marginTop: 4,
-          paddingTop: 8,
-          borderTopWidth: 1, borderTopColor: 'theme:rule',
-        }}>
+      {/* Row 4 — capabilities. Locked → only the active ones as inert
+          badges. Unlocked → the full toggle row so the user can fix
+          mis-inferred capabilities for unknown models. */}
+      {isText && (capsLocked ? (
+        caps.length > 0 && (
+          <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {caps.map((c) => (
+              <LockedCapabilityBadge key={c} cap={c} labLabel={hit!.labLabel} />
+            ))}
+          </Box>
+        )
+      ) : (
+        <Box style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
           {ALL_CAPS.map((c) => (
             <CapabilityButton
               key={c}
@@ -240,8 +402,9 @@ function ModelCard({ m, providerIconId, onToggleFav, onRename, onChangeModality,
             />
           ))}
         </Box>
-      )}
-    </Box>
+      ))}
+      </Box>
+    </StaticSurface>
   );
 }
 
@@ -262,6 +425,17 @@ function ProviderModelsBlock({ conn, modelsForConn, onRefetch, fetching }: {
     return g;
   }, [modelsForConn]);
 
+  // Per-connection latest-Opus id — only that one gets `xhigh`. We
+  // recompute when the model list changes (refetch). Returns null when
+  // the connection isn't Anthropic-shaped, which is harmless: effort
+  // tiers default to the non-latest set in that case.
+  const opusLatestId = useMemo(
+    () => latestOpusId(modelsForConn.map((m) => m.remoteId)),
+    [modelsForConn],
+  );
+
+  const connLabel: string = conn.label || conn.id;
+
   const { modelStore, reload } = useSettingsCtx();
 
   const updateRow = async (m: ModelRow, patch: Partial<ModelRow>) => {
@@ -270,9 +444,17 @@ function ProviderModelsBlock({ conn, modelsForConn, onRefetch, fetching }: {
   };
 
   const toggleCap = async (m: ModelRow, cap: Capability) => {
-    const cur = capsOf(m);
+    const hit = lookupModel(m.remoteId);
+    // Registry hits are authoritative — ignore stray toggle attempts.
+    if (hit?.capabilities) return;
+    const cur = capsOf(m, hit);
     const next = cur.includes(cap) ? cur.filter((c) => c !== cap) : [...cur, cap];
     await updateRow(m, { capabilities: next } as any);
+  };
+
+  const changeModality = (m: ModelRow, next: Modality) => {
+    if (lookupModel(m.remoteId)) return; // locked by registry
+    updateRow(m, { modality: next });
   };
 
   return (
@@ -329,9 +511,11 @@ function ProviderModelsBlock({ conn, modelsForConn, onRefetch, fetching }: {
                     key={m.id}
                     m={m}
                     providerIconId={conn.iconId}
+                    connectionLabel={connLabel}
+                    opusLatestId={opusLatestId}
                     onToggleFav={() => updateRow(m, { favorite: !m.favorite })}
                     onRename={(next) => updateRow(m, { displayName: next })}
-                    onChangeModality={(next) => updateRow(m, { modality: next })}
+                    onChangeModality={(next) => changeModality(m, next)}
                     onToggleCap={(cap) => toggleCap(m, cap)}
                   />
                 ))}

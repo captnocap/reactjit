@@ -1,14 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { Box } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
-import Onboarding from './onboarding/Onboarding';
-import { useOnboarding } from './onboarding/state';
+import Onboarding from './onboarding/Onboarding.tsx';
+import { useOnboarding } from './onboarding/state.tsx';
 import { useHudInsets } from './shell';
 import { TRAITS_BY_ID } from './onboarding/traits';
 import { useAnimationTimeline } from './anim';
-import { SnakeSpinner } from '../component-gallery/components/grid-spinners/GridSpinners';
-import { MenuGridSquareContent } from '../component-gallery/components/menu-grid-square/MenuGridSquare';
-import type { MenuEntry } from '../component-gallery/data/menu-entry';
+import { SnakeSpinner } from './gallery/components/grid-spinners/GridSpinners';
+import { MenuGridSquareContent } from './gallery/components/menu-grid-square/MenuGridSquare';
+import type { MenuEntry } from './gallery/data/menu-entry';
 
 // ── Carryover entry timeline ─────────────────────────────────────────
 //
