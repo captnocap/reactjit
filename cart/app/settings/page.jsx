@@ -50,15 +50,19 @@
 import { Box, Pressable, ScrollView } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import { useCRUD } from '@reactjit/runtime/hooks';
-import { execAsync } from '@reactjit/runtime/hooks/process';
+import { execAsync, envGet } from '@reactjit/runtime/hooks/process';
+import * as http from '@reactjit/runtime/hooks/http';
 import * as sqlite from '@reactjit/runtime/hooks/sqlite';
 import * as pg from '@reactjit/runtime/hooks/pg';
 import * as embed from '@reactjit/runtime/hooks/embed';
+import * as fs from '@reactjit/runtime/hooks/fs';
 import { Children, useEffect, useMemo, useRef, useState } from 'react';
 import { useOnboarding } from '../onboarding/state';
 import { useHudInsets, useSettingsSection } from '../shell';
 import { useAnimationTimeline } from '../anim';
 import { TRAITS } from '../onboarding/traits';
+import { inferenceParameterMockData } from '../../component-gallery/data/inference-parameter';
+import { effortLevelsFor, latestOpusId, familyOf } from '../claude-models';
 
 // ── List-entry stagger ───────────────────────────────────────────────
 //
@@ -106,6 +110,66 @@ const SETTINGS_ID = 'settings_default';
 const PRIVACY_ID = 'privacy_default';
 const passthrough = { parse: (v) => v };
 
+// ── local-runtime helpers ────────────────────────────────────────────
+// Used by the local-runtime probe path. The cart embeds its own
+// llama.cpp inference subprocess (rjit-llm-worker), so probing means
+// "what .gguf files can I find in this folder?" rather than HTTP.
+
+function expandHome(p) {
+  const v = String(p || '').trim();
+  if (!v) return v;
+  if (v.startsWith('~/') || v === '~') {
+    const home = envGet('HOME') || '';
+    if (home) return v === '~' ? home : `${home}/${v.slice(2)}`;
+  }
+  return v;
+}
+
+// Walk root for *.gguf files, breadth-first, skipping hidden dirs and
+// the obvious mmproj/lora/embed siblings (we want chat models). Bail
+// early at maxFiles to keep the UI list manageable. mmproj projector
+// files end in `-mmproj-*.gguf` — skip those, they're not standalone
+// chat models.
+function walkForGgufs(root, maxDepth, maxFiles) {
+  // If root is itself a .gguf file (re-probing an already-saved
+  // local-runtime connection where the locator is the picked file),
+  // return that single file. Lets the user re-pick from the same
+  // result without having to retype the folder.
+  const rootStat = fs.stat(root);
+  if (rootStat && rootStat.isFile && root.toLowerCase().endsWith('.gguf')) {
+    return [root];
+  }
+
+  const out = [];
+  const queue = [{ path: root, depth: 0 }];
+  while (queue.length > 0 && out.length < maxFiles) {
+    const { path, depth } = queue.shift();
+    let entries;
+    try {
+      entries = fs.listDir(path) || [];
+    } catch {
+      continue;
+    }
+    for (const name of entries) {
+      if (name.startsWith('.')) continue;
+      const full = `${path}/${name}`;
+      const st = fs.stat(full);
+      if (!st) continue;
+      if (st.isDirectory && depth < maxDepth) {
+        queue.push({ path: full, depth: depth + 1 });
+      } else if (st.isFile && name.toLowerCase().endsWith('.gguf')) {
+        // Skip mmproj projectors and obvious non-chat artifacts.
+        const lower = name.toLowerCase();
+        if (lower.includes('mmproj') || lower.includes('-projector')) continue;
+        out.push(full);
+        if (out.length >= maxFiles) break;
+      }
+    }
+  }
+  out.sort();
+  return out;
+}
+
 const NAV_ITEMS = [
   { id: 'profile',     label: 'Profile' },
   { id: 'preferences', label: 'Preferences' },
@@ -131,7 +195,18 @@ const CONNECTION_KINDS = [
 ];
 
 const CREDENTIAL_SOURCES = ['env', 'keychain', 'cli-session', 'file', 'none'];
-const EFFORT_OPTIONS = ['minimal', 'low', 'medium', 'high'];
+// Reasoning controls are driven by the inference-parameter catalog
+// (cart/component-gallery/data/inference-parameter.ts), not a hardcoded
+// list. Each provider kind exposes a different shape — OpenAI's
+// `reasoning_effort: low|medium|high` (GPT-5), Anthropic's
+// `thinking.type: enabled|disabled` paired with `thinking.budget_tokens`
+// (Claude 4 family). Filtering by role + applicableKinds keeps the UI
+// honest as the catalog grows.
+function reasoningParamsFor(kind) {
+  return inferenceParameterMockData.filter(
+    (p) => p.role === 'reasoning' && (p.applicableKinds || []).includes(kind),
+  );
+}
 
 // Tool surface known to the framework. Privacy.tools allowed/denied lists
 // pick from this — typing free-form names is a sharp edge we don't want.
@@ -423,7 +498,7 @@ function emptyDraft() {
     locator: defaultLocatorFor('anthropic-api-key'),
     endpoint: 'https://api.anthropic.com/v1',
     contextLength: 200000,
-    effort: 'medium',
+    reasoning: {},
     chosenModel: '',
     probedModels: null,
     probeStatus: null,
@@ -463,18 +538,26 @@ function ProvidersSection({ connections, settings, settingsStore, connectionStor
               onSubmit={async (draft) => {
                 const id = `conn_${Date.now().toString(36)}`;
                 const now = new Date().toISOString();
+                // For local-runtime, the actual model path is what the
+                // user picked from the probe results (chosenModel) — the
+                // Locator field they typed was just the folder we walked.
+                // useAssistantChat reads credentialRef.locator as the
+                // .gguf path, so override it with the picked file.
+                const locator = draft.kind === 'local-runtime' && draft.chosenModel
+                  ? draft.chosenModel
+                  : (draft.locator || undefined);
                 await connectionStore.create({
                   id,
                   settingsId: SETTINGS_ID,
                   providerId: providerIdForKind(draft.kind),
                   kind: draft.kind,
                   label: draft.label || labelForKind(draft.kind),
-                  credentialRef: { source: draft.source, locator: draft.locator || undefined },
+                  credentialRef: { source: draft.source, locator },
                   endpoint: needsEndpoint(draft.kind) ? (draft.endpoint || undefined) : undefined,
                   capabilities: defaultCapabilitiesFor(draft.kind),
                   status: 'active',
                   contextLength: draft.contextLength || undefined,
-                  effort: draft.effort || undefined,
+                  reasoning: hasAny(draft.reasoning) ? draft.reasoning : undefined,
                   defaultModel: draft.chosenModel || undefined,
                   createdAt: now,
                 });
@@ -503,14 +586,20 @@ function ProvidersSection({ connections, settings, settingsStore, connectionStor
                 initial={c}
                 connections={connections}
                 onSubmit={async (draft) => {
+                  // Same locator-override semantic as the create path:
+                  // for local-runtime, the picked .gguf file IS the
+                  // locator (overwrites whatever folder we walked).
+                  const locator = draft.kind === 'local-runtime' && draft.chosenModel
+                    ? draft.chosenModel
+                    : (draft.locator || undefined);
                   await connectionStore.update(c.id, {
                     label: draft.label,
                     kind: draft.kind,
                     providerId: providerIdForKind(draft.kind),
-                    credentialRef: { source: draft.source, locator: draft.locator || undefined },
+                    credentialRef: { source: draft.source, locator },
                     endpoint: needsEndpoint(draft.kind) ? (draft.endpoint || undefined) : undefined,
                     contextLength: draft.contextLength || undefined,
-                    effort: draft.effort || undefined,
+                    reasoning: hasAny(draft.reasoning) ? draft.reasoning : undefined,
                     defaultModel: draft.chosenModel || undefined,
                   });
                   setEditingId(null);
@@ -534,6 +623,10 @@ function ProvidersSection({ connections, settings, settingsStore, connectionStor
                   await settingsStore.update(SETTINGS_ID, { ...settings, defaultConnectionId: c.id });
                   reload();
                 }}
+                onPickModel={async (modelId) => {
+                  await connectionStore.update(c.id, { defaultModel: modelId || undefined });
+                  reload();
+                }}
               />
             )}
           </S.Card>
@@ -543,8 +636,9 @@ function ProvidersSection({ connections, settings, settingsStore, connectionStor
   );
 }
 
-function ConnectionRowView({ conn, isDefault, onEdit, onDelete, onMakeDefault }) {
+function ConnectionRowView({ conn, isDefault, onEdit, onDelete, onMakeDefault, onPickModel }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [probe, setProbe] = useState({ status: null, message: '', models: null });
   const cap = conn.capabilities || {};
   const capChips = [
     cap.streaming   && 'streaming',
@@ -555,15 +649,36 @@ function ConnectionRowView({ conn, isDefault, onEdit, onDelete, onMakeDefault })
     cap.batch       && 'batch',
   ].filter(Boolean);
 
+  const hasModel = !!conn.defaultModel;
+
+  const runProbe = async () => {
+    setProbe({ status: 'busy', message: '', models: null });
+    const draft = {
+      kind: conn.kind,
+      endpoint: conn.endpoint || defaultEndpointFor(conn.kind),
+      source: conn.credentialRef?.source || defaultSourceForKind(conn.kind),
+      locator: conn.credentialRef?.locator || '',
+    };
+    const r = await probeConnection(draft).catch((err) => ({ ok: false, message: String(err?.message || err) }));
+    setProbe(r.ok
+      ? { status: 'success', message: r.message || '', models: r.models || [] }
+      : { status: 'fail', message: r.message || 'Probe failed.', models: null }
+    );
+  };
+
   return (
     <Box style={{ flexDirection: 'column', gap: 10 }}>
       <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
           <S.Title>{conn.label || labelForKind(conn.kind)}</S.Title>
           {isDefault ? <S.Chip><S.Body>default</S.Body></S.Chip> : null}
+          {!hasModel ? <S.Chip><S.Body>no model picked</S.Body></S.Chip> : null}
           <S.Chip><S.Body>{conn.status}</S.Body></S.Chip>
         </Box>
-        <Box style={{ flexDirection: 'row', gap: 8 }}>
+        <Box style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <S.Button onPress={probe.status === 'busy' ? () => {} : runProbe}>
+            <S.ButtonLabel>{probe.status === 'busy' ? 'Probing…' : (hasModel ? 'Re-probe & pick model' : 'Probe & pick model')}</S.ButtonLabel>
+          </S.Button>
           {!isDefault ? (
             <S.ButtonOutline onPress={onMakeDefault}>
               <S.ButtonOutlineLabel>Make default</S.ButtonOutlineLabel>
@@ -588,6 +703,37 @@ function ConnectionRowView({ conn, isDefault, onEdit, onDelete, onMakeDefault })
           )}
         </Box>
       </Box>
+
+      {probe.status === 'success' || probe.status === 'fail' ? (
+        <S.AppProbeResult>
+          {probe.status === 'success'
+            ? <S.AppProbeOk>Probe succeeded</S.AppProbeOk>
+            : <S.AppProbeFail>Probe failed</S.AppProbeFail>}
+          {probe.message ? <S.AppProbeMessage>{probe.message}</S.AppProbeMessage> : null}
+        </S.AppProbeResult>
+      ) : null}
+
+      {probe.models && probe.models.length > 0 ? (
+        <S.AppFormFieldCol>
+          <S.AppModelListLabel>Pick a model</S.AppModelListLabel>
+          <S.AppModelListBox style={{ height: probe.models.length > 6 ? 240 : undefined, maxHeight: 240 }}>
+            <ScrollView showScrollbar={probe.models.length > 6} style={{ flexGrow: 1, minHeight: 0, width: '100%' }}>
+              <Box style={{ flexDirection: 'column', gap: 4 }}>
+                {probe.models.map((m) => {
+                  const isOn = m === conn.defaultModel;
+                  const Choice = isOn ? S.AppModelChoiceActive : S.AppModelChoice;
+                  const Text = isOn ? S.AppModelChoiceTextActive : S.AppModelChoiceText;
+                  return (
+                    <Choice key={m} onPress={() => onPickModel(m)}>
+                      <Text>{m}</Text>
+                    </Choice>
+                  );
+                })}
+              </Box>
+            </ScrollView>
+          </S.AppModelListBox>
+        </S.AppFormFieldCol>
+      ) : null}
       <S.KV>
         <Box style={{ width: 140, flexShrink: 0 }}><S.Body>Kind</S.Body></Box>
         <Box style={{ flexGrow: 1 }}><S.Body>{conn.kind}</S.Body></Box>
@@ -618,12 +764,14 @@ function ConnectionRowView({ conn, isDefault, onEdit, onDelete, onMakeDefault })
           <Box style={{ flexGrow: 1 }}><S.Body>{conn.contextLength.toLocaleString()} tok</S.Body></Box>
         </S.KV>
       ) : null}
-      {conn.effort ? (
-        <S.KV>
-          <Box style={{ width: 140, flexShrink: 0 }}><S.Body>Effort</S.Body></Box>
-          <Box style={{ flexGrow: 1 }}><S.Body>{conn.effort}</S.Body></Box>
-        </S.KV>
-      ) : null}
+      {conn.reasoning && typeof conn.reasoning === 'object'
+        ? Object.keys(conn.reasoning).filter((k) => conn.reasoning[k] !== undefined && conn.reasoning[k] !== '').map((k) => (
+          <S.KV key={k}>
+            <Box style={{ width: 140, flexShrink: 0 }}><S.Body>{k}</S.Body></Box>
+            <Box style={{ flexGrow: 1 }}><S.Body>{String(conn.reasoning[k])}</S.Body></Box>
+          </S.KV>
+        ))
+        : null}
       {capChips.length > 0 ? (
         <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
           {capChips.map((c) => <S.Chip key={c}><S.Body>{c}</S.Body></S.Chip>)}
@@ -643,7 +791,7 @@ function ConnectionEditor({ initial, connections, onSubmit, onCancel }) {
         locator: initial.credentialRef?.locator || '',
         endpoint: initial.endpoint || defaultEndpointFor(initial.kind),
         contextLength: typeof initial.contextLength === 'number' ? initial.contextLength : defaultContextFor(initial.kind),
-        effort: initial.effort || 'medium',
+        reasoning: initial.reasoning && typeof initial.reasoning === 'object' ? initial.reasoning : {},
         chosenModel: initial.defaultModel || '',
         probedModels: null,
         probeStatus: null,
@@ -661,6 +809,9 @@ function ConnectionEditor({ initial, connections, onSubmit, onCancel }) {
     locator: defaultLocatorFor(k),
     endpoint: defaultEndpointFor(k),
     contextLength: defaultContextFor(k),
+    // Reasoning param shapes differ per kind (OpenAI's reasoning_effort
+    // vs Anthropic's thinking.*) — wipe so the new kind starts clean.
+    reasoning: {},
     probedModels: null, probeStatus: null, probeMessage: '',
   });
 
@@ -724,13 +875,23 @@ function ConnectionEditor({ initial, connections, onSubmit, onCancel }) {
       </S.AppFormFieldCol>
 
       <S.AppFormFieldCol>
-        <S.AppFormLabel>Locator</S.AppFormLabel>
+        <S.AppFormLabel>
+          {draft.kind === 'local-runtime' ? 'Models folder' : 'Locator'}
+        </S.AppFormLabel>
         <S.AppFormInputMono
           value={draft.locator}
           onChange={inputHandler((v) => update({ locator: v }))}
-          placeholder={placeholderForLocator(draft.source)}
+          placeholder={
+            draft.kind === 'local-runtime'
+              ? '~/.lmstudio/models  (or any folder containing .gguf files)'
+              : placeholderForLocator(draft.source)
+          }
         />
-        <S.AppFormLabel style={{ marginTop: 4 }}>{locatorHint(draft.source)}</S.AppFormLabel>
+        <S.AppFormLabel style={{ marginTop: 4 }}>
+          {draft.kind === 'local-runtime'
+            ? 'A folder containing .gguf files. Probe walks it (5 levels deep, max 200 files) and lists every chat model it finds. Pick one below.'
+            : locatorHint(draft.source)}
+        </S.AppFormLabel>
       </S.AppFormFieldCol>
 
       <S.AppFormFieldCol>
@@ -742,14 +903,13 @@ function ConnectionEditor({ initial, connections, onSubmit, onCancel }) {
         />
       </S.AppFormFieldCol>
 
-      <S.AppFormFieldCol>
-        <S.AppFormLabel>Default reasoning effort</S.AppFormLabel>
-        <PillRow
-          options={EFFORT_OPTIONS}
-          value={draft.effort}
-          onChange={(v) => update({ effort: v })}
-        />
-      </S.AppFormFieldCol>
+      <ReasoningControls
+        kind={draft.kind}
+        value={draft.reasoning}
+        onChange={(next) => update({ reasoning: next })}
+        modelId={draft.chosenModel}
+        modelList={Array.isArray(draft.probedModels) ? draft.probedModels : []}
+      />
 
       <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
         <S.Button onPress={draft.probeStatus === 'busy' ? () => {} : probe}>
@@ -767,9 +927,9 @@ function ConnectionEditor({ initial, connections, onSubmit, onCancel }) {
         </S.AppProbeResult>
       ) : null}
 
-      {draft.probedModels ? (
-        <S.AppFormFieldCol>
-          <S.AppModelListLabel>Default model (from probe)</S.AppModelListLabel>
+      <S.AppFormFieldCol>
+        <S.AppModelListLabel>Default model</S.AppModelListLabel>
+        {draft.probedModels ? (
           <S.AppModelListBox style={{ height: draft.probedModels.length > 6 ? 220 : undefined, maxHeight: 220 }}>
             <ScrollView showScrollbar={draft.probedModels.length > 6} style={{ flexGrow: 1, minHeight: 0, width: '100%' }}>
               <Box style={{ flexDirection: 'column', gap: 4 }}>
@@ -786,17 +946,16 @@ function ConnectionEditor({ initial, connections, onSubmit, onCancel }) {
               </Box>
             </ScrollView>
           </S.AppModelListBox>
-        </S.AppFormFieldCol>
-      ) : (
-        <S.AppFormFieldCol>
-          <S.AppFormLabel>Default model</S.AppFormLabel>
-          <S.AppFormInputMono
-            value={draft.chosenModel}
-            onChange={inputHandler((v) => update({ chosenModel: v }))}
-            placeholder="probe to populate, or type manually"
-          />
-        </S.AppFormFieldCol>
-      )}
+        ) : draft.chosenModel ? (
+          <S.AppProbeResult>
+            <S.AppProbeMessage>Currently set to <S.AppProbeMessage>{draft.chosenModel}</S.AppProbeMessage>. Probe the connection above to re-pick from the live model list.</S.AppProbeMessage>
+          </S.AppProbeResult>
+        ) : (
+          <S.AppProbeResult>
+            <S.AppProbeMessage>Probe the connection to populate the model list. Models are picked from what the endpoint actually serves — not typed by hand.</S.AppProbeMessage>
+          </S.AppProbeResult>
+        )}
+      </S.AppFormFieldCol>
 
       {!validation.ok ? (
         <S.AppProbeResult>
@@ -842,54 +1001,132 @@ function validateConnectionDraft(draft, connections, currentId) {
   return { ok: true, message: '' };
 }
 
+// All HTTP probes go through runtime/hooks/http.getAsync — same path
+// onboarding's LocalForm uses (via fetch). Do NOT shell out to curl:
+// the spawned shell may not see the cart's process env, and quoting
+// errors silently corrupted the Authorization header in earlier
+// revisions of this file.
 async function probeConnection(draft) {
   const kind = draft.kind;
+
   if (kind === 'claude-code-cli') {
-    const r = await execAsync('claude --version').catch((err) => ({ code: 1, stdout: '', stderr: String(err?.message || err) }));
-    if (r.code !== 0) {
-      return { ok: false, message: (r.stderr || r.stdout || 'claude binary not found on PATH').split('\n').slice(-3).join('\n') };
+    // Same flow as onboarding/Step2.jsx ClaudeForm:
+    //   1. read <home>/.credentials.json (default $HOME/.claude/)
+    //   2. pull claudeAiOauth.accessToken
+    //   3. GET https://api.anthropic.com/v1/models with Bearer + version
+    //      + the oauth beta header (without anthropic-beta:oauth-... the
+    //      API rejects OAuth-issued tokens).
+    // No hardcoded model list — the API answers with the real one.
+    const home = (draft.locator || '~/.claude/').replace(/\/+$/, '');
+    const credPath = `${home}/.credentials.json`;
+    const catCmd = home.startsWith('~/')
+      ? `cat "$HOME${home.slice(1)}/.credentials.json"`
+      : `cat "${credPath}"`;
+    const cat = await execAsync(catCmd).catch((err) => ({ code: 1, stdout: '', stderr: String(err?.message || err) }));
+    if (!cat || cat.code !== 0) {
+      return { ok: false, message: `No credentials.json under ${home}. Run \`claude auth login\` (or fix the home dir).` };
     }
-    return { ok: true, message: r.stdout.trim(), models: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'] };
+    let token = '';
+    try {
+      const json = JSON.parse(cat.stdout);
+      token = (json && json.claudeAiOauth && json.claudeAiOauth.accessToken) || '';
+    } catch {
+      return { ok: false, message: 'credentials.json was not valid JSON.' };
+    }
+    if (!token) {
+      return { ok: false, message: 'No accessToken in credentials.json — run `claude auth login`.' };
+    }
+    const res = await http.getAsync('https://api.anthropic.com/v1/models', {
+      Authorization: `Bearer ${token}`,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'oauth-2025-04-20',
+    }).catch((err) => ({ status: 0, headers: {}, body: '', error: String(err?.message || err) }));
+    if (!res || res.status === 0) {
+      return { ok: false, message: `GET /v1/models failed: ${res?.error || 'no response'}` };
+    }
+    if (res.status === 401) {
+      return { ok: false, message: 'Token rejected (401). Run `claude auth login` again.' };
+    }
+    if (res.status !== 200) {
+      return { ok: false, message: `Anthropic /v1/models → ${res.status}: ${(res.body || '').slice(0, 200)}` };
+    }
+    const models = parseModelList(res.body);
+    if (models.length === 0) {
+      return { ok: false, message: `Replied 200 but no models parsed. Body head: ${(res.body || '').slice(0, 600)}` };
+    }
+    return { ok: true, message: `${models.length} models from /v1/models (OAuth)`, models };
   }
+
   if (kind === 'local-runtime') {
-    // Probe a few common local OAI-shaped servers (Ollama, LM-Studio, vLLM).
-    const tries = ['http://localhost:11434/v1/models', 'http://localhost:1234/v1/models', 'http://localhost:8000/v1/models'];
-    for (const url of tries) {
-      const r = await execAsync(`curl -fsS --max-time 3 "${url}"`).catch(() => null);
-      if (r && r.code === 0) {
-        const models = parseModelList(r.stdout);
-        if (models.length > 0) return { ok: true, message: `Probed ${url}`, models };
-      }
+    // local-runtime = the cart spawns its own llama.cpp inference
+    // worker (rjit-llm-worker) on a model file directly. The Locator
+    // is a folder containing .gguf files (or nested dirs of them, like
+    // ~/.lmstudio/models/Qwen/Qwen3-...-GGUF/qwen3.gguf). We walk it
+    // and return absolute paths so the user can pick a model with one
+    // click — no typing the full path.
+    const raw = (draft.locator || '').trim();
+    if (!raw) {
+      return { ok: false, message: 'Set Locator to a folder of .gguf files (e.g. ~/.lmstudio/models or /path/to/your/models).' };
     }
-    return { ok: false, message: 'No local runtime found at common ports (11434 / 1234 / 8000).' };
+    const root = expandHome(raw);
+    if (!fs.exists(root)) {
+      return { ok: false, message: `Folder not found: ${root}` };
+    }
+    const ggufs = walkForGgufs(root, /* maxDepth */ 5, /* maxFiles */ 200);
+    if (ggufs.length === 0) {
+      return { ok: false, message: `No .gguf files under ${root} (searched ≤5 levels deep, capped at 200 results).` };
+    }
+    return { ok: true, message: `Found ${ggufs.length} .gguf file${ggufs.length === 1 ? '' : 's'} under ${root}`, models: ggufs };
   }
+
   // HTTP api-key kinds — anthropic, openai, openai-api-like, kimi.
   const endpoint = (draft.endpoint || defaultEndpointFor(kind) || '').replace(/\/+$/, '');
   if (!endpoint) return { ok: false, message: 'Missing endpoint URL.' };
+
   const keyResolution = await resolveKey(draft);
   if (!keyResolution.ok) return { ok: false, message: keyResolution.message };
+
+  const headers = authHeadersObj(kind, keyResolution.value);
   const url = `${endpoint}/models`;
-  const cmd = `curl -fsS --max-time 8 -H "${authHeaderFor(kind)}: ${keyResolution.value}" "${url}"`;
-  const r = await execAsync(cmd).catch((err) => ({ code: 1, stdout: '', stderr: String(err?.message || err) }));
-  if (r.code !== 0) {
-    const tail = (r.stderr || r.stdout || '').split('\n').slice(-3).join('\n');
-    return { ok: false, message: `GET ${url} failed.\n${tail}` };
+  const res = await http.getAsync(url, headers).catch((err) => ({ status: 0, headers: {}, body: '', error: String(err?.message || err) }));
+
+  if (!res || typeof res.status !== 'number' || res.status === 0) {
+    return { ok: false, message: `GET ${url} failed: ${res?.error || 'no response'}` };
   }
-  const models = parseModelList(r.stdout);
-  if (models.length === 0) return { ok: false, message: 'Endpoint replied but no models parsed.' };
+  if (res.status < 200 || res.status >= 300) {
+    const tail = (res.body || '').slice(0, 600);
+    return { ok: false, message: `GET ${url} → ${res.status}\n${tail}` };
+  }
+
+  const models = parseModelList(res.body);
+  if (models.length === 0) {
+    const tail = (res.body || '').slice(0, 600);
+    return { ok: false, message: `Endpoint replied ${res.status} but no models parsed. First 600 chars of body:\n${tail || '(empty body)'}` };
+  }
   return { ok: true, message: `${models.length} models from ${url}`, models };
 }
 
-function authHeaderFor(kind) {
-  if (kind === 'anthropic-api-key') return 'x-api-key';
-  return 'Authorization: Bearer';
+// Provider-specific auth headers as a plain object suitable for
+// http.getAsync. Anthropic needs x-api-key + an API version header;
+// OpenAI-shaped endpoints use Authorization: Bearer.
+function authHeadersObj(kind, key) {
+  if (kind === 'anthropic-api-key') {
+    return { 'x-api-key': key, 'anthropic-version': '2023-06-01' };
+  }
+  return { Authorization: `Bearer ${key}` };
 }
 
 async function resolveKey(draft) {
   if (draft.source === 'env') {
-    const r = await execAsync(`printf %s "$${draft.locator.replace(/[^A-Za-z0-9_]/g, '')}"`).catch(() => null);
-    const val = (r?.stdout || '').trim();
-    if (!val) return { ok: false, message: `Env var ${draft.locator} is unset or empty.` };
+    const name = (draft.locator || '').trim();
+    if (!name) return { ok: false, message: 'Env var name is empty.' };
+    // Read directly from the cart's process env. Earlier revisions
+    // shelled `printf %s "$VAR"` which spawns a NEW shell that does
+    // NOT inherit the cart's process env in dev mode — so any key set
+    // by ./scripts/dev was invisible to the probe even though the rest
+    // of the cart could see it via process.envGet.
+    const val = envGet(name);
+    if (!val || !val.length) return { ok: false, message: `Env var ${name} is unset or empty in the cart's process environment.` };
     return { ok: true, value: val };
   }
   if (draft.source === 'file') {
@@ -901,16 +1138,31 @@ async function resolveKey(draft) {
   return { ok: false, message: `Source "${draft.source}" can't be resolved during a probe; use env or file for testing.` };
 }
 
+// Permissive shape detector. /v1/models returns `{data: [...]}` for
+// OpenAI / Anthropic / Kimi (each entry has .id), Ollama's /api/tags
+// returns `{models: [...]}` (each entry has .name + .model), some
+// custom endpoints return a bare array. Accept ids, names, or plain
+// strings.
 function parseModelList(stdout) {
   try {
     const obj = JSON.parse(stdout);
-    if (Array.isArray(obj?.data)) return obj.data.map((m) => m.id || m.model).filter(Boolean);
-    if (Array.isArray(obj?.models)) return obj.models.map((m) => m.id || m.name).filter(Boolean);
-    if (Array.isArray(obj)) return obj.map((m) => m.id || m.name).filter(Boolean);
+    const arr = Array.isArray(obj?.data) ? obj.data
+              : Array.isArray(obj?.models) ? obj.models
+              : Array.isArray(obj) ? obj
+              : null;
+    if (!arr) return [];
+    return arr
+      .map((m) => {
+        if (typeof m === 'string') return m;
+        if (m && typeof m === 'object') {
+          return m.id || m.model || m.name || m.modelName || null;
+        }
+        return null;
+      })
+      .filter((s) => typeof s === 'string' && s.length > 0);
   } catch {
-    /* fallthrough — return [] */
+    return [];
   }
-  return [];
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────
@@ -919,26 +1171,30 @@ function DefaultsSection({ settings, settingsStore, connections, reload }) {
   const defaultConn = connections.find((c) => c.id === settings?.defaultConnectionId) || null;
   const [draft, setDraft] = useState({
     defaultConnectionId: settings?.defaultConnectionId || '',
-    defaultModelId: settings?.defaultModelId || '',
-    effort: settings?.defaultEffort || defaultConn?.effort || 'medium',
+    reasoning: hydrateReasoningDefault(settings, defaultConn),
     maxOutputTokens: settings?.defaultMaxOutputTokens || 0,
   });
 
   useEffect(() => {
     setDraft({
       defaultConnectionId: settings?.defaultConnectionId || '',
-      defaultModelId: settings?.defaultModelId || '',
-      effort: settings?.defaultEffort || defaultConn?.effort || 'medium',
+      reasoning: hydrateReasoningDefault(settings, defaultConn),
       maxOutputTokens: settings?.defaultMaxOutputTokens || 0,
     });
-  }, [settings?.id, settings?.defaultConnectionId, settings?.defaultModelId, settings?.defaultEffort, settings?.defaultMaxOutputTokens]);
+  }, [settings?.id, settings?.defaultConnectionId, settings?.defaultMaxOutputTokens, defaultConn?.id]);
 
   const save = async () => {
     await settingsStore.update(SETTINGS_ID, {
       ...settings,
       defaultConnectionId: draft.defaultConnectionId || undefined,
-      defaultModelId: draft.defaultModelId || undefined,
-      defaultEffort: draft.effort || undefined,
+      // Settings.defaultModelId is dropped — the model lives on the
+      // Connection row, set via the probe flow in Providers. Keeping
+      // a parallel writable copy here would let the two drift.
+      defaultModelId: undefined,
+      // Drop the made-up `defaultEffort` enum; reasoning lives in the
+      // catalog-driven shape now.
+      defaultEffort: undefined,
+      defaultReasoning: hasAny(draft.reasoning) ? draft.reasoning : undefined,
       defaultMaxOutputTokens: draft.maxOutputTokens || undefined,
     });
     reload();
@@ -948,7 +1204,7 @@ function DefaultsSection({ settings, settingsStore, connections, reload }) {
     <S.Card>
       <S.Caption>Defaults</S.Caption>
       <S.Title>Assistant target</S.Title>
-      <S.Body>The connection + model the supervisor input fires against. Reasoning effort and max-output-token cap apply to every default-routed request unless an activity overrides them.</S.Body>
+      <S.Body>Pick which connection the supervisor input fires against. Reasoning effort and max-output-token cap are profile-wide and apply to every default-routed request unless an activity overrides them. The default model is owned by the connection — change it by re-probing in Providers, never by typing.</S.Body>
 
       <Box style={{ flexDirection: 'column', gap: 14, marginTop: 14 }}>
         <S.AppFormFieldCol>
@@ -960,31 +1216,49 @@ function DefaultsSection({ settings, settingsStore, connections, reload }) {
               options={connections.map((c) => c.id)}
               labels={connections.map((c) => c.label || labelForKind(c.kind))}
               value={draft.defaultConnectionId}
-              onChange={(v) => setDraft((d) => ({ ...d, defaultConnectionId: v, defaultModelId: '' }))}
+              onChange={(v) => setDraft((d) => ({ ...d, defaultConnectionId: v }))}
             />
           )}
         </S.AppFormFieldCol>
 
         <S.AppFormFieldCol>
-          <S.AppFormLabel>Default model</S.AppFormLabel>
-          <S.AppFormInputMono
-            value={draft.defaultModelId}
-            onChange={inputHandler((v) => setDraft((d) => ({ ...d, defaultModelId: v })))}
-            placeholder={defaultConn?.defaultModel || 'probe a connection in Providers to populate'}
-          />
-          {defaultConn?.defaultModel ? (
-            <S.AppFormLabel>Connection's saved default: <S.Body>{defaultConn.defaultModel}</S.Body>. Empty here = use the connection's default.</S.AppFormLabel>
-          ) : null}
+          <S.AppFormLabel>Default model (from the active connection)</S.AppFormLabel>
+          {defaultConn ? (
+            <S.AppProbeResult>
+              {defaultConn.defaultModel ? (
+                <S.AppProbeMessage>{defaultConn.defaultModel}</S.AppProbeMessage>
+              ) : (
+                <S.AppProbeMessage>This connection has no probed model yet. Open it in Providers and run Probe to pick one from the live model list.</S.AppProbeMessage>
+              )}
+            </S.AppProbeResult>
+          ) : (
+            <S.AppProbeResult>
+              <S.AppProbeMessage>Pick a connection above; its default model will appear here.</S.AppProbeMessage>
+            </S.AppProbeResult>
+          )}
         </S.AppFormFieldCol>
 
-        <S.AppFormFieldCol>
-          <S.AppFormLabel>Reasoning effort</S.AppFormLabel>
-          <PillRow
-            options={EFFORT_OPTIONS}
-            value={draft.effort}
-            onChange={(v) => setDraft((d) => ({ ...d, effort: v }))}
+        {defaultConn ? (
+          // Defaults doesn't keep the probed model list around — pass
+          // the chosen model as a single-entry list. Effort tiers stay
+          // correct except for the xhigh-on-latest-Opus rule, which
+          // needs the full list to identify "latest". Re-probe the
+          // connection in Providers to refresh that signal there.
+          <ReasoningControls
+            kind={defaultConn.kind}
+            value={draft.reasoning}
+            onChange={(next) => setDraft((d) => ({ ...d, reasoning: next }))}
+            modelId={defaultConn.defaultModel || ''}
+            modelList={defaultConn.defaultModel ? [defaultConn.defaultModel] : []}
           />
-        </S.AppFormFieldCol>
+        ) : (
+          <S.AppFormFieldCol>
+            <S.AppFormLabel>Reasoning controls</S.AppFormLabel>
+            <S.AppProbeResult>
+              <S.AppProbeMessage>Pick a connection above; reasoning controls depend on the provider kind (OpenAI's reasoning_effort vs Anthropic's thinking.*).</S.AppProbeMessage>
+            </S.AppProbeResult>
+          </S.AppFormFieldCol>
+        )}
 
         <S.AppFormFieldCol>
           <S.AppFormLabel>Max output tokens (0 = no override)</S.AppFormLabel>
@@ -1348,7 +1622,28 @@ function EmbeddingSection({ user, userStore, connections, reload }) {
   const [endpointDraft, setEndpointDraft] = useState({
     modelId: endpointModelId,
     connectionId: endpointConnId,
+    probedModels: null,
+    probeStatus: null,
+    probeMessage: '',
   });
+
+  const endpointConn = connections.find((c) => c.id === endpointDraft.connectionId) || null;
+
+  const probeEndpoint = async () => {
+    if (!endpointConn) return;
+    setEndpointDraft((d) => ({ ...d, probeStatus: 'busy', probeMessage: '', probedModels: null }));
+    const draft = {
+      kind: endpointConn.kind,
+      endpoint: endpointConn.endpoint || defaultEndpointFor(endpointConn.kind),
+      source: endpointConn.credentialRef?.source || defaultSourceForKind(endpointConn.kind),
+      locator: endpointConn.credentialRef?.locator || '',
+    };
+    const r = await probeConnection(draft).catch((err) => ({ ok: false, message: String(err?.message || err) }));
+    setEndpointDraft((d) => r.ok
+      ? { ...d, probeStatus: 'success', probeMessage: r.message || '', probedModels: r.models || [] }
+      : { ...d, probeStatus: 'fail', probeMessage: r.message || 'Probe failed.' }
+    );
+  };
 
   useEffect(() => { setDirDraft(dirPref); }, [dirPref]);
   useEffect(() => {
@@ -1532,7 +1827,7 @@ function EmbeddingSection({ user, userStore, connections, reload }) {
         <S.Card>
           <S.Caption>Endpoint</S.Caption>
           <S.Title>Provider embedder</S.Title>
-          <S.Body>Embedding requests reuse one of your provider connections. Pick the connection, then type the embedder model id the provider exposes — there's no canonical list (every provider names them differently and the catalog drifts faster than this UI could keep up).</S.Body>
+          <S.Body>Embedding requests reuse one of your provider connections. Pick the connection, probe it for the live model list, then click an embedder to set it as default. Same flow as connection-setup in onboarding — no typing model names by hand.</S.Body>
 
           <Box style={{ flexDirection: 'column', gap: 12, marginTop: 12 }}>
             <S.AppFormFieldCol>
@@ -1544,26 +1839,67 @@ function EmbeddingSection({ user, userStore, connections, reload }) {
                   options={connections.map((c) => c.id)}
                   labels={connections.map((c) => c.label || labelForKind(c.kind))}
                   value={endpointDraft.connectionId}
-                  onChange={(v) => setEndpointDraft((d) => ({ ...d, connectionId: v }))}
+                  onChange={(v) => setEndpointDraft((d) => ({
+                    ...d, connectionId: v, probedModels: null, probeStatus: null, probeMessage: '',
+                  }))}
                 />
               )}
             </S.AppFormFieldCol>
 
-            <S.AppFormFieldCol>
-              <S.AppFormLabel>Model id</S.AppFormLabel>
-              <S.AppFormInputMono
-                value={endpointDraft.modelId}
-                onChange={inputHandler((v) => setEndpointDraft((d) => ({ ...d, modelId: v })))}
-                placeholder="provider-specific id (e.g. text-embedding-3-small)"
-              />
-              <S.AppFormLabel style={{ marginTop: 4 }}>Probe the connection in Providers to discover what model ids the endpoint actually serves; copy the embedder id back here.</S.AppFormLabel>
-            </S.AppFormFieldCol>
+            {endpointConn ? (
+              <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <S.Button onPress={endpointDraft.probeStatus === 'busy' ? () => {} : probeEndpoint}>
+                  <S.ButtonLabel>{endpointDraft.probeStatus === 'busy' ? 'Probing…' : 'Probe for embedders'}</S.ButtonLabel>
+                </S.Button>
+                <S.AppFormLabel>Lists every model the endpoint serves. Embedders are picked from that list — no hand-typed ids.</S.AppFormLabel>
+              </Box>
+            ) : null}
+
+            {endpointDraft.probeStatus === 'success' || endpointDraft.probeStatus === 'fail' ? (
+              <S.AppProbeResult>
+                {endpointDraft.probeStatus === 'success'
+                  ? <S.AppProbeOk>Probe succeeded</S.AppProbeOk>
+                  : <S.AppProbeFail>Probe failed</S.AppProbeFail>}
+                {endpointDraft.probeMessage ? <S.AppProbeMessage>{endpointDraft.probeMessage}</S.AppProbeMessage> : null}
+              </S.AppProbeResult>
+            ) : null}
+
+            {endpointDraft.probedModels && endpointDraft.probedModels.length > 0 ? (
+              <S.AppFormFieldCol>
+                <S.AppModelListLabel>Pick an embedder</S.AppModelListLabel>
+                <S.AppModelListBox style={{ height: endpointDraft.probedModels.length > 6 ? 240 : undefined, maxHeight: 240 }}>
+                  <ScrollView showScrollbar={endpointDraft.probedModels.length > 6} style={{ flexGrow: 1, minHeight: 0, width: '100%' }}>
+                    <Box style={{ flexDirection: 'column', gap: 4 }}>
+                      {endpointDraft.probedModels.map((m) => {
+                        const isOn = m === endpointDraft.modelId;
+                        const Choice = isOn ? S.AppModelChoiceActive : S.AppModelChoice;
+                        const Text = isOn ? S.AppModelChoiceTextActive : S.AppModelChoiceText;
+                        return (
+                          <Choice key={m} onPress={() => setEndpointDraft((d) => ({ ...d, modelId: m }))}>
+                            <Text>{m}</Text>
+                          </Choice>
+                        );
+                      })}
+                    </Box>
+                  </ScrollView>
+                </S.AppModelListBox>
+              </S.AppFormFieldCol>
+            ) : null}
+
+            {endpointDraft.modelId ? (
+              <S.AppFormFieldCol>
+                <S.AppFormLabel>Selected embedder</S.AppFormLabel>
+                <S.AppProbeResult>
+                  <S.AppProbeMessage>{endpointDraft.modelId}</S.AppProbeMessage>
+                </S.AppProbeResult>
+              </S.AppFormFieldCol>
+            ) : null}
           </Box>
 
           <S.AppFormButtonRow style={{ marginTop: 12, gap: 8 }}>
             <S.Button onPress={() => writePref({
               connectionId: endpointDraft.connectionId || undefined,
-              modelId: endpointDraft.modelId.trim() || undefined,
+              modelId: endpointDraft.modelId || undefined,
               modelPath: undefined,
             })}>
               <S.ButtonLabel>Save endpoint default</S.ButtonLabel>
@@ -2077,6 +2413,179 @@ function OnboardingSection({ user, userStore, onb, reload }) {
       </S.Card>
     </Box>
   );
+}
+
+// ─── Reasoning controls (catalog-driven) ──────────────────────────
+//
+// Renders one widget per InferenceParameter that matches `role:
+// 'reasoning'` and the connection kind. Catalog is the source of
+// truth for both names and allowed values — when a new reasoning
+// param lands in inference-parameter.ts (e.g. a future
+// `claude-4.5` extending `thinking.budget_tokens`), this UI picks
+// it up automatically.
+
+function ReasoningControls({ kind, value, onChange, modelId, modelList }) {
+  const v = value && typeof value === 'object' ? value : {};
+
+  // Claude kinds get the family/model-aware effort tiers used by
+  // onboarding's ClaudeForm — see cart/app/claude-models.ts. The
+  // catalog's `reasoning_effort` enum is OpenAI-only and doesn't
+  // express Opus-latest's `xhigh` or `max` levels.
+  if (kind === 'anthropic-api-key' || kind === 'claude-code-cli') {
+    const opusLatest = modelList && modelList.length ? latestOpusId(modelList) : null;
+    const levels = modelId ? effortLevelsFor(modelId, opusLatest) : [];
+    if (!modelId) {
+      return (
+        <S.AppFormFieldCol>
+          <S.AppFormLabel>Effort</S.AppFormLabel>
+          <S.AppProbeResult>
+            <S.AppProbeMessage>Pick a model first — effort tiers depend on family and version (Haiku has none, Sonnet stops at high, Opus exposes max, latest Opus also exposes xhigh).</S.AppProbeMessage>
+          </S.AppProbeResult>
+        </S.AppFormFieldCol>
+      );
+    }
+    if (levels.length === 0) {
+      const fam = familyOf(modelId);
+      return (
+        <S.AppFormFieldCol>
+          <S.AppFormLabel>Effort</S.AppFormLabel>
+          <S.AppProbeResult>
+            <S.AppProbeMessage>{fam === 'haiku' ? 'Haiku has no effort tiers — runs at fixed budget.' : `Model ${modelId} doesn't expose effort tiers.`}</S.AppProbeMessage>
+          </S.AppProbeResult>
+        </S.AppFormFieldCol>
+      );
+    }
+    const current = v.effort && levels.includes(v.effort) ? v.effort : null;
+    return (
+      <S.AppFormFieldCol>
+        <S.AppFormLabel>Effort</S.AppFormLabel>
+        <PillRow
+          options={levels}
+          value={current}
+          onChange={(nv) => {
+            const next = { ...v };
+            if (!nv) delete next.effort; else next.effort = nv;
+            onChange(next);
+          }}
+        />
+        <S.AppFormLabel style={{ marginTop: 4 }}>Tiers from <S.Body>cart/app/claude-models.ts</S.Body>; same set the onboarding ClaudeForm uses.</S.AppFormLabel>
+      </S.AppFormFieldCol>
+    );
+  }
+
+  // Other kinds: catalog-driven (OpenAI's reasoning_effort, etc.)
+  const params = reasoningParamsFor(kind);
+  if (params.length === 0) {
+    return (
+      <S.AppFormFieldCol>
+        <S.AppFormLabel>Reasoning controls</S.AppFormLabel>
+        <S.AppProbeResult>
+          <S.AppProbeMessage>No reasoning parameters apply to <S.AppProbeMessage>{kind}</S.AppProbeMessage>. (See cart/component-gallery/data/inference-parameter.ts for which kinds expose what.)</S.AppProbeMessage>
+        </S.AppProbeResult>
+      </S.AppFormFieldCol>
+    );
+  }
+  return (
+    <Box style={{ flexDirection: 'column', gap: 12 }}>
+      {params.map((p) => (
+        <ParamWidget
+          key={p.name}
+          param={p}
+          value={v[p.name]}
+          onChange={(nv) => {
+            const next = { ...v };
+            if (nv === undefined || nv === '' || nv === null) delete next[p.name];
+            else next[p.name] = nv;
+            onChange(next);
+          }}
+        />
+      ))}
+    </Box>
+  );
+}
+
+function ParamWidget({ param, value, onChange }) {
+  const summary = param.summary ? <S.AppFormLabel>{param.summary}</S.AppFormLabel> : null;
+  if (param.type === 'enum' && Array.isArray(param.enum)) {
+    return (
+      <S.AppFormFieldCol>
+        <S.AppFormLabel>{param.name}</S.AppFormLabel>
+        <PillRow
+          options={param.enum}
+          value={value ?? param.default ?? null}
+          onChange={onChange}
+        />
+        {summary}
+      </S.AppFormFieldCol>
+    );
+  }
+  if (param.type === 'integer' || param.type === 'number') {
+    return (
+      <S.AppFormFieldCol>
+        <S.AppFormLabel>{param.name}</S.AppFormLabel>
+        <S.AppFormInputMono
+          value={value == null || value === '' ? '' : String(value)}
+          onChange={inputHandler((raw) => {
+            const trimmed = raw.trim();
+            if (trimmed === '') return onChange(undefined);
+            const n = param.type === 'integer' ? parseInt(trimmed, 10) : parseFloat(trimmed);
+            onChange(Number.isFinite(n) ? n : undefined);
+          })}
+          placeholder={param.default != null ? String(param.default) : (param.range ? `${param.range.min}–${param.range.max}` : '')}
+        />
+        {summary}
+      </S.AppFormFieldCol>
+    );
+  }
+  if (param.type === 'boolean') {
+    return (
+      <S.AppFormFieldCol>
+        <S.AppFormLabel>{param.name}</S.AppFormLabel>
+        <PillRow
+          options={[true, false]}
+          labels={['On', 'Off']}
+          value={value === undefined ? !!param.default : !!value}
+          onChange={onChange}
+        />
+        {summary}
+      </S.AppFormFieldCol>
+    );
+  }
+  // 'string' / 'object' / unknown — fall through to a plain input.
+  // 'object' shapes (response_format etc.) need bespoke editors;
+  // surface as JSON for now so the param is at least settable.
+  const isJsonShape = param.type === 'object';
+  const displayValue = value == null ? '' : (isJsonShape ? JSON.stringify(value) : String(value));
+  return (
+    <S.AppFormFieldCol>
+      <S.AppFormLabel>{param.name}{isJsonShape ? ' (JSON)' : ''}</S.AppFormLabel>
+      <S.AppFormInputMono
+        value={displayValue}
+        onChange={inputHandler((v) => {
+          if (!isJsonShape) return onChange(v || undefined);
+          const trimmed = (v || '').trim();
+          if (!trimmed) return onChange(undefined);
+          try { onChange(JSON.parse(trimmed)); } catch { /* keep last good */ }
+        })}
+        placeholder={isJsonShape ? '{ ... }' : ''}
+      />
+      {summary}
+    </S.AppFormFieldCol>
+  );
+}
+
+function hasAny(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  for (const k of Object.keys(obj)) if (obj[k] !== undefined && obj[k] !== '' && obj[k] !== null) return true;
+  return false;
+}
+
+function hydrateReasoningDefault(settings, conn) {
+  const fromSettings = settings?.defaultReasoning;
+  if (fromSettings && typeof fromSettings === 'object') return fromSettings;
+  const fromConn = conn?.reasoning;
+  if (fromConn && typeof fromConn === 'object') return fromConn;
+  return {};
 }
 
 // ─── Local atoms (tiny helpers, only what isn't in the gallery) ───
