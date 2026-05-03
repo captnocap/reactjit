@@ -19,10 +19,42 @@
 
 import { useCRUD } from '@reactjit/runtime/hooks';
 import { useClaudeChat } from '@reactjit/runtime/hooks/useClaudeChat';
+import { callHost, hasHost } from '@reactjit/runtime/ffi';
 
 const NS = 'app';
 const SETTINGS_ID = 'settings_default';
 const passthrough: any = { parse: (v: unknown) => v };
+
+// Resolve the configDir literal stored on the Connection row to
+// something the Claude CLI can read. Strips a leading `~/` or bare
+// `~` against the user's HOME, and treats the canonical "~/.claude/"
+// as "no override" (the CLI's own default already resolves to it).
+function resolveConfigDir(raw: string): string {
+  const v = raw.trim();
+  if (!v) return '';
+  if (v === '~/.claude' || v === '~/.claude/') return '';
+  if (v.startsWith('~/') || v === '~') {
+    const home = hasHost('__env') ? (callHost<string>('__env', '', 'HOME') || '') : '';
+    if (home) return v === '~' ? home : `${home}/${v.slice(2)}`;
+  }
+  return v;
+}
+
+function processCwd(): string {
+  if (hasHost('__cwd')) {
+    try {
+      const v = callHost<string>('__cwd', '');
+      if (typeof v === 'string' && v.length > 0) return v;
+    } catch { /* ignore */ }
+  }
+  if (hasHost('__env')) {
+    try {
+      const home = callHost<string>('__env', '', 'HOME');
+      if (typeof home === 'string' && home.length > 0) return home;
+    } catch { /* ignore */ }
+  }
+  return '/';
+}
 
 export function useAssistantChat() {
   const settingsStore = useCRUD<any>('settings', passthrough, { namespace: NS });
@@ -35,9 +67,10 @@ export function useAssistantChat() {
   const kind = conn && conn.kind;
   const cfgDir =
     kind === 'claude-code-cli' && conn?.credentialRef?.locator
-      ? String(conn.credentialRef.locator)
+      ? resolveConfigDir(String(conn.credentialRef.locator))
       : '';
   const model = (settings && settings.defaultModelId) || 'claude-opus-4-7';
+  const cwd = processCwd();
 
-  return useClaudeChat({ model, configDir: cfgDir });
+  return useClaudeChat({ cwd, model, configDir: cfgDir });
 }

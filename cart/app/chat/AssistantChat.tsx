@@ -24,8 +24,12 @@
 
 import { classifiers as S } from '@reactjit/core';
 import type { ChatShape } from './types';
-import { useChatTurns } from './store';
+import { useChatStatus, useChatTurns } from './store';
 import { AssistantTurn } from './AssistantTurn';
+
+function truncate(s: string, n: number): string {
+  return s.length <= n ? s : s.slice(0, n - 1) + '…';
+}
 
 export function AssistantChat({
   shape,
@@ -35,11 +39,30 @@ export function AssistantChat({
   onToggleShape?: () => void;
 }) {
   const turns = useChatTurns();
+  const status = useChatStatus();
   if (shape === 'hidden') return null;
 
   const isSide = shape === 'side';
   const showLift = shape === 'full';
   const turnCount = turns.length;
+
+  // Header subline shows live phase/error so the user can see what the
+  // session is doing — esp. when the asst turn is empty (init / loading
+  // / failed). Falls back to the persistent-thread tagline when chat is
+  // idle and clean.
+  const phaseLabel = status.error
+    ? `ERROR · ${truncate(status.error, 64)}`
+    : status.phase === 'init' || status.phase === 'loading'
+    ? `STARTING SESSION…`
+    : status.phase === 'loaded' || status.phase === 'idle'
+    ? (status.lastStatus
+        ? status.lastStatus.toUpperCase()
+        : `READY · ${turnCount} TURN${turnCount === 1 ? '' : 'S'}`)
+    : status.phase === 'generating'
+    ? `GENERATING…`
+    : status.phase === 'failed'
+    ? `FAILED · ${truncate(status.error || status.lastStatus || 'no detail', 64)}`
+    : `PERSISTENT · ${turnCount} TURNS · DRAG ANY SURFACE TO CART`;
 
   return (
     <S.AppChatPanel>
@@ -61,7 +84,7 @@ export function AssistantChat({
       {isSide ? (
         <S.AppChatPanelSubline>
           <S.AppChatPanelSublineText>
-            {`PERSISTENT · ${turnCount} TURNS · DRAG ANY SURFACE TO CART`}
+            {phaseLabel}
           </S.AppChatPanelSublineText>
         </S.AppChatPanelSubline>
       ) : null}

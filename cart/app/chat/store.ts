@@ -95,3 +95,41 @@ export function nextTurnId(prefix: string): string {
   _idCounter = (_idCounter + 1) | 0;
   return `${prefix}_${Date.now().toString(36)}_${_idCounter}`;
 }
+
+// ── Chat status (provider → header subline) ───────────────────────────
+//
+// Provider publishes the live generation hook's phase / lastStatus /
+// error here so the AssistantChat header can render them inline (e.g.
+// "loading session…", "session: claude-haiku-4-5", "[error] …").
+// Without this surface every "no response" looks identical to the user
+// — empty asst turn, no signal whether the session is hung in init,
+// failed to spawn, or just slow.
+
+export interface ChatStatus {
+  phase: string;
+  lastStatus: string;
+  error: string | null;
+}
+
+let _status: ChatStatus = { phase: 'init', lastStatus: '', error: null };
+const _statusSubs = new Set<() => void>();
+
+export function setChatStatus(next: ChatStatus): void {
+  if (
+    _status.phase === next.phase &&
+    _status.lastStatus === next.lastStatus &&
+    _status.error === next.error
+  ) return;
+  _status = next;
+  for (const s of _statusSubs) s();
+}
+
+function _subscribeStatus(fn: () => void): () => void {
+  _statusSubs.add(fn);
+  return () => { _statusSubs.delete(fn); };
+}
+function _getStatus(): ChatStatus { return _status; }
+
+export function useChatStatus(): ChatStatus {
+  return React.useSyncExternalStore(_subscribeStatus, _getStatus, _getStatus);
+}

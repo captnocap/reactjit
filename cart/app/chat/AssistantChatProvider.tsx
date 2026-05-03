@@ -17,7 +17,7 @@
 
 import { useEffect } from 'react';
 import { useAssistantChat } from './useAssistantChat';
-import { appendTurn, nextTurnId, setAsker, updateTurnBody } from './store';
+import { appendTurn, nextTurnId, setAsker, setChatStatus, updateTurnBody } from './store';
 
 function nowHHMMSS(): string {
   const d = new Date();
@@ -27,6 +27,18 @@ function nowHHMMSS(): string {
 
 export function AssistantChatProvider() {
   const chat = useAssistantChat();
+
+  // Publish hook state to the chat-status store so AssistantChat's
+  // header can render live phase/status/error. Without this, every
+  // failure path (no bindings, spawn fail, model not yet loaded)
+  // looks identical to the user — empty asst turn, no signal.
+  useEffect(() => {
+    setChatStatus({
+      phase: chat.phase,
+      lastStatus: chat.lastStatus || '',
+      error: chat.error || null,
+    });
+  }, [chat.phase, chat.lastStatus, chat.error]);
 
   useEffect(() => {
     const orchestratedAsk = async (text: string): Promise<string> => {
