@@ -16,13 +16,47 @@
 import { useEffect, useState } from 'react';
 import { Box, Row, Col, Text, Pressable, ScrollView, TextInput } from '@reactjit/runtime/primitives';
 import { useEmbed } from '@reactjit/runtime/hooks/useEmbed';
+import type { EmbedKind } from '@reactjit/runtime/hooks/embed';
 
 // ── defaults ───────────────────────────────────────────────────────────
 
 const DEFAULT_MODEL =
   '/home/siah/.lmstudio/models/Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf';
 const DEFAULT_SLUG = 'qwen3-embedding-0-6b-q8_0';
-const DEFAULT_PATH = '/home/siah/.claude/projects/-home-siah-creative-reactjit';
+const HOME = '/home/siah';
+
+// Per-kind defaults: the directory the bench's per-source walker is rooted
+// at. The framework picks parser + walker + canonical source_type from the
+// kind enum; the cart only needs to point it at the right starting path.
+const KIND_DEFAULT_PATH: Record<EmbedKind, string> = {
+  code: '/home/siah/creative/reactjit',
+  claude: `${HOME}/.claude`,
+  'claude-overflow': `${HOME}/.claude-overflow`,
+  codex: `${HOME}/.codex`,
+  kimi: `${HOME}/.kimi`,
+  memory: HOME, // walker iterates ~/.claude*/projects/<slug>/memory/*.md
+};
+
+const KIND_LABEL: Record<EmbedKind, string> = {
+  code: 'Code',
+  claude: 'Claude logs',
+  'claude-overflow': 'Claude overflow logs',
+  codex: 'Codex logs',
+  kimi: 'Kimi logs',
+  memory: 'Memory (.md)',
+};
+
+const KIND_SOURCE_TYPE: Record<EmbedKind, string> = {
+  code: 'code-chunk',
+  claude: 'chat-log-chunk',
+  'claude-overflow': 'chat-log-chunk',
+  codex: 'chat-log-chunk',
+  kimi: 'chat-log-chunk',
+  memory: 'document-chunk',
+};
+
+const KIND_ORDER: EmbedKind[] = ['claude', 'claude-overflow', 'codex', 'kimi', 'memory', 'code'];
+
 // 2 is a safe default on a display-driving GPU. Each agent costs ~900 MB
 // KV + ~1.3 GB compute scratch on top of the shared model. Push higher
 // if your GPU is not also driving displays.
@@ -129,12 +163,20 @@ interface QueryHit {
 export default function EmbedLab() {
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [slug, setSlug] = useState(DEFAULT_SLUG);
-  const [indexPath, setIndexPath] = useState(DEFAULT_PATH);
+  const [kind, setKindRaw] = useState<EmbedKind>('claude');
+  const [indexPath, setIndexPath] = useState(KIND_DEFAULT_PATH['claude']);
   const [agents, setAgents] = useState(String(DEFAULT_WORKERS));
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<QueryHit[]>([]);
   const [queryMs, setQueryMs] = useState(0);
   const [startedAt, setStartedAt] = useState(0);
+
+  // When kind changes, snap the index path to the canonical default so
+  // the cart points at the right starting directory by default.
+  function setKind(next: EmbedKind) {
+    setKindRaw(next);
+    setIndexPath(KIND_DEFAULT_PATH[next]);
+  }
 
   const e = useEmbed({ model, storeSlug: slug });
   const ingest = e.ingest;
@@ -152,7 +194,7 @@ export default function EmbedLab() {
     const n = parseInt(agents, 10);
     const nWorkers = Number.isFinite(n) && n > 0 ? Math.min(16, n) : DEFAULT_WORKERS;
     setStartedAt(Date.now());
-    e.startIngest(indexPath.replace(/\/+$/, ''), nWorkers, 'code-chunk');
+    e.startIngest(indexPath.replace(/\/+$/, ''), nWorkers, kind);
   }
 
   function runQuery() {
@@ -161,7 +203,7 @@ export default function EmbedLab() {
       return;
     }
     const t0 = Date.now();
-    const out = e.query(query, { k: 10, sourceType: 'code-chunk' });
+    const out = e.query(query, { k: 10, sourceType: KIND_SOURCE_TYPE[kind] });
     const t1 = Date.now();
     setHits(out as QueryHit[]);
     setQueryMs(t1 - t0);
@@ -188,6 +230,8 @@ export default function EmbedLab() {
 
       <Box style={{ flexGrow: 1, padding: 24, gap: 16 } as any}>
         <BuildPanel
+          kind={kind}
+          setKind={setKind}
           model={model}
           setModel={setModel}
           slug={slug}
@@ -252,10 +296,49 @@ function Header({ phase, ready, error }: { phase: string; ready: boolean; error:
   );
 }
 
+function KindPicker({ kind, setKind }: { kind: EmbedKind; setKind: (k: EmbedKind) => void }) {
+  return (
+    <Col style={{ gap: 4 } as any}>
+      <Text style={{ fontSize: 12, color: C.dim }}>Source kind</Text>
+      <Row style={{ gap: 6, flexWrap: 'wrap' } as any}>
+        {KIND_ORDER.map((k) => {
+          const active = k === kind;
+          return (
+            <Pressable
+              key={k}
+              onPress={() => setKind(k)}
+              style={{
+                backgroundColor: active ? C.accent : C.surface2,
+                paddingLeft: 10,
+                paddingRight: 10,
+                paddingTop: 6,
+                paddingBottom: 6,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: active ? C.accent : C.border,
+              } as any}
+            >
+              <Text style={{ color: active ? '#fff' : C.text, fontSize: 12 } as any}>
+                {KIND_LABEL[k]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </Row>
+      <Text style={{ fontSize: 11, color: C.dim } as any}>
+        Picks the parser + walker. {KIND_LABEL[kind]} → {KIND_SOURCE_TYPE[kind]} rows.
+      </Text>
+    </Col>
+  );
+}
+
 function BuildPanel({
+  kind, setKind,
   model, setModel, slug, setSlug, indexPath, setIndexPath, agents, setAgents,
   phase, ready, onBuild, onCancel,
 }: {
+  kind: EmbedKind;
+  setKind: (k: EmbedKind) => void;
   model: string;
   setModel: (s: string) => void;
   slug: string;
@@ -283,6 +366,7 @@ function BuildPanel({
     >
       <Text style={{ color: C.text, fontSize: 13, fontWeight: 600 } as any}>Build an index</Text>
 
+      <KindPicker kind={kind} setKind={setKind} />
       <Field
         label="Model (.gguf)"
         value={model}
@@ -299,7 +383,7 @@ function BuildPanel({
         label="Index path"
         value={indexPath}
         onChange={setIndexPath}
-        hint="Directory walked recursively in zig. .ts/.tsx/.zig/.md/.jsonl/.lua/.py are embedded."
+        hint={hintForKind(kind)}
       />
       <Field
         label="Agents (worker threads)"
@@ -318,6 +402,23 @@ function BuildPanel({
       </Row>
     </Col>
   );
+}
+
+function hintForKind(kind: EmbedKind): string {
+  switch (kind) {
+    case 'code':
+      return 'Repo root. Walked recursively in zig. .ts/.tsx/.zig/.md/.jsonl/.lua/.py are embedded.';
+    case 'claude':
+      return '~/.claude (the framework reads <root>/projects/<slug>/*.jsonl).';
+    case 'claude-overflow':
+      return '~/.claude-overflow (same shape as Claude).';
+    case 'codex':
+      return '~/.codex (the framework reads <root>/sessions/**/*.jsonl).';
+    case 'kimi':
+      return '~/.kimi (the framework reads <root>/sessions/<acct>/<sess>/context.jsonl).';
+    case 'memory':
+      return '$HOME (the framework iterates ~/.claude*/projects/<slug>/memory/*.md across both accounts).';
+  }
 }
 
 function IngestPanel({
