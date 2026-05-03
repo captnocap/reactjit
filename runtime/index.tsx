@@ -216,6 +216,18 @@ if (!(globalThis as any).__zigOS_tick) {
 // CJS default interop (QuickJS CJS wrappers from esbuild behave like Node's).
 const Reconciler: any = require('react-reconciler');
 
+// ── Host-shared modules for <Cartridge> guests ───────────────────────
+// Cartridge bundles are built with `react`, `react-reconciler`, `scheduler`
+// aliased to stubs that read from this map. That way a guest cart's hooks
+// run on the SAME React (and therefore the same dispatcher / handler
+// registry) as the host. Anything the host already loaded; if a future
+// guest needs more modules wire them in here.
+(globalThis as any).__hostModules = {
+  react: React,
+  'react-reconciler': Reconciler,
+  scheduler: (() => { try { return require('scheduler'); } catch { return null; } })(),
+};
+
 // ── Auto hot-state: wrap React.useState so every cart's useState survives a
 // hot reload without opt-in. Works because esbuild preserves live bindings
 // for `import { useState } from 'react'` — user code reads `_react.useState`

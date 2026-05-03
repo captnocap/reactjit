@@ -227,10 +227,24 @@ export const notification: any = Notification;
 export const Video: any = ({ src, videoSrc, ...rest }: any) =>
   h('Image', { ...rest, videoSrc: videoSrc ?? src }, rest.children);
 
-// ── Cartridge — embeds another cart's binary as a nested host instance.
-// engine.zig:619 walks the tree and lifts any node with cartridge_src.
-export const Cartridge: any = ({ src, cartridgeSrc, ...rest }: any) =>
-  h('View', { ...rest, cartridgeSrc: cartridgeSrc ?? src }, rest.children);
+// ── Cartridge — embed a guest cart bundle inline. `src` is a path to a
+// `.cart.js` file built with `cart-bundle.js --cartridge`. The loader reads
+// it off disk, evals it in this V8 context, and the bundle's entry stashes
+// its root component into a slot we then render. Sharing the host's React,
+// reconciler, and renderer means the guest's hooks and event handlers wire
+// into the same dispatcher and registry as the host's tree — no new
+// isolate, no extra runtime weight, no binary embedding. Unmount removes
+// the guest subtree like any normal React unmount; the cached module bytes
+// stay in V8 until evictCartridge() is called.
+export const Cartridge: any = ({ src, ...rest }: any) => {
+  if (!src) return null;
+  const { loadCartridge } = require('./cartridge_loader');
+  const Comp = loadCartridge(src);
+  if (!Comp) {
+    return h('Text', { color: 'red' }, `[cartridge load failed: ${src}]`);
+  }
+  return h(Comp, rest);
+};
 
 // ── RenderTarget — render-to-texture surface. Hot-loadable .so render hook
 // keyed by the `src` id (matches a registered render pass).
@@ -317,34 +331,122 @@ PhysicsBase.Collider = ({ shape, radius, density, friction, restitution, ...rest
   }, rest.children);
 export const Physics: any = PhysicsBase;
 
-// ── Scene3D — React-side 3D scene graph (lifted from sweatshop) ─────────────
+// ── Scene3D — declarative wrapper around framework/gpu/3d.zig ──────────────
 //
-// Surface mirrors Physics: a base component plus typed sub-components for
-// camera / mesh / lights / orbit-controls. The actual implementation lives
-// in runtime/scene3d/ — we lazy-require it here so primitives.tsx doesn't
-// drag the whole 3D module into the init graph.
+// Mirrors Physics: a base <Scene3D> root plus typed sub-components. Each
+// helper just spreads typed `scene3d*` props onto a <View> — gpu/3d.zig
+// reads `node.scene3d_mesh / scene3d_camera / scene3d_light / scene3d_*`
+// off the layout tree and runs them through the wgpu render-to-texture
+// pipeline (composited back via images.queueQuad).
 //
-//   <Scene3D backgroundColor="#0a0e18">
-//     <Scene3D.Camera position={[3, 2, 4]} target={[0, 0, 0]} />
-//     <Scene3D.AmbientLight intensity={0.3} />
-//     <Scene3D.DirectionalLight direction={[0.5, 1, -0.3]} />
-//     <Scene3D.PointLight position={[0, 3, 0]} color="#ffc48a" />
-//     <Scene3D.Mesh geometry="sphere" material="#4aa3ff" />
-//     <Scene3D.OrbitControls />
+//   <Scene3D style={{ width: 320, height: 240 }} backgroundColor="#0a0e18">
+//     <Scene3D.Camera position={[3, 2, 4]} target={[0, 0, 0]} fov={60} />
+//     <Scene3D.AmbientLight color="#ffffff" intensity={0.3} />
+//     <Scene3D.DirectionalLight direction={[0.5, 1, -0.3]} color="#ffffff" intensity={0.7} />
+//     <Scene3D.PointLight position={[0, 3, 0]} color="#ffc48a" intensity={1.0} />
+//     <Scene3D.Mesh geometry="sphere" material="#4aa3ff" position={[0, 0, 0]} radius={1} />
 //   </Scene3D>
 //
-// Today the renderer is a CPU 2D perspective mockup over Canvas.Node. When
-// the host registers a wgpu-backed Scene3D primitive, the registry stays
-// the same and Scene3D.tsx swaps its paint path internally.
-const Scene3DBase: any = function Scene3D(props: any) {
-  return require('./scene3d/Scene3D').Scene3D(props);
+// Note: the previous JS-side scene-graph + CPU painter at runtime/scene3d/
+// is dead (moved to runtime/scene3d_dead/). The host already had a real
+// wgpu-backed pipeline in framework/gpu/3d.zig keyed off layout-node flags;
+// this surface emits straight to that.
+function _hexToRgb(hex: string | undefined, fallback: [number, number, number] = [0.8, 0.8, 0.8]): [number, number, number] {
+  if (!hex || typeof hex !== 'string') return fallback;
+  const s = hex.startsWith('#') ? hex.slice(1) : hex;
+  const expanded = s.length === 3 ? s.split('').map((c) => c + c).join('') : s;
+  if (expanded.length !== 6) return fallback;
+  const n = parseInt(expanded, 16);
+  if (Number.isNaN(n)) return fallback;
+  return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
+}
+function _vec3(v: any, dx = 0, dy = 0, dz = 0): [number, number, number] {
+  if (Array.isArray(v) && v.length === 3) return [v[0] ?? dx, v[1] ?? dy, v[2] ?? dz];
+  return [dx, dy, dz];
+}
+function _scaleVec3(v: any): [number, number, number] {
+  if (typeof v === 'number') return [v, v, v];
+  if (Array.isArray(v) && v.length === 3) return [v[0] ?? 1, v[1] ?? 1, v[2] ?? 1];
+  return [1, 1, 1];
+}
+const Scene3DBase: any = ({ showGrid, showAxes, ...rest }: any) =>
+  h('View', {
+    ...rest,
+    scene3d: true,
+    scene3dShowGrid: !!showGrid,
+    scene3dShowAxes: !!showAxes,
+  }, rest.children);
+Scene3DBase.Camera = ({ position, target, fov, ...rest }: any) => {
+  const [px, py, pz] = _vec3(position, 3, 2, 4);
+  const [lx, ly, lz] = _vec3(target, 0, 0, 0);
+  return h('View', {
+    ...rest,
+    scene3dCamera: true,
+    scene3dPosX: px, scene3dPosY: py, scene3dPosZ: pz,
+    scene3dLookX: lx, scene3dLookY: ly, scene3dLookZ: lz,
+    scene3dFov: fov ?? 60,
+  });
 };
-Scene3DBase.Camera           = function Camera(props: any)           { return require('./scene3d/Camera').Camera(props); };
-Scene3DBase.Mesh             = function Mesh(props: any)             { return require('./scene3d/Mesh').Mesh(props); };
-Scene3DBase.AmbientLight     = function AmbientLight(props: any)     { return require('./scene3d/AmbientLight').AmbientLight(props); };
-Scene3DBase.DirectionalLight = function DirectionalLight(props: any) { return require('./scene3d/DirectionalLight').DirectionalLight(props); };
-Scene3DBase.PointLight       = function PointLight(props: any)       { return require('./scene3d/PointLight').PointLight(props); };
-Scene3DBase.OrbitControls    = function OrbitControls(props: any)    { return require('./scene3d/OrbitControls').OrbitControls(props); };
+Scene3DBase.Mesh = ({ geometry, material, color, position, rotation, scale, radius, tubeRadius, sizeX, sizeY, sizeZ, ...rest }: any) => {
+  const matColor = typeof material === 'string' ? material : (material?.color ?? color);
+  const [r, g, b] = _hexToRgb(matColor, [0.8, 0.8, 0.8]);
+  const [px, py, pz] = _vec3(position, 0, 0, 0);
+  const [rx, ry, rz] = _vec3(rotation, 0, 0, 0);
+  const [sx, sy, sz] = _scaleVec3(scale);
+  return h('View', {
+    ...rest,
+    scene3dMesh: true,
+    scene3dGeometry: typeof geometry === 'string' ? geometry : (geometry?.kind ?? 'box'),
+    scene3dPosX: px, scene3dPosY: py, scene3dPosZ: pz,
+    scene3dRotX: rx, scene3dRotY: ry, scene3dRotZ: rz,
+    scene3dScaleX: sx, scene3dScaleY: sy, scene3dScaleZ: sz,
+    scene3dColorR: r, scene3dColorG: g, scene3dColorB: b,
+    scene3dRadius: radius ?? geometry?.radius ?? 0.5,
+    scene3dTubeRadius: tubeRadius ?? geometry?.tube ?? 0.25,
+    scene3dSizeX: sizeX ?? geometry?.width ?? 1,
+    scene3dSizeY: sizeY ?? geometry?.height ?? 1,
+    scene3dSizeZ: sizeZ ?? geometry?.depth ?? 1,
+  });
+};
+Scene3DBase.AmbientLight = ({ color, intensity, ...rest }: any) => {
+  const [r, g, b] = _hexToRgb(color, [1, 1, 1]);
+  return h('View', {
+    ...rest,
+    scene3dLight: true,
+    scene3dLightType: 'ambient',
+    scene3dColorR: r, scene3dColorG: g, scene3dColorB: b,
+    scene3dIntensity: intensity ?? 0.3,
+  });
+};
+Scene3DBase.DirectionalLight = ({ direction, color, intensity, ...rest }: any) => {
+  const [dx, dy, dz] = _vec3(direction, 0, -1, 0);
+  const [r, g, b] = _hexToRgb(color, [1, 1, 1]);
+  return h('View', {
+    ...rest,
+    scene3dLight: true,
+    scene3dLightType: 'directional',
+    scene3dDirX: dx, scene3dDirY: dy, scene3dDirZ: dz,
+    scene3dColorR: r, scene3dColorG: g, scene3dColorB: b,
+    scene3dIntensity: intensity ?? 1.0,
+  });
+};
+Scene3DBase.PointLight = ({ position, color, intensity, ...rest }: any) => {
+  const [px, py, pz] = _vec3(position, 0, 0, 0);
+  const [r, g, b] = _hexToRgb(color, [1, 1, 1]);
+  return h('View', {
+    ...rest,
+    scene3dLight: true,
+    scene3dLightType: 'point',
+    scene3dPosX: px, scene3dPosY: py, scene3dPosZ: pz,
+    scene3dColorR: r, scene3dColorG: g, scene3dColorB: b,
+    scene3dIntensity: intensity ?? 1.0,
+  });
+};
+// OrbitControls — host has no flag for this today (no scene3d_orbit on
+// layout.zig). No-op until a hook-driven camera mutator lands or the host
+// gets an orbit input handler. Render nothing rather than emit a misleading
+// node.
+Scene3DBase.OrbitControls = (_props: any) => null;
 export const Scene3D: any = Scene3DBase;
 
 // ── Audio — declarative wrapper around framework/audio.zig ─────────────────

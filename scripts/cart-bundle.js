@@ -35,9 +35,11 @@ if (__env('BUNDLE_FROM_HARNESS') !== '1') {
 const argv = process.argv.slice(1);
 let entryArg = null;
 let outArg = null;
+let cartridgeMode = false;
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--out' || a === '-o') { outArg = argv[++i]; continue; }
+  if (a === '--cartridge') { cartridgeMode = true; continue; }
   if (a.startsWith('-')) die('unknown flag: ' + a, 2);
   if (entryArg === null) { entryArg = a; continue; }
   die('too many positional args', 2);
@@ -60,12 +62,28 @@ if (!entryInsideHome && !entryInsideCart) {
 if (!__exists(entryAbs)) die('missing entry: ' + entryArg, 2);
 
 // ── esbuild flags ─────────────────────────────────────────────────────
-const runtimeEntry = ROOT + '/runtime/index.tsx';
+// In cartridge mode the bundle is loaded into an already-running host. The
+// host has React, the reconciler, scheduler, console, timers, fs, dispatch,
+// and the renderer wired up — we MUST share those instances or hooks break
+// (each React copy has its own dispatcher; two copies = "Invalid hook call").
+// runtime/cart_externs/*.cjs redirects bare imports to globalThis.__hostModules.
+const runtimeEntry = cartridgeMode
+  ? ROOT + '/runtime/cartridge_entry.tsx'
+  : ROOT + '/runtime/index.tsx';
 // Metafile is the structured "what ended up in the bundle" record.
 // scripts/ship reads it to decide which V8 binding ingredients to
 // register on the cart. Path is bundle path + ".metafile.json" so
 // each cart's bundle has its own sidecar.
 const metafileAbs = bundleAbs + '.metafile.json';
+const reactAlias = cartridgeMode
+  ? ROOT + '/runtime/cart_externs/react.cjs'
+  : ROOT + '/vendor/react';
+const reconcilerAlias = cartridgeMode
+  ? ROOT + '/runtime/cart_externs/react_reconciler.cjs'
+  : ROOT + '/vendor/react-reconciler';
+const schedulerAlias = cartridgeMode
+  ? ROOT + '/runtime/cart_externs/scheduler.cjs'
+  : ROOT + '/vendor/scheduler';
 const flags = [
   runtimeEntry,
   '--bundle',
@@ -87,9 +105,9 @@ const flags = [
   // Vendored npm deps under vendor/. Replaces node_modules lookup so
   // bare-specifier imports (react, react-reconciler, ...) resolve without
   // any node_modules directory anywhere in the tree.
-  '--alias:react=' + ROOT + '/vendor/react',
-  '--alias:react-reconciler=' + ROOT + '/vendor/react-reconciler',
-  '--alias:scheduler=' + ROOT + '/vendor/scheduler',
+  '--alias:react=' + reactAlias,
+  '--alias:react-reconciler=' + reconcilerAlias,
+  '--alias:scheduler=' + schedulerAlias,
   '--alias:loose-envify=' + ROOT + '/vendor/loose-envify',
   '--alias:js-tokens=' + ROOT + '/vendor/js-tokens',
   '--external:path',
