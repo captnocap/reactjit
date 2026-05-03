@@ -1717,12 +1717,13 @@ fn paintNode(node: *Node) void {
     if (node.static_surface) {
         if (node.static_surface_key) |surface_key| {
             const surface_scale = @max(1.0, @min(node.static_surface_scale, 4.0));
-            if (gpu.queueStaticSurface(surface_key, r.x, r.y, r.w, r.h, g_paint_opacity, node.static_surface_intro_frames, surface_scale)) {
+            const dirty_frame = node.subtree_last_mutated_frame;
+            if (gpu.queueStaticSurface(surface_key, r.x, r.y, r.w, r.h, g_paint_opacity, node.static_surface_intro_frames, surface_scale, dirty_frame)) {
                 paintStaticSurfaceOverlays(node);
                 g_paint_opacity = saved_opacity;
                 return;
             }
-            if (!gpu.staticSurfaceWarming(surface_key, r.w, r.h, node.static_surface_warmup_frames, surface_scale)) {
+            if (!gpu.staticSurfaceWarming(surface_key, r.w, r.h, node.static_surface_warmup_frames, surface_scale, dirty_frame)) {
                 if (gpu.beginStaticSurfaceCapture(surface_key, r.x, r.y, r.w, r.h, g_paint_opacity, node.static_surface_intro_frames, surface_scale)) |token| {
                     const scissor_snapshot = gpu.suspendScissorForStaticCapture(token.width, token.height);
                     const start_counts = gpu.primitiveCounts();

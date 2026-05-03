@@ -336,6 +336,16 @@ pub const Node = struct {
     static_surface_warmup_frames: u16 = 0,
     static_surface_intro_frames: u16 = 0,
     static_surface_overlay: bool = false,
+    /// Last frame any descendant of this node (or this node itself) was
+    /// mutated by the React reconciler. The host stamps this on every
+    /// CREATE / UPDATE / APPEND / INSERT_BEFORE / REMOVE op and walks the
+    /// parent chain stamping ancestors.
+    ///
+    /// `<StaticSurface>` reads this in the paint loop: if its captured
+    /// texture was taken before this frame, the cache is stale and the
+    /// surface re-captures. Lets stable keys auto-invalidate without
+    /// folding state into the cache key.
+    subtree_last_mutated_frame: u64 = 0,
     // Post-process shader filter — when set, the subtree is rendered into
     // an offscreen texture every frame and composited via the named
     // filter's fragment shader. See framework/gpu/filters.zig for the

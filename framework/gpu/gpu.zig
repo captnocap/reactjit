@@ -664,6 +664,11 @@ const StaticSurfaceEntry = struct {
     active: bool = false,
     warmup_started_frame: u64 = 0,
     ready_frame: u64 = 0,
+    /// Frame on which this entry's texture was last fully rendered. Compared
+    /// against the surface node's subtree-mutation stamp at queue time: if
+    /// any descendant was touched after this, the cached texture is stale
+    /// and the surface re-captures.
+    captured_frame: u64 = 0,
     // Filter mode — when true, this entry feeds a post-process shader
     // pass instead of being blitted as a plain image quad. The entry is
     // never marked ready=true, so the subtree re-renders every frame and
@@ -821,12 +826,23 @@ fn ensureStaticEntry(hash: u64, key_len: usize, width: u32, height: u32) ?usize 
     return idx;
 }
 
-pub fn staticSurfaceReady(key: []const u8, width_f: f32, height_f: f32, scale_f: f32) bool {
+pub fn staticSurfaceReady(key: []const u8, width_f: f32, height_f: f32, scale_f: f32, dirty_frame: u64) bool {
     const width = staticDim(width_f, scale_f);
     const height = staticDim(height_f, scale_f);
     const idx = findStaticEntry(staticKeyHash(key), key.len) orelse return false;
     const entry = g_static_entries[idx];
-    return entry.ready and entry.width == width and entry.height == height and entry.bind_group != null;
+    if (!(entry.ready and entry.width == width and entry.height == height and entry.bind_group != null)) return false;
+    // Stale: the source subtree was mutated after the texture was captured.
+    // Treat as cache miss so the paint loop falls through to recapture.
+    if (entry.captured_frame < dirty_frame) return false;
+    return true;
+}
+
+/// Public read-only accessor for the global frame counter. The host (v8_app)
+/// uses this to stamp `subtree_last_mutated_frame` on Nodes so StaticSurface
+/// can detect cache staleness.
+pub fn frameCounter() u64 {
+    return g_frame_counter;
 }
 
 fn staticSurfaceIntroProgress(entry: *const StaticSurfaceEntry, intro_frames: u16) f32 {
@@ -849,19 +865,25 @@ fn queueStaticSurfaceQuad(entry: *const StaticSurfaceEntry, x: f32, y: f32, widt
     return true;
 }
 
-pub fn queueStaticSurface(key: []const u8, x: f32, y: f32, width_f: f32, height_f: f32, opacity: f32, intro_frames: u16, scale_f: f32) bool {
-    if (!staticSurfaceReady(key, width_f, height_f, scale_f)) return false;
+pub fn queueStaticSurface(key: []const u8, x: f32, y: f32, width_f: f32, height_f: f32, opacity: f32, intro_frames: u16, scale_f: f32, dirty_frame: u64) bool {
+    if (!staticSurfaceReady(key, width_f, height_f, scale_f, dirty_frame)) return false;
     const idx = findStaticEntry(staticKeyHash(key), key.len) orelse return false;
     return queueStaticSurfaceQuad(&g_static_entries[idx], x, y, width_f, height_f, opacity, intro_frames);
 }
 
-pub fn staticSurfaceWarming(key: []const u8, width_f: f32, height_f: f32, warmup_frames: u16, scale_f: f32) bool {
+pub fn staticSurfaceWarming(key: []const u8, width_f: f32, height_f: f32, warmup_frames: u16, scale_f: f32, dirty_frame: u64) bool {
     if (warmup_frames == 0) return false;
     const width = staticDim(width_f, scale_f);
     const height = staticDim(height_f, scale_f);
     const idx = ensureStaticEntry(staticKeyHash(key), key.len, width, height) orelse return false;
     const entry = &g_static_entries[idx];
-    if (entry.ready) return false;
+    if (entry.ready) {
+        // A captured-and-ready entry that's now stale must skip the warming
+        // gate so the paint loop reaches `beginStaticSurfaceCapture` and
+        // recaptures immediately. Warming is for the FIRST capture only.
+        if (entry.captured_frame < dirty_frame) return false;
+        return false;
+    }
     const age = g_frame_counter -| entry.warmup_started_frame;
     return age < warmup_frames;
 }
@@ -1173,6 +1195,7 @@ fn renderStaticSurfaceCaptures(device: *wgpu.Device, queue: *wgpu.Queue) void {
         } else {
             entry.ready = true;
             entry.ready_frame = g_frame_counter;
+            entry.captured_frame = g_frame_counter;
         }
     }
 

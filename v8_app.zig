@@ -24,6 +24,11 @@ const state = @import("framework/state.zig");
 const events = @import("framework/events.zig");
 const context_menu = @import("framework/context_menu.zig");
 const engine = if (IS_LIB) struct {} else @import("framework/engine.zig");
+const gpu = if (IS_LIB) struct {
+    pub fn frameCounter() u64 {
+        return 0;
+    }
+} else @import("framework/gpu/gpu.zig");
 const windows = @import("framework/windows.zig");
 const ipc = @import("framework/net/ipc.zig");
 const qjs_runtime = @import("framework/qjs_runtime.zig"); // kept for non-VM state (input, telemetry, dock resize, pty)
@@ -235,6 +240,11 @@ var g_alloc: std.mem.Allocator = undefined;
 var g_arena: std.heap.ArenaAllocator = undefined;
 var g_node_by_id: std.AutoHashMap(u32, *Node) = undefined;
 var g_children_ids: std.AutoHashMap(u32, std.ArrayList(u32)) = undefined;
+/// child_id → parent_id. Inverse of `g_children_ids`. Maintained alongside
+/// every APPEND / INSERT_BEFORE / REMOVE so `markSubtreeDirty` can walk the
+/// ancestor chain in O(depth). Without this, finding a node's parent
+/// would require scanning every entry of `g_children_ids` per mutation.
+var g_parent_id: std.AutoHashMap(u32, u32) = undefined;
 var g_root_child_ids: std.ArrayList(u32) = .{};
 var g_window_owner_by_node_id: std.AutoHashMap(u32, u32) = undefined;
 const WindowBinding = struct {
@@ -1674,6 +1684,76 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonBool(v)) |b| node.physics_fixed_rotation = b;
         } else if (std.mem.eql(u8, k, "physicsBullet")) {
             if (jsonBool(v)) |b| node.physics_bullet = b;
+        }
+        // ── Scene3D props (framework/gpu/3d.zig reads these per node) ──
+        else if (std.mem.eql(u8, k, "scene3d")) {
+            if (jsonBool(v)) |b| node.scene3d = b;
+        } else if (std.mem.eql(u8, k, "scene3dMesh")) {
+            if (jsonBool(v)) |b| node.scene3d_mesh = b;
+        } else if (std.mem.eql(u8, k, "scene3dCamera")) {
+            if (jsonBool(v)) |b| node.scene3d_camera = b;
+        } else if (std.mem.eql(u8, k, "scene3dLight")) {
+            if (jsonBool(v)) |b| node.scene3d_light = b;
+        } else if (std.mem.eql(u8, k, "scene3dGroup")) {
+            if (jsonBool(v)) |b| node.scene3d_group = b;
+        } else if (std.mem.eql(u8, k, "scene3dGeometry")) {
+            if (dupJsonText(v)) |s| node.scene3d_geometry = s;
+        } else if (std.mem.eql(u8, k, "scene3dLightType")) {
+            if (dupJsonText(v)) |s| node.scene3d_light_type = s;
+        } else if (std.mem.eql(u8, k, "scene3dColorR")) {
+            if (jsonFloat(v)) |f| node.scene3d_color_r = f;
+        } else if (std.mem.eql(u8, k, "scene3dColorG")) {
+            if (jsonFloat(v)) |f| node.scene3d_color_g = f;
+        } else if (std.mem.eql(u8, k, "scene3dColorB")) {
+            if (jsonFloat(v)) |f| node.scene3d_color_b = f;
+        } else if (std.mem.eql(u8, k, "scene3dPosX")) {
+            if (jsonFloat(v)) |f| node.scene3d_pos_x = f;
+        } else if (std.mem.eql(u8, k, "scene3dPosY")) {
+            if (jsonFloat(v)) |f| node.scene3d_pos_y = f;
+        } else if (std.mem.eql(u8, k, "scene3dPosZ")) {
+            if (jsonFloat(v)) |f| node.scene3d_pos_z = f;
+        } else if (std.mem.eql(u8, k, "scene3dRotX")) {
+            if (jsonFloat(v)) |f| node.scene3d_rot_x = f;
+        } else if (std.mem.eql(u8, k, "scene3dRotY")) {
+            if (jsonFloat(v)) |f| node.scene3d_rot_y = f;
+        } else if (std.mem.eql(u8, k, "scene3dRotZ")) {
+            if (jsonFloat(v)) |f| node.scene3d_rot_z = f;
+        } else if (std.mem.eql(u8, k, "scene3dScaleX")) {
+            if (jsonFloat(v)) |f| node.scene3d_scale_x = f;
+        } else if (std.mem.eql(u8, k, "scene3dScaleY")) {
+            if (jsonFloat(v)) |f| node.scene3d_scale_y = f;
+        } else if (std.mem.eql(u8, k, "scene3dScaleZ")) {
+            if (jsonFloat(v)) |f| node.scene3d_scale_z = f;
+        } else if (std.mem.eql(u8, k, "scene3dLookX")) {
+            if (jsonFloat(v)) |f| node.scene3d_look_x = f;
+        } else if (std.mem.eql(u8, k, "scene3dLookY")) {
+            if (jsonFloat(v)) |f| node.scene3d_look_y = f;
+        } else if (std.mem.eql(u8, k, "scene3dLookZ")) {
+            if (jsonFloat(v)) |f| node.scene3d_look_z = f;
+        } else if (std.mem.eql(u8, k, "scene3dDirX")) {
+            if (jsonFloat(v)) |f| node.scene3d_dir_x = f;
+        } else if (std.mem.eql(u8, k, "scene3dDirY")) {
+            if (jsonFloat(v)) |f| node.scene3d_dir_y = f;
+        } else if (std.mem.eql(u8, k, "scene3dDirZ")) {
+            if (jsonFloat(v)) |f| node.scene3d_dir_z = f;
+        } else if (std.mem.eql(u8, k, "scene3dFov")) {
+            if (jsonFloat(v)) |f| node.scene3d_fov = f;
+        } else if (std.mem.eql(u8, k, "scene3dIntensity")) {
+            if (jsonFloat(v)) |f| node.scene3d_intensity = f;
+        } else if (std.mem.eql(u8, k, "scene3dRadius")) {
+            if (jsonFloat(v)) |f| node.scene3d_radius = f;
+        } else if (std.mem.eql(u8, k, "scene3dTubeRadius")) {
+            if (jsonFloat(v)) |f| node.scene3d_tube_radius = f;
+        } else if (std.mem.eql(u8, k, "scene3dSizeX")) {
+            if (jsonFloat(v)) |f| node.scene3d_size_x = f;
+        } else if (std.mem.eql(u8, k, "scene3dSizeY")) {
+            if (jsonFloat(v)) |f| node.scene3d_size_y = f;
+        } else if (std.mem.eql(u8, k, "scene3dSizeZ")) {
+            if (jsonFloat(v)) |f| node.scene3d_size_z = f;
+        } else if (std.mem.eql(u8, k, "scene3dShowGrid")) {
+            if (jsonBool(v)) |b| node.scene3d_show_grid = b;
+        } else if (std.mem.eql(u8, k, "scene3dShowAxes")) {
+            if (jsonBool(v)) |b| node.scene3d_show_axes = b;
         } else if (std.mem.eql(u8, k, "devtoolsViz")) {
             // Inspector overlay mode for this node:
             //   'sparkline' | 'wireframe' | 'node_tree' | 'inspector_overlay' | 'none'
@@ -2036,6 +2116,29 @@ fn inheritTypography(parent_id: u32, child_id: u32) void {
     if (parent.line_height > 0) child.line_height = parent.line_height;
 }
 
+/// Stamp `subtree_last_mutated_frame` on `id` and every ancestor up to
+/// the root. Called after every reconciler mutation so that a
+/// `<StaticSurface>` ancestor's cached texture can be detected as stale
+/// and force a recapture on the next paint pass. Walk-up is O(depth)
+/// which is amortized cheap because mutations are rare relative to
+/// frames; the per-frame paint check stays O(1) (a single integer compare
+/// against `entry.captured_frame` in gpu.zig).
+fn markSubtreeDirty(id: u32) void {
+    const frame = gpu.frameCounter();
+    var current: ?u32 = id;
+    var hops: u32 = 0;
+    while (current) |cur| {
+        if (g_node_by_id.get(cur)) |node| {
+            node.subtree_last_mutated_frame = frame;
+        }
+        current = g_parent_id.get(cur);
+        // Defensive cycle guard: should never happen but if g_parent_id
+        // ever contained a loop, we'd hang here forever.
+        hops += 1;
+        if (hops > 4096) break;
+    }
+}
+
 fn applyCommand(cmd: std.json.Value) !void {
     if (cmd != .object) return;
     noteCommandWindowOwner(cmd);
@@ -2109,6 +2212,7 @@ fn applyCommand(cmd: std.json.Value) !void {
             } else |_| {}
         };
         applyHandlerFlags(n, id, cmd);
+        markSubtreeDirty(id);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "CREATE_TEXT")) {
         const id: u32 = @intCast(cmd.object.get("id").?.integer);
@@ -2116,6 +2220,7 @@ fn applyCommand(cmd: std.json.Value) !void {
         if (cmd.object.get("text")) |t| if (t == .string) {
             n.text = try g_alloc.dupe(u8, t.string);
         };
+        markSubtreeDirty(id);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "APPEND")) {
         const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
@@ -2123,12 +2228,16 @@ fn applyCommand(cmd: std.json.Value) !void {
         _ = try ensureNode(pid);
         _ = try ensureNode(cid);
         if (g_children_ids.getPtr(pid)) |list| try list.append(g_alloc, cid);
+        g_parent_id.put(cid, pid) catch {};
         inheritTypography(pid, cid);
+        markSubtreeDirty(cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "APPEND_TO_ROOT")) {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
         _ = try ensureNode(cid);
         try g_root_child_ids.append(g_alloc, cid);
+        _ = g_parent_id.remove(cid);
+        markSubtreeDirty(cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "INSERT_BEFORE_ROOT")) {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
@@ -2140,6 +2249,8 @@ fn applyCommand(cmd: std.json.Value) !void {
             break;
         };
         try g_root_child_ids.insert(g_alloc, idx, cid);
+        _ = g_parent_id.remove(cid);
+        markSubtreeDirty(cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "INSERT_BEFORE")) {
         const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
@@ -2154,7 +2265,9 @@ fn applyCommand(cmd: std.json.Value) !void {
             };
             try list.insert(g_alloc, idx, cid);
         }
+        g_parent_id.put(cid, pid) catch {};
         inheritTypography(pid, cid);
+        markSubtreeDirty(cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "REMOVE")) {
         const pid: u32 = @intCast(cmd.object.get("parentId").?.integer);
@@ -2165,6 +2278,11 @@ fn applyCommand(cmd: std.json.Value) !void {
                 break;
             };
         }
+        // Stamp dirty BEFORE clearing the parent link so the walk reaches
+        // the (former) parent's StaticSurface ancestors. After this the
+        // detached subtree is gone from the tree anyway.
+        markSubtreeDirty(cid);
+        _ = g_parent_id.remove(cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "REMOVE_FROM_ROOT")) {
         const cid: u32 = @intCast(cmd.object.get("childId").?.integer);
@@ -2172,6 +2290,8 @@ fn applyCommand(cmd: std.json.Value) !void {
             _ = g_root_child_ids.orderedRemove(i);
             break;
         };
+        markSubtreeDirty(cid);
+        _ = g_parent_id.remove(cid);
         g_dirty = true;
     } else if (std.mem.eql(u8, op, "UPDATE")) {
         const id: u32 = @intCast(cmd.object.get("id").?.integer);
@@ -2185,6 +2305,7 @@ fn applyCommand(cmd: std.json.Value) !void {
             if (g_children_ids.get(id)) |children| {
                 for (children.items) |child_id| inheritTypography(id, child_id);
             }
+            markSubtreeDirty(id);
             g_dirty = true;
         }
     } else if (std.mem.eql(u8, op, "UPDATE_TEXT")) {
@@ -2193,6 +2314,7 @@ fn applyCommand(cmd: std.json.Value) !void {
             if (cmd.object.get("text")) |t| if (t == .string) {
                 n.text = try g_alloc.dupe(u8, t.string);
             };
+            markSubtreeDirty(id);
             g_dirty = true;
         }
     }
@@ -2717,6 +2839,7 @@ fn clearTreeStateForReload() void {
     var cid_it = g_children_ids.valueIterator();
     while (cid_it.next()) |list| list.deinit(g_alloc);
     g_children_ids.clearRetainingCapacity();
+    g_parent_id.clearRetainingCapacity();
     g_window_owner_by_node_id.clearRetainingCapacity();
     g_scroll_prop_slots.clearRetainingCapacity();
 
@@ -3094,6 +3217,7 @@ pub fn main() !void {
     g_arena = std.heap.ArenaAllocator.init(g_alloc);
     g_node_by_id = std.AutoHashMap(u32, *Node).init(g_alloc);
     g_children_ids = std.AutoHashMap(u32, std.ArrayList(u32)).init(g_alloc);
+    g_parent_id = std.AutoHashMap(u32, u32).init(g_alloc);
     g_window_owner_by_node_id = std.AutoHashMap(u32, u32).init(g_alloc);
     g_window_by_node_id = std.AutoHashMap(u32, WindowBinding).init(g_alloc);
     g_scroll_prop_slots = std.AutoHashMap(u32, void).init(g_alloc);
