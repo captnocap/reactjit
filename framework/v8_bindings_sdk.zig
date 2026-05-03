@@ -638,25 +638,28 @@ fn jsonAsString(value: std.json.Value) ?[]const u8 {
 
 fn localAiEventToJs(iso: v8.Isolate, ctx: v8.Context, evt: local_ai_runtime.OwnedEvent) v8.Object {
     const obj = v8.Object.init(iso);
+    // useLocalChat hook keys events on `kind` (not `type`) and reads
+    // assistant text from `text` (not `result`). Pre-existing mismatch
+    // — was masked when in-process load failed silently.
     switch (evt.kind) {
         .system => {
-            setStrProp(iso, ctx, obj, "type", "system");
+            setStrProp(iso, ctx, obj, "kind", "system");
             if (evt.model) |value| setStrProp(iso, ctx, obj, "model", value);
             if (evt.session_id) |value| setStrProp(iso, ctx, obj, "session_id", value);
         },
         .assistant_part => {
-            setStrProp(iso, ctx, obj, "type", "assistant_part");
+            setStrProp(iso, ctx, obj, "kind", "assistant_part");
             setStrProp(iso, ctx, obj, "part_type", evt.part_type orelse "text");
             if (evt.text) |value| setStrProp(iso, ctx, obj, "text", value);
         },
         .status => {
-            setStrProp(iso, ctx, obj, "type", "status");
+            setStrProp(iso, ctx, obj, "kind", "status");
             if (evt.text) |value| setStrProp(iso, ctx, obj, "text", value);
             setBoolProp(iso, ctx, obj, "is_error", evt.is_error);
         },
         .result => {
-            setStrProp(iso, ctx, obj, "type", "result");
-            if (evt.text) |value| setStrProp(iso, ctx, obj, "result", value);
+            setStrProp(iso, ctx, obj, "kind", "result");
+            if (evt.text) |value| setStrProp(iso, ctx, obj, "text", value);
             setBoolProp(iso, ctx, obj, "is_error", evt.is_error);
         },
     }
@@ -1178,10 +1181,20 @@ fn hostLocalAiInit(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
     }
     defer if (session_id) |sid| std.heap.page_allocator.free(sid);
 
+    // Optional 4th arg: n_ctx. Lets the cart dial down KV-cache size for
+    // small chat models / tight VRAM. Defaults to 2048 if absent or <= 0.
+    var n_ctx: u32 = 2048;
+    if (info.length() >= 4) {
+        if (jsI32Arg(info, 3)) |v| {
+            if (v > 0) n_ctx = @intCast(v);
+        }
+    }
+
     const opts = local_ai_runtime.SessionOptions{
         .cwd = cwd,
         .model_path = model,
         .session_id = session_id,
+        .n_ctx = n_ctx,
         .verbose = false,
     };
     const sess = local_ai_runtime.Session.create(std.heap.c_allocator, opts) catch return setReturnBool(info, cx.iso, false);

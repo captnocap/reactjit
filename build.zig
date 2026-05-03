@@ -191,6 +191,12 @@ pub fn build(b: *std.Build) void {
     root_mod.addIncludePath(b.path("."));
     root_mod.addIncludePath(b.path("love2d/quickjs"));
     root_mod.addIncludePath(b.path("framework/ffi"));
+    // llama.h + ggml*.h for framework/local_ai_runtime.zig's @cImport.
+    // We dlopen lmstudio's libllama.so at runtime; these headers only
+    // give the Zig compiler authoritative struct layouts (no link-time
+    // dep on llama.cpp). Source: github.com/ggerganov/llama.cpp HEAD,
+    // synced into the repo so builds don't depend on deps/llama.cpp.zig.
+    root_mod.addIncludePath(b.path("framework/ffi/llama_headers"));
 
     // ── QuickJS ────────────────────────────────────────────────
     root_mod.addCSourceFiles(.{
@@ -345,10 +351,18 @@ pub fn build(b: *std.Build) void {
     const has_pg = b.option(bool, "has-pg", "Register __pg_* bindings (pg.zig client + embedded postgres)") orelse false;
     const has_embed = b.option(bool, "has-embed", "Register __embed_* bindings (llama.cpp + pgvector store; implies has-pg)") orelse false;
     if (has_embed) {
-        const llama_lib_dir = b.path("tsz/zig-out/lib");
-        root_mod.addLibraryPath(llama_lib_dir);
+        // Prefer root zig-out/lib (a recent libllama_ffi.so dropped here wins
+        // over the frozen tsz copy — needed for newer arches like gemma4).
+        // Falls through to tsz/zig-out/lib if root has no .so.
+        const root_lib = std.fs.cwd().access("zig-out/lib/libllama_ffi.so", .{}) catch null;
+        if (root_lib != null) {
+            root_mod.addLibraryPath(b.path("zig-out/lib"));
+        } else {
+            root_mod.addLibraryPath(b.path("tsz/zig-out/lib"));
+        }
         exe.linkSystemLibrary("llama_ffi");
         exe.addRPath(.{ .cwd_relative = "$ORIGIN" });
+        exe.addRPath(.{ .cwd_relative = "$ORIGIN/../lib" });
     }
 
     // ── Framework FFI shims ────────────────────────────────────
