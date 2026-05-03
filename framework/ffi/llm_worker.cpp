@@ -103,6 +103,155 @@ static std::string read_block_until_dot() {
     }
 }
 
+// ── Hauhaucs XML tool-call fallback ─────────────────────────────────
+//
+// Several uncensored Qwen finetunes (HauhauCS-Aggressive family, etc.)
+// are trained to emit tool calls as nested XML rather than the
+// JSON-in-<tool_call> shape vanilla Qwen3 / Hermes / Mistral use:
+//
+//   <tool_call>
+//   <function=get_weather>
+//   <parameter=city>
+//   tokyo
+//   </parameter>
+//   </function>
+//   </tool_call>
+//
+// common_chat_parse won't recognize this (it's nobody's official format),
+// so we run a regex pass on the raw model output as a fallback when the
+// upstream parser returns no tool_calls. Plain whitespace/newlines around
+// names and values are tolerated; values are passed through verbatim and
+// emitted as JSON strings.
+
+static std::string trim_ws(const std::string & s) {
+    size_t a = 0;
+    while (a < s.size() && std::isspace(static_cast<unsigned char>(s[a]))) a++;
+    size_t b = s.size();
+    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) b--;
+    return s.substr(a, b - a);
+}
+
+static std::string json_escape_str(const std::string & s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    out += '"';
+    for (char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[8];
+                    std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    out += buf;
+                } else {
+                    out += c;
+                }
+        }
+    }
+    out += '"';
+    return out;
+}
+
+// Parse Hauhaucs-style XML tool calls out of `text`. Returns the parsed
+// calls (empty if none found) and writes the non-tool-call content (with
+// any <think>...</think> reasoning preserved as `reasoning_out`) into
+// `content_out`.
+static std::vector<common_chat_tool_call> parse_hauhaucs_tool_calls(
+    const std::string & text,
+    std::string &       content_out,
+    std::string &       reasoning_out)
+{
+    std::vector<common_chat_tool_call> calls;
+    content_out.clear();
+    reasoning_out.clear();
+
+    // Strip <think>…</think> into reasoning_out, keep the rest in `body`.
+    std::string body;
+    {
+        size_t pos = 0;
+        while (pos < text.size()) {
+            size_t open = text.find("<think>", pos);
+            if (open == std::string::npos) {
+                body.append(text, pos, std::string::npos);
+                break;
+            }
+            body.append(text, pos, open - pos);
+            size_t close = text.find("</think>", open);
+            if (close == std::string::npos) {
+                // Unterminated <think> — take everything to end as reasoning
+                reasoning_out.append(text, open + 7, std::string::npos);
+                break;
+            }
+            reasoning_out.append(text, open + 7, close - (open + 7));
+            pos = close + 8;
+        }
+    }
+
+    size_t pos = 0;
+    while (pos < body.size()) {
+        size_t open = body.find("<tool_call>", pos);
+        if (open == std::string::npos) {
+            content_out.append(body, pos, std::string::npos);
+            break;
+        }
+        content_out.append(body, pos, open - pos);
+        size_t close = body.find("</tool_call>", open);
+        if (close == std::string::npos) {
+            // Unterminated — abort fallback, treat as plain content
+            content_out.append(body, open, std::string::npos);
+            break;
+        }
+        const std::string block = body.substr(open + 11, close - (open + 11));
+        pos = close + 12;
+
+        // Extract function name: <function=NAME>
+        const std::string func_open = "<function=";
+        size_t f_at = block.find(func_open);
+        if (f_at == std::string::npos) continue;
+        size_t f_end = block.find(">", f_at + func_open.size());
+        if (f_end == std::string::npos) continue;
+        std::string fn_name = trim_ws(block.substr(f_at + func_open.size(), f_end - (f_at + func_open.size())));
+
+        // Walk <parameter=KEY>…</parameter> blocks, build JSON args.
+        std::string args_json = "{";
+        bool first = true;
+        size_t p = f_end + 1;
+        const std::string param_open = "<parameter=";
+        while (p < block.size()) {
+            size_t pa = block.find(param_open, p);
+            if (pa == std::string::npos) break;
+            size_t pa_end = block.find(">", pa + param_open.size());
+            if (pa_end == std::string::npos) break;
+            std::string key = trim_ws(block.substr(pa + param_open.size(), pa_end - (pa + param_open.size())));
+            size_t vstart = pa_end + 1;
+            size_t pclose = block.find("</parameter>", vstart);
+            if (pclose == std::string::npos) break;
+            std::string val = trim_ws(block.substr(vstart, pclose - vstart));
+            if (!first) args_json += ",";
+            args_json += json_escape_str(key);
+            args_json += ":";
+            args_json += json_escape_str(val);
+            first = false;
+            p = pclose + 12;
+        }
+        args_json += "}";
+
+        common_chat_tool_call tc;
+        tc.name      = fn_name;
+        tc.arguments = args_json;
+        // tc.id stays empty — caller will mint one
+        calls.push_back(tc);
+    }
+
+    content_out = trim_ws(content_out);
+    reasoning_out = trim_ws(reasoning_out);
+    return calls;
+}
+
 // ── worker state ────────────────────────────────────────────────────
 
 struct WorkerState {
@@ -369,6 +518,20 @@ int main(int argc, char ** argv) {
                     parsed = common_chat_parse(response, false, pp);
                 } catch (const std::exception &) {
                     parse_ok = false;
+                }
+
+                // Fallback: Hauhaucs-style XML tool calls that
+                // common_chat_parse doesn't recognize.
+                if (parse_ok && parsed.tool_calls.empty() && !w.tools.empty()) {
+                    std::string fb_content, fb_reasoning;
+                    auto fb_calls = parse_hauhaucs_tool_calls(response, fb_content, fb_reasoning);
+                    if (!fb_calls.empty()) {
+                        parsed.tool_calls       = fb_calls;
+                        parsed.content          = fb_content;
+                        if (!fb_reasoning.empty() && parsed.reasoning_content.empty()) {
+                            parsed.reasoning_content = fb_reasoning;
+                        }
+                    }
                 }
 
                 if (!parse_ok || parsed.tool_calls.empty()) {
