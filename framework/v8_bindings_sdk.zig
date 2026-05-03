@@ -671,6 +671,12 @@ fn localAiEventToJs(iso: v8.Isolate, ctx: v8.Context, evt: local_ai_runtime.Owne
             if (evt.text) |value| setStrProp(iso, ctx, obj, "text", value);
             setBoolProp(iso, ctx, obj, "is_error", evt.is_error);
         },
+        .tool_call => {
+            setStrProp(iso, ctx, obj, "kind", "tool_call");
+            if (evt.tool_call_id) |value|   setStrProp(iso, ctx, obj, "id", value);
+            if (evt.tool_call_name) |value| setStrProp(iso, ctx, obj, "name", value);
+            if (evt.tool_call_args) |value| setStrProp(iso, ctx, obj, "args", value);
+        },
     }
     return obj;
 }
@@ -1284,6 +1290,28 @@ fn hostLocalAiClose(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void
     setReturnUndefined(info, callbackCtx(info).iso);
 }
 
+fn hostLocalAiSetTools(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const cx = callbackCtx(info);
+    if (info.length() < 1 or g_local_ai_session == null) return setReturnBool(info, cx.iso, false);
+    const json = jsStringArg(std.heap.page_allocator, info, 0) orelse return setReturnBool(info, cx.iso, false);
+    defer std.heap.page_allocator.free(json);
+    g_local_ai_session.?.setTools(json) catch return setReturnBool(info, cx.iso, false);
+    setReturnBool(info, cx.iso, true);
+}
+
+fn hostLocalAiSendToolResult(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const cx = callbackCtx(info);
+    if (info.length() < 2 or g_local_ai_session == null) return setReturnBool(info, cx.iso, false);
+    const id = jsStringArg(std.heap.page_allocator, info, 0) orelse return setReturnBool(info, cx.iso, false);
+    defer std.heap.page_allocator.free(id);
+    const body = jsStringArg(std.heap.page_allocator, info, 1) orelse return setReturnBool(info, cx.iso, false);
+    defer std.heap.page_allocator.free(body);
+    g_local_ai_session.?.submitToolReply(id, body) catch return setReturnBool(info, cx.iso, false);
+    setReturnBool(info, cx.iso, true);
+}
+
 fn hostIpcConnect(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const cx = callbackCtx(info);
@@ -1795,6 +1823,8 @@ pub fn registerSdk(vm: anytype) void {
     v8rt.registerHostFn("__localai_send", hostLocalAiSend);
     v8rt.registerHostFn("__localai_poll", hostLocalAiPoll);
     v8rt.registerHostFn("__localai_close", hostLocalAiClose);
+    v8rt.registerHostFn("__localai_set_tools", hostLocalAiSetTools);
+    v8rt.registerHostFn("__localai_send_tool_result", hostLocalAiSendToolResult);
     v8rt.registerHostFn("__ipc_connect", hostIpcConnect);
     v8rt.registerHostFn("__ipc_disconnect", hostIpcDisconnect);
     v8rt.registerHostFn("__ipc_status", hostIpcStatus);

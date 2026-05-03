@@ -53,6 +53,7 @@ pub const EventKind = enum {
     assistant_part,
     status,
     result,
+    tool_call,
 };
 
 pub const OwnedEvent = struct {
@@ -63,11 +64,18 @@ pub const OwnedEvent = struct {
     session_id: ?[]u8 = null,
     part_type: ?[]const u8 = null,
     is_error: bool = false,
+    // tool_call extras (only populated for kind == .tool_call)
+    tool_call_id: ?[]u8 = null,
+    tool_call_name: ?[]u8 = null,
+    tool_call_args: ?[]u8 = null,
 
     pub fn deinit(self: *OwnedEvent) void {
         if (self.text) |value| self.allocator.free(value);
         if (self.model) |value| self.allocator.free(value);
         if (self.session_id) |value| self.allocator.free(value);
+        if (self.tool_call_id) |value| self.allocator.free(value);
+        if (self.tool_call_name) |value| self.allocator.free(value);
+        if (self.tool_call_args) |value| self.allocator.free(value);
     }
 };
 
@@ -83,13 +91,30 @@ const Request = struct {
     }
 };
 
+const ToolReply = struct {
+    id: []u8,
+    body: []u8,
+
+    fn deinit(self: *ToolReply, allocator: std.mem.Allocator) void {
+        allocator.free(self.id);
+        allocator.free(self.body);
+    }
+};
+
 pub const Session = struct {
     allocator: std.mem.Allocator,
     options: SessionOptions,
     requests: RingBuffer(Request, 32) = .{},
     events: RingBuffer(OwnedEvent, 1024) = .{},
+    tool_replies: RingBuffer(ToolReply, 16) = .{},
     worker: ?std.Thread = null,
     should_stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    // Pending tools schema to send to worker before next CHAT.
+    // Mutex-protected so set_tools from JS thread doesn't race the worker
+    // thread reading + clearing it.
+    tools_mutex: std.Thread.Mutex = .{},
+    tools_json: ?[]u8 = null,    // owned, freed when consumed or session destroyed
+    tools_dirty: bool = false,   // true after setTools, false after worker sends
 
     pub fn create(allocator: std.mem.Allocator, options: SessionOptions) !*Session {
         const session = try allocator.create(Session);
@@ -146,6 +171,30 @@ pub const Session = struct {
         if (!self.requests.push(req)) return error.QueueFull;
     }
 
+    /// Replace the pending tools schema. Worker will send TOOLS to the
+    /// subprocess before its next CHAT. Empty string clears.
+    pub fn setTools(self: *Session, tools_json: []const u8) !void {
+        if (self.should_stop.load(.seq_cst)) return error.SessionClosed;
+        const owned = try self.allocator.dupe(u8, tools_json);
+        self.tools_mutex.lock();
+        defer self.tools_mutex.unlock();
+        if (self.tools_json) |old| self.allocator.free(old);
+        self.tools_json = owned;
+        self.tools_dirty = true;
+    }
+
+    /// Push a tool-execution result into the worker's mid-CHAT reply queue.
+    /// Called by JS after it executes the handler for a tool_call event.
+    pub fn submitToolReply(self: *Session, id: []const u8, body: []const u8) !void {
+        if (self.should_stop.load(.seq_cst)) return error.SessionClosed;
+        var reply = ToolReply{
+            .id = try self.allocator.dupe(u8, id),
+            .body = try self.allocator.dupe(u8, body),
+        };
+        errdefer reply.deinit(self.allocator);
+        if (!self.tool_replies.push(reply)) return error.QueueFull;
+    }
+
     pub fn poll(self: *Session) ?OwnedEvent {
         return self.events.pop();
     }
@@ -163,6 +212,15 @@ pub const Session = struct {
             .kind = .system,
             .model = try self.allocator.dupe(u8, model),
             .session_id = try self.allocator.dupe(u8, session_id),
+        });
+    }
+
+    fn pushToolCall(self: *Session, id: []const u8, name: []const u8, args: []const u8) !void {
+        try self.pushEvent(.{
+            .kind = .tool_call,
+            .tool_call_id   = try self.allocator.dupe(u8, id),
+            .tool_call_name = try self.allocator.dupe(u8, name),
+            .tool_call_args = try self.allocator.dupe(u8, args),
         });
     }
 
@@ -205,6 +263,11 @@ pub const Session = struct {
             var evt = item;
             evt.deinit();
         }
+        while (self.tool_replies.pop()) |item| {
+            var reply = item;
+            reply.deinit(self.allocator);
+        }
+        if (self.tools_json) |t| self.allocator.free(t);
     }
 };
 
@@ -426,6 +489,11 @@ fn workerMainInner(session: *Session) !void {
 
     // Main request loop
     while (!session.should_stop.load(.seq_cst)) {
+        // Flush pending TOOLS schema before processing the next CHAT.
+        // setTools() may fire from JS at any moment; we drain it here so
+        // the worker subprocess has the latest schema for the upcoming turn.
+        try flushPendingTools(session, stdin_file, &reader);
+
         if (session.requests.pop()) |req| {
             var owned = req;
             defer owned.deinit(session.allocator);
@@ -440,7 +508,9 @@ fn workerMainInner(session: *Session) !void {
             defer session.allocator.free(cmd);
             try stdin_file.writeAll(cmd);
 
-            // Stream tokens until DONE or ERR
+            // Stream tokens until DONE or ERR. TOOL_CALL lines pause the
+            // stream — we wait for a matching TOOL_RESULT from JS, write
+            // it to the worker subprocess, then keep reading.
             var assistant_buf = std.ArrayList(u8){};
             defer assistant_buf.deinit(session.allocator);
 
@@ -469,6 +539,49 @@ fn workerMainInner(session: *Session) !void {
                     try assistant_buf.appendSlice(session.allocator, piece);
                     continue;
                 }
+                if (std.mem.startsWith(u8, line, "TOOL_CALL ")) {
+                    const id = try session.allocator.dupe(u8, line[10..]);
+                    defer session.allocator.free(id);
+
+                    const name_line = reader.next() orelse {
+                        try session.pushStatus("worker EOF after TOOL_CALL header", true);
+                        try session.pushResult("worker EOF after TOOL_CALL header", true);
+                        return;
+                    };
+                    const name = try session.allocator.dupe(u8, name_line);
+                    defer session.allocator.free(name);
+
+                    var args_buf = std.ArrayList(u8){};
+                    defer args_buf.deinit(session.allocator);
+                    while (true) {
+                        const al = reader.next() orelse {
+                            try session.pushStatus("worker EOF mid TOOL_CALL args", true);
+                            try session.pushResult("worker EOF mid TOOL_CALL args", true);
+                            return;
+                        };
+                        if (std.mem.eql(u8, al, ".")) break;
+                        if (args_buf.items.len > 0) try args_buf.append(session.allocator, '\n');
+                        try args_buf.appendSlice(session.allocator, al);
+                    }
+
+                    try session.pushToolCall(id, name, args_buf.items);
+
+                    // Block-poll for matching TOOL_RESULT. The JS side
+                    // dispatches the tool_call event, runs the handler,
+                    // then calls submitToolReply.
+                    const reply = try awaitToolReply(session, id);
+                    var owned_reply = reply;
+                    defer owned_reply.deinit(session.allocator);
+
+                    const tr_cmd = try std.fmt.allocPrint(
+                        session.allocator,
+                        "TOOL_RESULT {s}\n{s}\n.\n",
+                        .{ owned_reply.id, owned_reply.body },
+                    );
+                    defer session.allocator.free(tr_cmd);
+                    try stdin_file.writeAll(tr_cmd);
+                    continue;
+                }
                 // Unknown line type — log and ignore
             }
         } else {
@@ -479,6 +592,59 @@ fn workerMainInner(session: *Session) !void {
     // Clean shutdown
     stdin_file.writeAll("QUIT\n") catch {};
     _ = child.wait() catch {};
+}
+
+// Send TOOLS\n{json}\n.\n to the worker subprocess if setTools fired
+// since the last flush. Drains the worker's READY ack so the next CHAT
+// sees a clean stream. No-op if no schema is pending.
+fn flushPendingTools(session: *Session, stdin_file: std.fs.File, reader: *LineReader) !void {
+    var pending: ?[]u8 = null;
+    {
+        session.tools_mutex.lock();
+        defer session.tools_mutex.unlock();
+        if (!session.tools_dirty) return;
+        if (session.tools_json) |json| {
+            pending = try session.allocator.dupe(u8, json);
+        }
+        session.tools_dirty = false;
+    }
+
+    const json_body = pending orelse "[]";
+    defer if (pending) |p| session.allocator.free(p);
+
+    const cmd = try std.fmt.allocPrint(session.allocator, "TOOLS\n{s}\n.\n", .{json_body});
+    defer session.allocator.free(cmd);
+    try stdin_file.writeAll(cmd);
+
+    // Drain the READY (or ERR) ack
+    while (true) {
+        const line = reader.next() orelse return error.WorkerEofDuringTools;
+        if (std.mem.eql(u8, line, "READY")) return;
+        if (std.mem.startsWith(u8, line, "ERR ")) {
+            try session.pushStatus(line[4..], true);
+            return;
+        }
+        // Anything else — ignore, keep waiting
+    }
+}
+
+// Block-poll the tool_replies queue until a reply with matching id arrives,
+// or until the session is shut down. Mid-flight cancellation surfaces as
+// an error so the caller can abort the CHAT loop.
+fn awaitToolReply(session: *Session, want_id: []const u8) !ToolReply {
+    while (!session.should_stop.load(.seq_cst)) {
+        if (session.tool_replies.pop()) |reply| {
+            if (std.mem.eql(u8, reply.id, want_id)) return reply;
+            // ID mismatch — drop on the floor; the dispatcher should
+            // pair calls and replies correctly. (Could re-queue if we
+            // ever support out-of-order replies.)
+            var stale = reply;
+            stale.deinit(session.allocator);
+            continue;
+        }
+        std.Thread.sleep(2 * std.time.ns_per_ms);
+    }
+    return error.SessionClosed;
 }
 
 // ── small helpers ───────────────────────────────────────────────────
