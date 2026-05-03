@@ -334,6 +334,14 @@ pub const Node = struct {
     /// off, no boot wait. Use for putting build/test sandbox VMs in the
     /// background.
     render_suspended: bool = false,
+    /// Latch binding for layout-affecting style props. When set, the
+    /// layout engine resolves the value from `framework/latches.zig` at
+    /// measure time instead of using `style.height`. Lets cart code
+    /// animate a height per-frame via `__latchSet(key, value)` without
+    /// going through React reconciliation. See latches.zig and the
+    /// `latch:KEY` style-prop token resolver in v8_app.zig:applyStyle.
+    latch_height_key: ?[]const u8 = null,
+
     static_surface: bool = false,
     static_surface_key: ?[]const u8 = null,
     static_surface_scale: f32 = 1,

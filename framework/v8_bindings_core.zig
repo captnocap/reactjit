@@ -19,6 +19,7 @@ const audio = @import("audio.zig");
 const filedrop = @import("filedrop.zig");
 const localstore = @import("localstore.zig");
 const fswatch = @import("fswatch.zig");
+const latches = @import("latches.zig");
 const system_signals = @import("system_signals.zig");
 const c = @import("c.zig").imports;
 
@@ -230,6 +231,34 @@ fn hostSetStateString(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) vo
     defer std.heap.c_allocator.free(s);
     state.setSlotString(@intCast(slot_id), s);
     state.markDirty();
+}
+
+// ── Latches ─────────────────────────────────────────────
+//
+// __latchSet(key: string, value: number) — writes a host-owned
+// numeric value the layout engine reads at frame time. See
+// framework/latches.zig.
+fn hostLatchSet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 2) return;
+    const key = argToStringAlloc(info, 0) orelse return;
+    defer std.heap.c_allocator.free(key);
+    const value = argToF64(info, 1) orelse return;
+    latches.set(key, value);
+}
+
+fn hostLatchGet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) {
+        setReturnNumber(info, 0);
+        return;
+    }
+    const key = argToStringAlloc(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    defer std.heap.c_allocator.free(key);
+    setReturnNumber(info, latches.get(key));
 }
 
 fn hostGetState(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -1064,6 +1093,8 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__setState", hostSetState);
     v8_runtime.registerHostFn("__setStateString", hostSetStateString);
     v8_runtime.registerHostFn("__getState", hostGetState);
+    v8_runtime.registerHostFn("__latchSet", hostLatchSet);
+    v8_runtime.registerHostFn("__latchGet", hostLatchGet);
     v8_runtime.registerHostFn("__getStateString", hostGetStateString);
     v8_runtime.registerHostFn("__markDirty", hostMarkDirty);
     v8_runtime.registerHostFn("getMouseX", hostGetMouseX);

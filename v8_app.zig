@@ -29,6 +29,7 @@ const gpu = if (IS_LIB) struct {
         return 0;
     }
 } else @import("framework/gpu/gpu.zig");
+const latches = @import("framework/latches.zig");
 const windows = @import("framework/windows.zig");
 const ipc = @import("framework/net/ipc.zig");
 const qjs_runtime = @import("framework/qjs_runtime.zig"); // kept for non-VM state (input, telemetry, dock resize, pty)
@@ -245,6 +246,14 @@ var g_children_ids: std.AutoHashMap(u32, std.ArrayList(u32)) = undefined;
 /// ancestor chain in O(depth). Without this, finding a node's parent
 /// would require scanning every entry of `g_children_ids` per mutation.
 var g_parent_id: std.AutoHashMap(u32, u32) = undefined;
+
+/// Set of nodes with a `latch_height_key` style binding. The pre-frame
+/// `syncLatchesToNodes` pass iterates this set when `latches.isDirty()`
+/// and writes the current latch value into `node.style.height`. Adding
+/// to the set: applyStyle sees `"latch:KEY"` for height. Removing:
+/// currently never (subtree teardown is OK to leave stale entries; the
+/// node lookup will fail and the entry effectively becomes a no-op).
+var g_latch_height_nodes: std.AutoHashMap(u32, void) = undefined;
 var g_root_child_ids: std.ArrayList(u32) = .{};
 var g_window_owner_by_node_id: std.AutoHashMap(u32, u32) = undefined;
 const WindowBinding = struct {
@@ -526,6 +535,27 @@ fn dupJsonText(v: std.json.Value) ?[]const u8 {
         .bool => |b| g_alloc.dupe(u8, if (b) "true" else "false") catch null,
         else => null,
     };
+}
+
+fn fontFamilyIdFor(raw: []const u8) u8 {
+    var first = raw;
+    if (std.mem.indexOfScalar(u8, raw, ',')) |comma| first = raw[0..comma];
+    first = std.mem.trim(u8, first, " \t\r\n\"'");
+    if (first.len == 0) return 0;
+
+    var buf: [96]u8 = undefined;
+    const n = @min(first.len, buf.len);
+    for (first[0..n], 0..) |ch, i| buf[i] = std.ascii.toLower(ch);
+    const s = buf[0..n];
+
+    if (std.mem.eql(u8, s, "serif") or std.mem.indexOf(u8, s, "times") != null or std.mem.indexOf(u8, s, "roman") != null) return 2;
+    if (std.mem.eql(u8, s, "monospace") or std.mem.indexOf(u8, s, "mono") != null or std.mem.indexOf(u8, s, "courier") != null) return 3;
+    if (std.mem.indexOf(u8, s, "noto") != null) return 4;
+    if (std.mem.indexOf(u8, s, "arial") != null or std.mem.indexOf(u8, s, "helvetica") != null or std.mem.indexOf(u8, s, "liberation sans") != null) return 5;
+    if (std.mem.indexOf(u8, s, "segoe") != null or std.mem.indexOf(u8, s, "ubuntu") != null or std.mem.indexOf(u8, s, "sf pro") != null or std.mem.indexOf(u8, s, "inter") != null) return 6;
+    if (std.mem.indexOf(u8, s, "roboto") != null or std.mem.indexOf(u8, s, "quicksand") != null) return 7;
+    if (std.mem.eql(u8, s, "sans-serif") or std.mem.indexOf(u8, s, "dejavu sans") != null) return 1;
+    return 0;
 }
 
 fn dispatchInputEvent(slot: u8, global_name: [*:0]const u8) void {
@@ -987,7 +1017,38 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value, is_update:
     if (eq(u8, key, "width")) {
         if (jsonMaybePct(val)) |f| node.style.width = f;
     } else if (eq(u8, key, "height")) {
-        if (jsonMaybePct(val)) |f| node.style.height = f;
+        // `style.height = "latch:KEY"` binds the height to a host-owned
+        // latch value (see framework/latches.zig). Cart code mutates the
+        // latch via __latchSet; the pre-frame sync writes the current
+        // value into style.height before layout runs. No React
+        // reconciliation per tick.
+        if (val == .string and std.mem.startsWith(u8, val.string, "latch:")) {
+            const suffix = val.string[6..];
+            // Free a prior latch binding if this is an UPDATE replacing it.
+            if (node.latch_height_key) |old| g_alloc.free(old);
+            const owned = g_alloc.dupe(u8, suffix) catch null;
+            node.latch_height_key = owned;
+            // Seed style.height with whatever the latch currently holds
+            // so first-frame layout has a sensible value before any tick.
+            node.style.height = latches.getF32(suffix);
+            // Find this node's id (linear scan g_node_by_id; called only
+            // at applyStyle time, not per-frame). Add to the registry.
+            var it = g_node_by_id.iterator();
+            while (it.next()) |entry| {
+                if (entry.value_ptr.* == node) {
+                    g_latch_height_nodes.put(entry.key_ptr.*, {}) catch {};
+                    break;
+                }
+            }
+        } else if (jsonMaybePct(val)) |f| {
+            node.style.height = f;
+            // Clear any prior latch binding when the height becomes a
+            // literal value again.
+            if (node.latch_height_key) |old| {
+                g_alloc.free(old);
+                node.latch_height_key = null;
+            }
+        }
     } else if (eq(u8, key, "minWidth")) {
         if (jsonMaybePct(val)) |f| node.style.min_width = f;
     } else if (eq(u8, key, "maxWidth")) {
@@ -1234,6 +1295,8 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value, is_update:
     // silently render at the default size.
     else if (eq(u8, key, "fontSize")) {
         if (jsonInt(val)) |i| node.font_size = @intCast(@max(i, 1));
+    } else if (eq(u8, key, "fontFamily")) {
+        if (val == .string) node.font_family_id = fontFamilyIdFor(val.string);
     } else if (eq(u8, key, "fontWeight")) {
         // Accept either a CSS keyword ('bold', 'normal') or a numeric weight
         // (100..900). Anything ≥600 maps to bold at paint time; everything
@@ -1551,6 +1614,8 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
                 const size: u16 = @intCast(@max(i, 1));
                 if (is_terminal) node.terminal_font_size = size else node.font_size = size;
             }
+        } else if (std.mem.eql(u8, k, "fontFamily")) {
+            if (v == .string) node.font_family_id = fontFamilyIdFor(v.string);
         } else if (std.mem.eql(u8, k, "fontWeight")) {
             if (v == .string) {
                 const s = v.string;
@@ -2104,6 +2169,7 @@ fn inheritTypography(parent_id: u32, child_id: u32) void {
     const child = g_node_by_id.get(child_id) orelse return;
     if (child.text == null) return;
     child.font_size = parent.font_size;
+    child.font_family_id = parent.font_family_id;
     child.font_weight = parent.font_weight;
     if (parent.text_color) |c| child.text_color = c;
     child.letter_spacing = parent.letter_spacing;
@@ -2361,6 +2427,30 @@ fn contentStoreGet(id: u32) ?[]const u8 {
 
 fn drainPendingFlushes() void {
     v8_bindings_core.drainPendingFlushes(applyCommandBatch);
+}
+
+/// Pre-frame sync: write current latch values into the corresponding
+/// node style fields, then mark the global tree dirty so layout/paint
+/// re-run. Skipped when no latches were touched since last frame.
+///
+/// This is the substitute for the React reconciliation path when cart
+/// code uses `__latchSet(key, value)` instead of `setState`. The
+/// expensive parts of the React path (vdom diff → JSON → bridge →
+/// applyCommand parse) are entirely bypassed; the only per-tick cost
+/// is the latches.set() FFI call from JS plus this O(N latch-bound
+/// nodes) sweep.
+fn syncLatchesToNodes() void {
+    if (!latches.isDirty()) return;
+    var it = g_latch_height_nodes.keyIterator();
+    while (it.next()) |id_ptr| {
+        const id = id_ptr.*;
+        const node = g_node_by_id.get(id) orelse continue;
+        if (node.latch_height_key) |key| {
+            node.style.height = latches.getF32(key);
+        }
+    }
+    latches.clearDirty();
+    g_dirty = true;
 }
 
 // ── Tree materialization ────────────────────────────────────────
@@ -2840,6 +2930,8 @@ fn clearTreeStateForReload() void {
     while (cid_it.next()) |list| list.deinit(g_alloc);
     g_children_ids.clearRetainingCapacity();
     g_parent_id.clearRetainingCapacity();
+    g_latch_height_nodes.clearRetainingCapacity();
+    latches.clearAll();
     g_window_owner_by_node_id.clearRetainingCapacity();
     g_scroll_prop_slots.clearRetainingCapacity();
 
@@ -3078,6 +3170,7 @@ fn appTick(now: u32) void {
     // Must happen BEFORE rebuildTree so the tree reflects the new g_node_by_id.
     drainPendingFlushes();
     if (_probe) std.debug.print("[probe-tick] #{d} after drainPendingFlushes\n", .{_probe_n.v});
+    syncLatchesToNodes();
     windows.tickIndependent();
     cleanupClosedHostWindows();
     if (_probe) std.debug.print("[probe-tick] #{d} after windows+cleanup, dirty={}\n", .{ _probe_n.v, g_dirty });
@@ -3218,6 +3311,7 @@ pub fn main() !void {
     g_node_by_id = std.AutoHashMap(u32, *Node).init(g_alloc);
     g_children_ids = std.AutoHashMap(u32, std.ArrayList(u32)).init(g_alloc);
     g_parent_id = std.AutoHashMap(u32, u32).init(g_alloc);
+    g_latch_height_nodes = std.AutoHashMap(u32, void).init(g_alloc);
     g_window_owner_by_node_id = std.AutoHashMap(u32, u32).init(g_alloc);
     g_window_by_node_id = std.AutoHashMap(u32, WindowBinding).init(g_alloc);
     g_scroll_prop_slots = std.AutoHashMap(u32, void).init(g_alloc);
