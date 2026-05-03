@@ -85,19 +85,27 @@ export default function TestsPanel() {
         </Box>
       </ScrollView>
 
-      {/* Zero-size container — holds the live <Window> nodes without
-          consuming layout in the about page. */}
-      <Box style={{ width: 0, height: 0, overflow: 'hidden' }}>
+      {/* BIGDICKWINDOWHERE — restore the <Window> wrapper around <Cartridge>
+          once the Window primitive bug is sorted. Inline mount confirmed
+          cartridges load fine on their own; the failure was Window-side. */}
+      <Box style={{ flexDirection: 'column', gap: 16, paddingTop: 12 }}>
         {TESTS.filter((t) => open[t.id]).map((t) => (
-          <Window
+          <Box
             key={t.id}
-            title={t.label}
-            width={t.width ?? 960}
-            height={t.height ?? 720}
-            onClose={() => toggle(t.id)}
+            style={{
+              borderWidth: 1,
+              borderColor: 'theme:rule',
+              borderRadius: 8,
+              padding: 12,
+              minHeight: 320,
+              flexDirection: 'column',
+            }}
           >
+            <Text style={{ fontSize: 12, color: 'theme:inkDim', marginBottom: 8 }}>
+              {t.label} — {BUNDLE_DIR}/{t.id}.cart.js
+            </Text>
             <Cartridge src={`${BUNDLE_DIR}/${t.id}.cart.js`} />
-          </Window>
+          </Box>
         ))}
       </Box>
     </Box>
