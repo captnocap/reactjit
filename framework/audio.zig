@@ -1042,6 +1042,77 @@ pub fn logTelemetry() void {
     });
 }
 
+// ── V8-binding wrappers (engine internals exposed to v8_bindings_core.zig) ──
+
+pub fn resumeDevice() void {
+    if (g_engine.device_id != 0) _ = sdl.SDL_ResumeAudioDevice(g_engine.device_id);
+}
+
+pub fn pauseDevice() void {
+    if (g_engine.device_id != 0) _ = sdl.SDL_PauseAudioDevice(g_engine.device_id);
+}
+
+pub fn getModuleCount() u32 {
+    return g_engine.module_count;
+}
+
+pub fn getConnectionCount() u32 {
+    return g_engine.connection_count;
+}
+
+pub fn getCallbackCount() u64 {
+    return g_engine.callback_count.load(.monotonic);
+}
+
+pub fn getCallbackUs() u64 {
+    return g_engine.callback_us.load(.monotonic);
+}
+
+pub fn getPeakLevel() f32 {
+    var peak: f32 = 0;
+    for (0..BUFFER_SIZE) |i| {
+        const v = @abs(g_engine.master_buffer[i]);
+        if (v > peak) peak = v;
+    }
+    return peak;
+}
+
+pub fn getParam(module_id: u32, param_idx: u8) f64 {
+    if (findModule(module_id)) |m| {
+        if (param_idx < m.param_count) return m.params[param_idx].value;
+    }
+    return 0;
+}
+
+pub fn getParamCount(module_id: u32) u8 {
+    if (findModule(module_id)) |m| return m.param_count;
+    return 0;
+}
+
+pub fn getPortCount(module_id: u32) u8 {
+    if (findModule(module_id)) |m| return m.port_count;
+    return 0;
+}
+
+pub fn getModuleType(module_id: u32) i32 {
+    if (findModule(module_id)) |m| return @intFromEnum(m.module_type);
+    return -1;
+}
+
+pub fn getParamMin(module_id: u32, param_idx: u8) f64 {
+    if (findModule(module_id)) |m| {
+        if (param_idx < m.param_count) return m.params[param_idx].min;
+    }
+    return 0;
+}
+
+pub fn getParamMax(module_id: u32, param_idx: u8) f64 {
+    if (findModule(module_id)) |m| {
+        if (param_idx < m.param_count) return m.params[param_idx].max;
+    }
+    return 0;
+}
+
 // ── QuickJS host functions (registered via qjs_runtime.registerHostFn) ──
 // These get raw JSValue access with proper f64 extraction — no c_long truncation.
 

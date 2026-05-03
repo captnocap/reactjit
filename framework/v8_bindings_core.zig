@@ -11,6 +11,7 @@ const state = @import("state.zig");
 const input = @import("input.zig");
 const selection = @import("selection.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
+const mouse_state = @import("mouse_state.zig");
 const exec_async = @import("exec_async.zig");
 const vterm = @import("vterm.zig");
 const router = @import("router.zig");
@@ -277,22 +278,32 @@ fn hostMarkDirty(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
 
 fn hostGetMouseX(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
-    setReturnNumber(info, @floatCast(@field(qjs_runtime, "g_mouse_x")));
+    setReturnNumber(info, @floatCast(mouse_state.g_mouse_x));
 }
 
 fn hostGetMouseY(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
-    setReturnNumber(info, @floatCast(@field(qjs_runtime, "g_mouse_y")));
+    setReturnNumber(info, @floatCast(mouse_state.g_mouse_y));
+}
+
+fn hostViewportWidth(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatCast(system_signals.getViewportWidth()));
+}
+
+fn hostViewportHeight(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatCast(system_signals.getViewportHeight()));
 }
 
 fn hostGetMouseDown(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
-    setReturnNumber(info, if (@field(qjs_runtime, "g_mouse_down")) 1 else 0);
+    setReturnNumber(info, if (mouse_state.g_mouse_down) 1 else 0);
 }
 
 fn hostGetMouseRightDown(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
-    setReturnNumber(info, if (@field(qjs_runtime, "g_mouse_right_down")) 1 else 0);
+    setReturnNumber(info, if (mouse_state.g_mouse_right_down) 1 else 0);
 }
 
 fn hostIsKeyDown(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -464,6 +475,19 @@ pub fn drainPendingFlushes(apply: DrainCallback) void {
     for (batches) |b| apply(b);
 }
 
+/// Drop any queued mutation batches without applying them. Call this from the
+/// dev-mode reload path AFTER the tree has been wiped but BEFORE the new
+/// bundle is eval'd: any commands queued by the prior bundle reference node
+/// IDs that were just freed; replaying them on top of a fresh React mount
+/// produces parent/child cycles in g_children_ids and infinite recursion in
+/// materializeChildren. (The original comment in clearTreeStateForReload
+/// claimed the queue is freed on VM tear-down — but reload only swaps the V8
+/// Context, the queue persists.)
+pub fn clearPendingFlushForReload() void {
+    for (g_pending_flush.items) |b| std.heap.c_allocator.free(b);
+    g_pending_flush.clearRetainingCapacity();
+}
+
 pub fn contentStoreGet(id: u32) ?[]const u8 {
     if (!g_content_store_inited) return null;
     return g_content_store.get(id);
@@ -605,6 +629,156 @@ fn hostAudioMasterGain(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) v
         .cmd_type = .set_master_gain,
         .value_f = gain,
     });
+}
+
+fn hostAudioInit(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, if (audio.init()) 1 else 0);
+}
+
+fn hostAudioDeinit(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    _ = info_c;
+    audio.deinit();
+}
+
+fn hostAudioIsInitialized(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, if (audio.isInitialized()) 1 else 0);
+}
+
+fn hostAudioPause(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    _ = info_c;
+    audio.pauseDevice();
+}
+
+fn hostAudioResume(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    _ = info_c;
+    audio.resumeDevice();
+}
+
+fn hostAudioGetModuleCount(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatFromInt(audio.getModuleCount()));
+}
+
+fn hostAudioGetConnectionCount(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatFromInt(audio.getConnectionCount()));
+}
+
+fn hostAudioGetCallbackCount(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatFromInt(audio.getCallbackCount()));
+}
+
+fn hostAudioGetCallbackUs(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatFromInt(audio.getCallbackUs()));
+}
+
+fn hostAudioGetSampleRate(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatFromInt(audio.SAMPLE_RATE));
+}
+
+fn hostAudioGetBufferSize(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatFromInt(audio.BUFFER_SIZE));
+}
+
+fn hostAudioGetPeakLevel(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    setReturnNumber(info, @floatCast(audio.getPeakLevel()));
+}
+
+fn hostAudioGetParam(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    const param_idx = argToI32(info, 1) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    if (id < 0 or param_idx < 0 or param_idx > 255) {
+        setReturnNumber(info, 0);
+        return;
+    }
+    setReturnNumber(info, audio.getParam(@intCast(id), @intCast(param_idx)));
+}
+
+fn hostAudioGetParamCount(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    if (id < 0) {
+        setReturnNumber(info, 0);
+        return;
+    }
+    setReturnNumber(info, @floatFromInt(audio.getParamCount(@intCast(id))));
+}
+
+fn hostAudioGetPortCount(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    if (id < 0) {
+        setReturnNumber(info, 0);
+        return;
+    }
+    setReturnNumber(info, @floatFromInt(audio.getPortCount(@intCast(id))));
+}
+
+fn hostAudioGetModuleType(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse {
+        setReturnNumber(info, -1);
+        return;
+    };
+    if (id < 0) {
+        setReturnNumber(info, -1);
+        return;
+    }
+    setReturnNumber(info, @floatFromInt(audio.getModuleType(@intCast(id))));
+}
+
+fn hostAudioGetParamMin(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    const param_idx = argToI32(info, 1) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    if (id < 0 or param_idx < 0 or param_idx > 255) {
+        setReturnNumber(info, 0);
+        return;
+    }
+    setReturnNumber(info, audio.getParamMin(@intCast(id), @intCast(param_idx)));
+}
+
+fn hostAudioGetParamMax(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const id = argToI32(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    const param_idx = argToI32(info, 1) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    if (id < 0 or param_idx < 0 or param_idx > 255) {
+        setReturnNumber(info, 0);
+        return;
+    }
+    setReturnNumber(info, audio.getParamMax(@intCast(id), @intCast(param_idx)));
 }
 
 // ── Filedrop host functions (framework/filedrop.zig) ─────────
@@ -896,6 +1070,8 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("getMouseY", hostGetMouseY);
     v8_runtime.registerHostFn("getMouseDown", hostGetMouseDown);
     v8_runtime.registerHostFn("getMouseRightDown", hostGetMouseRightDown);
+    v8_runtime.registerHostFn("__viewport_width", hostViewportWidth);
+    v8_runtime.registerHostFn("__viewport_height", hostViewportHeight);
     v8_runtime.registerHostFn("isKeyDown", hostIsKeyDown);
     v8_runtime.registerHostFn("getInputText", hostGetInputText);
     v8_runtime.registerHostFn("__setInputText", hostSetInputText);
@@ -922,6 +1098,33 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__audioNoteOn", hostAudioNoteOn);
     v8_runtime.registerHostFn("__audioNoteOff", hostAudioNoteOff);
     v8_runtime.registerHostFn("__audioMasterGain", hostAudioMasterGain);
+    // snake_case aliases — match QJS surface so carts work under both runtimes.
+    v8_runtime.registerHostFn("__audio_init", hostAudioInit);
+    v8_runtime.registerHostFn("__audio_deinit", hostAudioDeinit);
+    v8_runtime.registerHostFn("__audio_is_initialized", hostAudioIsInitialized);
+    v8_runtime.registerHostFn("__audio_pause", hostAudioPause);
+    v8_runtime.registerHostFn("__audio_resume", hostAudioResume);
+    v8_runtime.registerHostFn("__audio_add_module", hostAudioAddModule);
+    v8_runtime.registerHostFn("__audio_remove_module", hostAudioRemoveModule);
+    v8_runtime.registerHostFn("__audio_connect", hostAudioConnect);
+    v8_runtime.registerHostFn("__audio_disconnect", hostAudioDisconnect);
+    v8_runtime.registerHostFn("__audio_set_param", hostAudioSetParam);
+    v8_runtime.registerHostFn("__audio_get_param", hostAudioGetParam);
+    v8_runtime.registerHostFn("__audio_note_on", hostAudioNoteOn);
+    v8_runtime.registerHostFn("__audio_note_off", hostAudioNoteOff);
+    v8_runtime.registerHostFn("__audio_set_master_gain", hostAudioMasterGain);
+    v8_runtime.registerHostFn("__audio_get_module_count", hostAudioGetModuleCount);
+    v8_runtime.registerHostFn("__audio_get_connection_count", hostAudioGetConnectionCount);
+    v8_runtime.registerHostFn("__audio_get_callback_count", hostAudioGetCallbackCount);
+    v8_runtime.registerHostFn("__audio_get_callback_us", hostAudioGetCallbackUs);
+    v8_runtime.registerHostFn("__audio_get_sample_rate", hostAudioGetSampleRate);
+    v8_runtime.registerHostFn("__audio_get_buffer_size", hostAudioGetBufferSize);
+    v8_runtime.registerHostFn("__audio_get_peak_level", hostAudioGetPeakLevel);
+    v8_runtime.registerHostFn("__audio_get_param_count", hostAudioGetParamCount);
+    v8_runtime.registerHostFn("__audio_get_port_count", hostAudioGetPortCount);
+    v8_runtime.registerHostFn("__audio_get_module_type", hostAudioGetModuleType);
+    v8_runtime.registerHostFn("__audio_get_param_min", hostAudioGetParamMin);
+    v8_runtime.registerHostFn("__audio_get_param_max", hostAudioGetParamMax);
     v8_runtime.registerHostFn("__filedropLastPath", hostFiledropLastPath);
     v8_runtime.registerHostFn("__filedropSeq", hostFiledropSeq);
     v8_runtime.registerHostFn("__vtermStartRecording", hostVtermStartRecording);
