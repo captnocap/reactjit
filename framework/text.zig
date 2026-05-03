@@ -242,6 +242,26 @@ pub const TextEngine = struct {
         gpu_text.drawTextLine(text, x, y, size_px, @as(f32, @floatFromInt(color.r)) / 255.0, @as(f32, @floatFromInt(color.g)) / 255.0, @as(f32, @floatFromInt(color.b)) / 255.0, @as(f32, @floatFromInt(color.a)) / 255.0);
     }
 
+    /// Canonical wrap-and-paint that takes RGBA float colors and returns the
+    /// total drawn height. Replaces the old gpu_text.drawTextWrapped char-loop;
+    /// uses the same wordWrap algorithm as the measurement path so layout and
+    /// paint can never disagree on line breaks.
+    pub fn drawTextWrappedRGBA(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, cr: f32, cg: f32, cb: f32, ca: f32, max_lines: u16, letter_spacing: f32, line_height_override: f32) f32 {
+        const lm = self.lineMetrics(size_px);
+        const line_h: f32 = if (line_height_override > 0) line_height_override else lm.height;
+        if (max_width <= 0) {
+            gpu_text.drawTextLine(text, x, y, size_px, cr, cg, cb, ca);
+            return line_h;
+        }
+        const wrap = self.wordWrap(text, size_px, max_width, letter_spacing);
+        const count = if (max_lines > 0 and wrap.count > max_lines) max_lines else wrap.count;
+        for (0..count) |li| {
+            const line = text[wrap.line_starts[li]..wrap.line_ends[li]];
+            gpu_text.drawTextLine(line, x, y + line_h * @as(f32, @floatFromInt(li)), size_px, cr, cg, cb, ca);
+        }
+        return line_h * @as(f32, @floatFromInt(count));
+    }
+
     pub fn drawTextTruncated(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color, letter_spacing: f32) void {
         const full_w = self.measureLineWidth(text, size_px, letter_spacing);
         if (full_w <= max_width) return self.drawText(text, x, y, size_px, color);
@@ -362,11 +382,19 @@ pub const TextEngine = struct {
             const word_end = i;
 
             // Would adding this word overflow the line?
+            // Sub-pixel tolerance: flex layout produces float widths that
+            // accumulate ~0.001-0.5px drift between the measure pass that
+            // sized the box and the paint pass that re-runs wordWrap inside
+            // it. Without slack, text measured to fit at width=145.000 wraps
+            // when the box ends up at 144.9997. The overflow is invisible
+            // (no glyph paints past max_width — it's just the pen position
+            // accumulator), so we tolerate up to half a pixel before wrapping.
+            const WRAP_EPSILON: f32 = 0.5;
             const need_space = (line_width > 0);
             const separator_w = if (need_space) space_w + letter_spacing * 2 else @as(f32, 0);
             const with_word = line_width + separator_w + word_width;
 
-            if (need_space and with_word > max_width) {
+            if (need_space and with_word > max_width + WRAP_EPSILON) {
                 // Wrap: emit current line, start new line at this word
                 result.addLine(line_start, last_word_end);
                 line_start = word_start;
