@@ -60,13 +60,16 @@ export function AssistantChatProvider() {
       });
 
       try {
+        // Trim only LEADING whitespace — some models emit a leading
+        // space as their first token (tokenizer artifact, especially
+        // BPE-style tokenizers) which renders as a visible indent
+        // because the chat row's first character is the body. We
+        // preserve trailing whitespace in case the model is mid-word.
+        const stripLeading = (s: string) => s.replace(/^[ \t]+/, '');
         const final = await chat.ask(text, {
-          onPart: (partial) => updateTurnBody(asstId, partial),
+          onPart: (partial) => updateTurnBody(asstId, stripLeading(partial)),
         });
-        // onPart already wrote the streaming body; this is the final-text
-        // fallback (in case the SDK delivers the full text only at the
-        // result step). Idempotent when onPart matched the final.
-        if (final && final.length > 0) updateTurnBody(asstId, final);
+        if (final && final.length > 0) updateTurnBody(asstId, stripLeading(final));
         return final;
       } catch (err: any) {
         const msg = err && err.message ? err.message : String(err);
