@@ -22,6 +22,8 @@ export * as clipboard from './clipboard';
 export * as websocket from './websocket';
 export * as media from './media';
 export * as browserPage from './browser_page';
+export { useBrowse, browseRequest, setBrowsePort, createBrowseTools } from './useBrowse';
+export type { BrowseHandle, BrowseOptions, PageContent as BrowsePageContent, ToolDefinition as BrowseToolDefinition } from './useBrowse';
 export { useHotState, removeHotState, clearHotState, hotStateKeys } from './useHotState';
 export { useIFTTT, busOn, busEmit, getSharedState, setSharedState, dispatchClaudeEvent } from './useIFTTT';
 export type { IFTTTTrigger, IFTTTAction, IFTTTResult } from './useIFTTT';
@@ -138,34 +140,12 @@ export { usePostgres } from './usePostgres';
 export type { UsePostgresOpts } from './usePostgres';
 export type { FileWatchEvent, FileWatchOptions } from './useFileWatch';
 
-// Scene3D scene-graph hook — lives in runtime/scene3d/, surfaced through
-// the same hooks barrel so carts can pull `useScene3D` alongside the rest.
-export { useScene3D, createScene3DRegistry, DEFAULT_CAMERA, Scene3DContext } from '../scene3d/useScene3D';
-export type { Scene3DRegistry } from '../scene3d/useScene3D';
-export type {
-  Vec3 as Scene3DVec3,
-  GeometryKind,
-  CameraKind,
-  BoxGeometry,
-  SphereGeometry,
-  PlaneGeometry,
-  TorusGeometry,
-  GeometryDescriptor,
-  StandardMaterial,
-  MeshNode,
-  CameraNode,
-  AmbientLightNode,
-  DirectionalLightNode,
-  PointLightNode,
-  LightNode,
-  Scene3DProps,
-  CameraProps,
-  MeshProps,
-  AmbientLightProps,
-  DirectionalLightProps,
-  PointLightProps,
-  OrbitControlsProps,
-} from '../scene3d/types';
+// Scene3D — the JS-side scene-graph hook (`useScene3D`) used to live here.
+// Removed when `<Scene3D>` was rewritten to emit straight to the host's
+// wgpu pipeline (framework/gpu/3d.zig). The previous registry + CPU painter
+// is moved aside under runtime/scene3d_dead/. Carts that need camera /
+// light / mesh introspection should subscribe to layout-tree events via
+// the existing host hooks, not a parallel JS scene graph.
 
 // Audio — declarative wrapper around framework/audio.zig. The <Audio>
 // primitive lives in runtime/audio.tsx; useAudio() is the imperative
@@ -182,6 +162,9 @@ export * from '../ffi';
  *   globalThis.WebSocket   → websocket
  *   globalThis.EventSource → http (streaming SSE)
  *
+ * Also wires the viewport-resize bridge so classifier `bp:` overrides
+ * become live. See `installResizeBridge` below.
+ *
  * Call once at the top of your cart entry (before <App /> mounts). Leaving
  * the shims OFF by default keeps things explicit — opt in per cart.
  */
@@ -191,4 +174,66 @@ export function installBrowserShims(): void {
   httpMod.installEventSourceShim();
   (require('./localstore') as typeof import('./localstore')).installLocalStorageShim();
   (require('./websocket') as typeof import('./websocket')).installWebSocketShim();
+  installResizeBridge();
+}
+
+/**
+ * Seed the JS-side theme store with the host's initial viewport width so
+ * `useBreakpoint()` resolves to the correct tier on first render. This is
+ * a one-shot read, NOT a live bridge — the engine-side resize push was
+ * removed because it caused multi-layer round-trips (Zig→V8 eval→IFTTT
+ * bus→React store→Zig primitive props→Zig layout) on every pixel of an
+ * active drag, and locked up the engine.
+ *
+ * The proper architecture for live breakpoint reactivity is for the
+ * layout engine in Zig to resolve classifier `bp:` variants directly from
+ * `framework/breakpoint.zig`'s active tier — no JS round-trip. That's a
+ * separate piece of work; until then, classifier bp variants only apply
+ * to the size the window had at app launch. The browser-shim path keeps
+ * a `window.resize` listener for DOM-hosted carts, where the round-trip
+ * is one boundary, not two.
+ *
+ * Idempotent — calling it twice is safe.
+ */
+let _resizeBridgeInstalled = false;
+export function installResizeBridge(): void {
+  if (_resizeBridgeInstalled) return;
+  _resizeBridgeInstalled = true;
+
+  const themeMod = require('../theme') as typeof import('../theme');
+  const ifttt = require('./useIFTTT') as typeof import('./useIFTTT');
+  const host = globalThis as any;
+
+  // Seed initial width — try the native host fn first, fall back to the
+  // browser path. If neither responds, the theme store stays at its
+  // default (1280 / lg) which is fine for the first frame.
+  let initialW = 0;
+  try {
+    if (typeof host.__viewport_width === 'function') {
+      initialW = Number(host.__viewport_width()) || 0;
+    } else if (typeof host.innerWidth === 'number') {
+      initialW = host.innerWidth;
+    }
+  } catch { /* ignore */ }
+  if (initialW > 0) themeMod.setViewportWidth(initialW);
+
+  // Live channel — Zig fires __ifttt_onSystemResize on tier crossings,
+  // which the IFTTT registry forwards as 'system:resize'. We subscribe
+  // here and push into the theme store so useBreakpoint() reflects the
+  // actual window size, not just the install-time seed.
+  ifttt.busOn('system:resize', (payload: any) => {
+    const w = typeof payload?.w === 'number' ? payload.w : 0;
+    if (w > 0) themeMod.setViewportWidth(w);
+  });
+
+  // Browser-shim path — DOM-hosted carts react to window.resize directly,
+  // since the IFTTT bus event only fires from the native V8 path.
+  if (typeof host.addEventListener === 'function') {
+    try {
+      host.addEventListener('resize', () => {
+        const w = typeof host.innerWidth === 'number' ? host.innerWidth : 0;
+        if (w > 0) themeMod.setViewportWidth(w);
+      });
+    } catch { /* ignore */ }
+  }
 }

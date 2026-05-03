@@ -4,6 +4,7 @@ const v8rt = @import("v8_runtime.zig");
 
 const net_http = @import("net/http.zig");
 const page_fetch = @import("net/page_fetch.zig");
+const browse_bridge = @import("net/browse_bridge.zig");
 const debug_client = @import("debug_client.zig");
 const player_mod = @import("player.zig");
 const vterm_mod = @import("vterm.zig");
@@ -20,6 +21,9 @@ var g_page_fetch_init_done: bool = false;
 const HttpPending = struct { rid: []u8, stream: bool, download: bool = false };
 var g_http_pending: ?std.AutoHashMap(u32, HttpPending) = null;
 var g_page_pending: ?std.AutoHashMap(u32, []u8) = null;
+
+var g_browse_init_done: bool = false;
+var g_browse_pending: ?std.AutoHashMap(u32, []u8) = null;
 
 var g_claude_session: ?claude_sdk.Session = null;
 var g_kimi_session: ?kimi_wire_sdk.Session = null;
@@ -228,6 +232,11 @@ fn httpPending() *std.AutoHashMap(u32, HttpPending) {
 fn pagePending() *std.AutoHashMap(u32, []u8) {
     if (g_page_pending == null) g_page_pending = std.AutoHashMap(u32, []u8).init(std.heap.page_allocator);
     return &g_page_pending.?;
+}
+
+fn browsePending() *std.AutoHashMap(u32, []u8) {
+    if (g_browse_pending == null) g_browse_pending = std.AutoHashMap(u32, []u8).init(std.heap.page_allocator);
+    return &g_browse_pending.?;
 }
 
 fn hashReqId(s: []const u8) u32 {
@@ -876,6 +885,50 @@ fn hostBrowserPageAsync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) 
         return setReturnUndefined(info, cx.iso);
     };
     _ = page_fetch.request(id, url);
+    setReturnUndefined(info, cx.iso);
+}
+
+fn hostBrowseRequestSync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const cx = callbackCtx(info);
+    const body = jsStringArg(std.heap.page_allocator, info, 0) orelse return setReturnString(info, cx.iso, "{\"ok\":false,\"error\":\"missing body\"}");
+    defer std.heap.page_allocator.free(body);
+    const resp = browse_bridge.requestSync(body);
+    defer std.heap.page_allocator.free(resp.body);
+    setReturnString(info, cx.iso, resp.body);
+}
+
+fn hostBrowseRequestAsync(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const cx = callbackCtx(info);
+    if (info.length() < 2) return setReturnUndefined(info, cx.iso);
+    const body = jsStringArg(std.heap.page_allocator, info, 0) orelse return setReturnUndefined(info, cx.iso);
+    defer std.heap.page_allocator.free(body);
+    const rid = jsStringArg(std.heap.page_allocator, info, 1) orelse return setReturnUndefined(info, cx.iso);
+    defer std.heap.page_allocator.free(rid);
+
+    if (!g_browse_init_done) {
+        browse_bridge.init();
+        g_browse_init_done = true;
+    }
+
+    const id = hashReqId(rid);
+    const rid_copy = std.heap.page_allocator.dupe(u8, rid) catch return setReturnUndefined(info, cx.iso);
+    browsePending().put(id, rid_copy) catch {
+        std.heap.page_allocator.free(rid_copy);
+        return setReturnUndefined(info, cx.iso);
+    };
+    _ = browse_bridge.request(std.heap.page_allocator, id, body);
+    setReturnUndefined(info, cx.iso);
+}
+
+fn hostBrowseSetPort(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const cx = callbackCtx(info);
+    const port_f = jsF64Arg(info, 0) orelse return setReturnUndefined(info, cx.iso);
+    if (port_f > 0 and port_f < 65536) {
+        browse_bridge.setPort(@intFromFloat(port_f));
+    }
     setReturnUndefined(info, cx.iso);
 }
 
@@ -1687,6 +1740,20 @@ pub fn tickDrain() void {
             emitChannelPayload(ch, payload);
         }
     }
+
+    if (g_browse_init_done) {
+        var buf: [8]browse_bridge.Response = undefined;
+        const n = browse_bridge.poll(&buf);
+        const alloc = std.heap.page_allocator;
+        for (buf[0..n]) |resp| {
+            defer alloc.free(resp.body);
+            const rid = browsePending().fetchRemove(resp.id) orelse continue;
+            defer alloc.free(rid.value);
+            var ch_buf: [256]u8 = undefined;
+            const ch = std.fmt.bufPrint(&ch_buf, "browse:{s}", .{rid.value}) catch continue;
+            emitChannelPayload(ch, resp.body);
+        }
+    }
 }
 
 pub fn registerSdk(vm: anytype) void {
@@ -1699,6 +1766,9 @@ pub fn registerSdk(vm: anytype) void {
     v8rt.registerHostFn("__http_download_to_file", hostHttpDownloadToFile);
     v8rt.registerHostFn("__browser_page_sync", hostBrowserPageSync);
     v8rt.registerHostFn("__browser_page_async", hostBrowserPageAsync);
+    v8rt.registerHostFn("__browse_request_sync", hostBrowseRequestSync);
+    v8rt.registerHostFn("__browse_request_async", hostBrowseRequestAsync);
+    v8rt.registerHostFn("__browse_set_port", hostBrowseSetPort);
     v8rt.registerHostFn("__play_load", hostPlayLoad);
     v8rt.registerHostFn("__play_play", hostPlayPlay);
     v8rt.registerHostFn("__play_pause", hostPlayPause);
