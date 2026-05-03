@@ -11,7 +11,7 @@
 // the assistant chat path from the same `submit()` path.
 
 import { useState, useRef } from 'react';
-import { TextInput } from '@reactjit/runtime/primitives';
+import { TextEditor } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import { useBreakpoint } from '@reactjit/runtime/theme';
 import { busEmit } from '@reactjit/runtime/hooks/useIFTTT';
@@ -105,13 +105,13 @@ export function InputStrip() {
             </S.CommandComposerPromptFlow>
           ) : null}
           <S.CommandComposerPromptFlow>
-            <TextInput
+            <TextEditor
               value={draft}
               onChangeText={setDraft}
               onSubmit={submit}
               placeholder="Ask, or @-mention a place to open…"
               style={{
-                flexGrow: 1, flexBasis: 0,
+                width: '100%',
                 minHeight: 24,
                 fontSize: 14,
                 color: 'theme:ink',

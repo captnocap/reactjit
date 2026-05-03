@@ -19,12 +19,13 @@
 //   Boundary rules (multi-select chips)
 //   Save
 
-import { useRef } from 'react';
-import { Box, Col, Row, ScrollView } from '@reactjit/runtime/primitives';
+import { useRef, useState } from 'react';
+import { Box, Col, Row, ScrollView, Pressable } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import { Avatar } from '@reactjit/runtime/avatar';
 import { CharacterProvider, useCharacter } from './state';
 import { useAnimationTimeline } from '../anim';
+import { askAssistant } from '../chat/store';
 import {
   ARCHETYPES,
   BOUNDARY_RULES,
@@ -91,6 +92,73 @@ function Chip({
     <Tile onPress={onPress}>
       <Text_>{label}</Text_>
     </Tile>
+  );
+}
+
+type MoreOptionKind = 'archetype' | 'quirks' | 'stance' | 'boundaries';
+
+function promptForMoreOptions(kind: MoreOptionKind): string {
+  const optionLines =
+    kind === 'archetype'
+      ? ARCHETYPES.map((a) => `- ${a.label}: ${a.description}`).join('\n')
+      : kind === 'quirks'
+        ? QUIRKS.map((q) => `- ${q.label}: ${q.description}`).join('\n')
+        : kind === 'stance'
+          ? [
+              'Relationship stance:',
+              ...STANCES.map((s) => `- ${s.label}`),
+              'Initiative profile:',
+              ...INITIATIVES.map((i) => `- ${i.label}`),
+              'Correction style:',
+              ...CORRECTIONS.map((c) => `- ${c.label}`),
+            ].join('\n')
+          : BOUNDARY_RULES.map((b) => `- ${b.label}: ${b.description}`).join('\n');
+
+  const noun =
+    kind === 'archetype'
+      ? 'assistant character archetypes'
+      : kind === 'quirks'
+        ? 'assistant voice quirks'
+        : kind === 'stance'
+          ? 'relationship, initiative, and correction stance options'
+          : 'portable assistant boundary rules';
+
+  return [
+    `Generate more ${noun} for the /character creator.`,
+    '',
+    'Current committed options:',
+    optionLines,
+    '',
+    'Freestyle beyond this list. Return an interactive chat-loom surface with 6 to 10 fresh options as <Btn> choices. Keep each label short, make every option distinct, and include one sentence explaining when a user should pick it.',
+    'For each <Btn>, set reply to a concise instruction that says which option was selected and asks you to translate it into the closest current character controls if it is not already a committed option.',
+  ].join('\n');
+}
+
+function MoreOptionsButton({ kind }: { kind: MoreOptionKind }) {
+  const [busy, setBusy] = useState(false);
+  const label =
+    kind === 'archetype'
+      ? 'More archetypes'
+      : kind === 'quirks'
+        ? 'More quirks'
+        : kind === 'stance'
+          ? 'More stances'
+          : 'More boundaries';
+
+  const onPress = () => {
+    if (busy) return;
+    setBusy(true);
+    void askAssistant(promptForMoreOptions(kind))
+      .catch((e: any) => {
+        console.log('[character] more options failed: ' + (e?.message ?? String(e)));
+      })
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <S.ButtonOutline onPress={onPress}>
+      <S.ButtonOutlineLabel>{busy ? 'Asking...' : label}</S.ButtonOutlineLabel>
+    </S.ButtonOutline>
   );
 }
 
@@ -213,9 +281,14 @@ function ArchetypeSection() {
   const c = useCharacter();
   return (
     <S.Card>
-      <S.Caption>
-        Pick a starting voice. Seeds dials + quirks + stances. You can change anything below afterward.
-      </S.Caption>
+      <Row style={{ gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+          <S.Caption>
+            Pick a starting voice. Seeds dials + quirks + stances. You can change anything below afterward.
+          </S.Caption>
+        </Box>
+        <MoreOptionsButton kind="archetype" />
+      </Row>
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
         {ARCHETYPES.map((a) => (
           <ArchetypeCard
@@ -263,7 +336,10 @@ function QuirksSection() {
   const c = useCharacter();
   return (
     <S.Card>
-      <S.Caption>Toggle on the quirks this character carries.</S.Caption>
+      <Row style={{ gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+        <S.Caption>Toggle on the quirks this character carries.</S.Caption>
+        <MoreOptionsButton kind="quirks" />
+      </Row>
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
         {QUIRKS.map((q) => (
           <Chip
@@ -282,6 +358,9 @@ function StanceTriadSection() {
   const c = useCharacter();
   return (
     <S.Card>
+      <Row style={{ gap: 10, alignItems: 'center', justifyContent: 'flex-end' }}>
+        <MoreOptionsButton kind="stance" />
+      </Row>
       <Col style={{ gap: 6 }}>
         <S.Label>Relationship stance</S.Label>
         <Segmented options={STANCES} value={c.character.relationshipStance} onPick={(s) => void c.setRelationshipStance(s)} />
@@ -302,9 +381,14 @@ function BoundariesSection() {
   const c = useCharacter();
   return (
     <S.Card>
-      <S.Caption>
-        Boundary rules travel with the character. These reuse the existing Constraint shape — no parallel type.
-      </S.Caption>
+      <Row style={{ gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box style={{ flexGrow: 1, flexBasis: 0 }}>
+          <S.Caption>
+            Boundary rules travel with the character. These reuse the existing Constraint shape — no parallel type.
+          </S.Caption>
+        </Box>
+        <MoreOptionsButton kind="boundaries" />
+      </Row>
       <Row style={{ gap: 8, flexWrap: 'wrap' }}>
         {BOUNDARY_RULES.map((b) => (
           <Chip
@@ -333,21 +417,20 @@ function SaveBar() {
 
 // ── Avatar preview column ─────────────────────────────────────────────
 
+const BACKDROP_SWATCHES = ['#0a0e18', '#1a1f2e', '#2a3347', '#3a4d5c', '#5a3a3a'];
+
 function AvatarPreview() {
   const c = useCharacter();
+  const [backdrop, setBackdrop] = useState(BACKDROP_SWATCHES[0]);
   return (
     <Col style={{ gap: 10 }}>
       <S.Card>
         <S.Label style={{ color: 'theme:accentHot' }}>PREVIEW</S.Label>
-        {/* Explicit pixel dimensions on the Avatar (and its inner Scene3D)
-            so the host paints the render-to-texture quad at exactly that
-            size — relying on overflow:hidden of a wrapper Box doesn't clip
-            the GPU quad, since the quad is positioned by the scene3d
-            node's own layout box, not the parent's. */}
-        <Box style={{ width: 320, height: 360, borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+        <Box style={{ width: '100%', height: 360, overflow: 'hidden', position: 'relative' }}>
           <Avatar
             avatar={DEFAULT_AVATAR}
-            style={{ width: 320, height: 360, position: 'absolute', inset: 0 }}
+            style={{ width: '100%', height: 360 }}
+            backgroundColor={backdrop}
             cameraPosition={[0, 1.0, 3.8]}
             cameraTarget={[0, 0.85, 0]}
             cameraFov={48}
@@ -356,6 +439,22 @@ function AvatarPreview() {
         <S.Heading>{c.character.name || '(unnamed)'}</S.Heading>
         {c.character.displayName ? <S.BodyDim>aka {c.character.displayName}</S.BodyDim> : null}
         {c.character.bio ? <S.BodyDim>{c.character.bio}</S.BodyDim> : null}
+        <Row style={{ gap: 6, marginTop: 8 }}>
+          {BACKDROP_SWATCHES.map((color) => (
+            <Pressable
+              key={color}
+              onPress={() => setBackdrop(color)}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                backgroundColor: color,
+                borderWidth: backdrop === color ? 2 : 1,
+                borderColor: backdrop === color ? 'theme:accentHot' : 'theme:border',
+              }}
+            />
+          ))}
+        </Row>
       </S.Card>
       <S.Card>
         <Col style={{ gap: 4 }}>

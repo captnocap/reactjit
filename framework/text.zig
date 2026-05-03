@@ -394,7 +394,47 @@ pub const TextEngine = struct {
             const separator_w = if (need_space) space_w + letter_spacing * 2 else @as(f32, 0);
             const with_word = line_width + separator_w + word_width;
 
-            if (need_space and with_word > max_width + WRAP_EPSILON) {
+            if (max_width > 0 and word_width > max_width + WRAP_EPSILON) {
+                // Single word too wide for the line — fall back to char-level
+                // wrap (mirrors framework/gpu/text.zig:drawSelectionRects so
+                // the selection rect and the painted text agree).
+                if (need_space) {
+                    result.addLine(line_start, last_word_end);
+                    line_start = word_start;
+                    line_width = 0;
+                }
+                var seg_start: usize = word_start;
+                var seg_width: f32 = 0;
+                var seg_chars: usize = 0;
+                var j: usize = word_start;
+                while (j < word_end) {
+                    var ch_w: f32 = 0;
+                    var ch_len: usize = 0;
+                    const sl = inlineGlyphSentinelLen(text, j);
+                    if (sl > 0) {
+                        ch_w = @floatFromInt(size_px);
+                        ch_len = sl;
+                    } else {
+                        const ch = decodeUtf8(text[j..]);
+                        ch_w = self.cpAdvance(ch.codepoint, size_px);
+                        ch_len = ch.len;
+                    }
+                    const ls: f32 = if (seg_chars > 0) letter_spacing else 0;
+                    if (seg_chars > 0 and seg_width + ls + ch_w > max_width + WRAP_EPSILON) {
+                        result.addLine(seg_start, j);
+                        seg_start = j;
+                        seg_width = ch_w;
+                        seg_chars = 1;
+                    } else {
+                        seg_width += ls + ch_w;
+                        seg_chars += 1;
+                    }
+                    j += ch_len;
+                }
+                line_start = seg_start;
+                line_width = seg_width;
+                last_word_end = word_end;
+            } else if (need_space and with_word > max_width + WRAP_EPSILON) {
                 // Wrap: emit current line, start new line at this word
                 result.addLine(line_start, last_word_end);
                 line_start = word_start;
