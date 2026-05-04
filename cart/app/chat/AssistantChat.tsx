@@ -1,50 +1,82 @@
 // Persistent assistant chat — root.
 //
-// Two visible shapes (concept art panels in cart/app/app.md →
-// "Persistent assistant chat (full ↔ side fluid surface)"):
+// Two visible shapes:
+//   - 'side'     — pinned in the side rail, above the InputStrip (or
+//                  alone, when the InputStrip morphed to full-bottom for
+//                  an activity claim). 95% of the time the chat lives
+//                  here.
+//   - 'activity' — fills the activity content area. Only on the /chat
+//                  route. The rail's chat slot still renders 'side' but
+//                  with the history-list empty state, since live turns
+//                  are visible in the activity area instead.
 //
-//   - 'side' (state B) — pinned inside AppSideMenuInput, above the
-//     docked InputStrip. Shows `DOCKED` pill + subline; hides the
-//     ▸ LIFT affordance and surface command previews.
-//
-//   - 'full' (state C) — fills the activity content area, above the
-//     bottom InputStrip. Hides the `DOCKED` pill + subline; shows
-//     the LIFT affordances and command previews.
-//
-// The composer footer in the concept art (the routing/attachments
-// envelope + the prompt input) is the existing <InputStrip> — the
-// chat does NOT render a second composer. The shell mounts the chat
-// above the InputStrip in whichever slot the GOLDEN morph has placed
-// the input today.
+// Empty-chat state: if the current session has no turns the surface
+// renders a clickable history list of past sessions. Sending the first
+// message replaces that view with the live transcript.
 //
 // Identity: the chat may re-mount when its slot changes, but the
 // thread state lives in `./store`, so the transcript content survives
-// the swap. v1 fixtures only; real generation arrives through a
-// `useAssistantChat()` hook in the follow-up commit.
+// the swap.
 
 import { classifiers as S } from '@reactjit/core';
+import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import type { ChatShape } from './types';
-import { useChatStatus, useChatTurns } from './store';
+import {
+  loadSession,
+  startNewSession,
+  useChatSessions,
+  useChatStatus,
+  useChatTurns,
+  useCurrentSessionId,
+} from './store';
 import { AssistantTurn } from './AssistantTurn';
 
 function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + '…';
 }
 
-export function AssistantChat({
-  shape,
-  onToggleShape,
-}: {
-  shape: ChatShape;
-  onToggleShape?: () => void;
-}) {
+function ChatHistoryList() {
+  const sessions = useChatSessions();
+  if (sessions.length === 0) {
+    return (
+      <Box style={{ padding: 16 }}>
+        <Text style={{ color: 'theme:ink-mute', fontSize: 12 }}>
+          No past chats. Type a message to start.
+        </Text>
+      </Box>
+    );
+  }
+  return (
+    <Box style={{ flexDirection: 'column', padding: 8 }}>
+      {sessions.map((s) => (
+        <Pressable
+          key={s.id}
+          onPress={() => loadSession(s.id)}
+          style={{
+            paddingTop: 8, paddingBottom: 8, paddingLeft: 12, paddingRight: 12,
+            flexDirection: 'column',
+          }}
+        >
+          <Text style={{ color: 'theme:ink', fontSize: 13 }}>{truncate(s.title, 60)}</Text>
+          <Text style={{ color: 'theme:ink-mute', fontSize: 11, marginTop: 2 }}>
+            {s.turn_count} turn{s.turn_count === 1 ? '' : 's'}
+          </Text>
+        </Pressable>
+      ))}
+    </Box>
+  );
+}
+
+export function AssistantChat({ shape }: { shape: ChatShape }) {
   const turns = useChatTurns();
   const status = useChatStatus();
+  const currentId = useCurrentSessionId();
   if (shape === 'hidden') return null;
 
   const isSide = shape === 'side';
-  const showLift = shape === 'full';
+  const showLift = shape === 'activity';
   const turnCount = turns.length;
+  const hasActiveSession = currentId !== null && turnCount > 0;
 
   // Header subline shows live phase/error so the user can see what the
   // session is doing — esp. when the asst turn is empty (init / loading
@@ -72,13 +104,17 @@ export function AssistantChat({
           <S.AppChatPanelHeaderTitle>01 ASSISTANT</S.AppChatPanelHeaderTitle>
           {isSide ? (
             <S.AppChatPanelHeaderState>
-              <S.AppChatPanelHeaderStateText>DOCKED</S.AppChatPanelHeaderStateText>
+              <S.AppChatPanelHeaderStateText>
+                {hasActiveSession ? 'ACTIVE' : 'HISTORY'}
+              </S.AppChatPanelHeaderStateText>
             </S.AppChatPanelHeaderState>
           ) : null}
         </S.AppChatPanelHeaderLeft>
-        <S.AppChatPanelHeaderToggle onPress={onToggleShape}>
-          <S.AppChatPanelHeaderToggleText>{isSide ? '↗' : '↘'}</S.AppChatPanelHeaderToggleText>
-        </S.AppChatPanelHeaderToggle>
+        {hasActiveSession ? (
+          <S.AppChatPanelHeaderToggle onPress={() => startNewSession()}>
+            <S.AppChatPanelHeaderToggleText>+</S.AppChatPanelHeaderToggleText>
+          </S.AppChatPanelHeaderToggle>
+        ) : null}
       </S.AppChatPanelHeader>
 
       {isSide ? (
@@ -90,9 +126,17 @@ export function AssistantChat({
       ) : null}
 
       <S.AppChatTranscript>
-        {turns.map((t) => (
-          <AssistantTurn key={t.id} turn={t} showLift={showLift} />
-        ))}
+        {/* Side rail with no active session shows the history list so
+            the user can resume. Activity view always shows the live
+            transcript (empty when no turns — the InputStrip is right
+            below it, ready to fire). */}
+        {!hasActiveSession && isSide ? (
+          <ChatHistoryList />
+        ) : (
+          turns.map((t) => (
+            <AssistantTurn key={t.id} turn={t} showLift={showLift} />
+          ))
+        )}
       </S.AppChatTranscript>
     </S.AppChatPanel>
   );

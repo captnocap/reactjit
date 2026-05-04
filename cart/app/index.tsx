@@ -21,7 +21,13 @@ import GalleryPage from './gallery';
 import { OnboardingProvider, useOnboarding } from './onboarding/state.tsx';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
-import { useInputFocal, setHudInsets, RAIL_SUBNAV_MAX_FRAC } from './shell';
+import {
+  useInputClaim,
+  useSessionEngaged,
+  markSessionEngaged,
+  setHudInsets,
+  RAIL_SUBNAV_MAX_FRAC,
+} from './shell';
 import { AssistantChat } from './chat/AssistantChat';
 import { AssistantChatProvider } from './chat/AssistantChatProvider';
 import type { ChatShape } from './chat/types';
@@ -29,11 +35,14 @@ import type { ChatShape } from './chat/types';
 applyGalleryTheme(getActiveGalleryThemeId());
 installBrowserShims();
 
-// Each route declares its shell layout mode. `full` means home-style
-// layout (no side panel). `side` means activity-style layout (side
-// panel visible, input docks unless an activity calls setInputFocal).
-// The shell derives `headingTo` from (active-route.mode, inputFocal),
-// so transitions only fire when the resolved state actually changes.
+// Each route declares its shell layout mode. `full` is home only —
+// the cold-start state with no side rail. Every other route is `side`
+// (rail visible). Whether the InputStrip lives in the rail or the
+// bottom is independent of route — it's derived from inputClaim and
+// chatIsActivity in ShellBody. /chat is not in this list because it
+// doesn't appear as a chrome tab (you reach it by typing on home or
+// via the home Chatbot tile); but it IS a valid path with side-mode
+// layout, handled in ShellBody's routeMode resolver.
 type RouteMode = 'full' | 'side';
 const ROUTES: Array<{ path: string; label: string; icon: number[][]; mode: RouteMode }> = [
   { path: '/',                  label: 'Home',      icon: Home,     mode: 'full' },
@@ -51,8 +60,14 @@ function NavLink({ path, label, icon }: { path: string; label: string; icon: num
   const Link = active ? S.AppNavLinkActive : S.AppNavLink;
   const Glyph = active ? S.AppNavIconActive : S.AppNavIcon;
   const Label = active ? S.AppNavLabelActive : S.AppNavLabel;
+  // Any chrome-route click commits the user to a working session — the
+  // rail surfaces from this point on. Sticky for the cart lifetime.
+  const handlePress = () => {
+    if (path !== '/') markSessionEngaged();
+    nav.push(path);
+  };
   return (
-    <Link onPress={() => nav.push(path)}>
+    <Link onPress={handlePress}>
       <Glyph icon={icon} />
       <Label>{label}</Label>
     </Link>
@@ -188,22 +203,16 @@ function ConditionalInputStrip() {
   return <InputStrip />;
 }
 
-// Chat is gated on the same onboarding completion check, plus the shape
-// derivation from `headingTo`. Hidden on home (state A); 'side' when
-// docked above the side InputStrip (state B); 'full' when filling the
-// activity content area (state C). Thread state survives the slot swap
-// via the module-level store in `chat/store.ts`.
-function ConditionalAssistantChat({
-  shape,
-  onToggleShape,
-}: {
-  shape: ChatShape;
-  onToggleShape?: () => void;
-}) {
+// Chat is gated on onboarding completion plus the shape derivation in
+// ShellBody. 'side' renders in the rail (with live transcript or
+// history list); 'activity' fills the /chat route's content area;
+// 'hidden' is the cold-start fallback. Thread state survives the slot
+// swap via the module-level store in `chat/store.ts`.
+function ConditionalAssistantChat({ shape }: { shape: ChatShape }) {
   const onb = useOnboarding();
   if (onb.loading || !onb.complete) return null;
   if (shape === 'hidden') return null;
-  return <AssistantChat shape={shape} onToggleShape={onToggleShape} />;
+  return <AssistantChat shape={shape} />;
 }
 
 // ── Morph constants + helpers ────────────────────────────────────────
@@ -268,41 +277,54 @@ function getViewportH(): number {
 
 const easeMorph = (p: number) => (EASINGS as any).easeInOutCubic(p);
 
-// Three resolved shell states. Derived from (active route's mode,
-// inputFocal) — see deriveHeadingTo below. Each maps to a target
-// triple (sideMorph, inputMorph, bottomMorph) plus a variant value
-// that determines which slot hosts the input.
+// Four resolved shell states. Derived from (sessionEngaged, inputClaim,
+// chatIsActivity). Each maps to a target triple (sideMorph, inputMorph,
+// bottomMorph) plus a variant value for the input slot.
 //
-//   home              (route=full, focal=*) — A
-//   activity-docked   (route=side, focal=false) — B
-//   activity-focal    (route=side, focal=true)  — C
+//   1: cold       — !sessionEngaged. No rail. Home page on full screen.
+//                   Input full-bottom.
+//   2: rail-input — sessionEngaged && !claim && !chatIsActivity. Rail
+//                   visible, chat in rail, input in rail.
+//   3: rail-claim — sessionEngaged && claim. Rail visible, chat in
+//                   rail, input full-bottom (claimed by activity).
+//   4: chat-route — chatIsActivity. Rail visible, chat in activity
+//                   area, input full-bottom (default chat target).
 
-type HeadingTo = 'home' | 'activity-docked' | 'activity-focal';
+type HeadingTo = 'cold' | 'rail-input' | 'rail-claim' | 'chat-route';
 
 const TARGETS: Record<HeadingTo, {
   side: number; input: number; bottom: number; variant: string | null;
 }> = {
-  'home':            { side: 0, input: 0, bottom: 0, variant: null   },
-  'activity-docked': { side: 1, input: 1, bottom: 1, variant: 'side' },
-  'activity-focal':  { side: 1, input: 0, bottom: 0, variant: null   },
+  'cold':       { side: 0, input: 0, bottom: 0, variant: null   },
+  'rail-input': { side: 1, input: 1, bottom: 1, variant: 'side' },
+  'rail-claim': { side: 1, input: 0, bottom: 0, variant: null   },
+  'chat-route': { side: 1, input: 0, bottom: 0, variant: null   },
 };
 
-function deriveHeadingTo(routeMode: RouteMode, focal: boolean): HeadingTo {
-  if (routeMode === 'full') return 'home';
-  return focal ? 'activity-focal' : 'activity-docked';
+function deriveHeadingTo(
+  sessionEngaged: boolean,
+  hasClaim: boolean,
+  chatIsActivity: boolean,
+): HeadingTo {
+  if (chatIsActivity) return 'chat-route';
+  if (!sessionEngaged) return 'cold';
+  if (hasClaim) return 'rail-claim';
+  return 'rail-input';
 }
 
-// Chat shape rides the same axes as the InputStrip morph. Hidden on
-// home; 'side' docks above the side InputStrip; 'full' fills the
-// activity content area above the bottom InputStrip.
+// Live chat surface location. Hidden in cold-state (no session yet);
+// 'activity' on /chat (the chat IS the activity); 'side' otherwise —
+// rendered in the rail's chat slot, falling back to a session-history
+// list when no current session is active.
 function deriveChatShape(headingTo: HeadingTo): ChatShape {
-  if (headingTo === 'home') return 'hidden';
-  if (headingTo === 'activity-docked') return 'side';
-  return 'full';
+  if (headingTo === 'cold') return 'hidden';
+  if (headingTo === 'chat-route') return 'activity';
+  return 'side';
 }
 
-// All the shell-level hooks (useRoute, useActiveVariant, useInputFocal,
-// the morph effect) MUST run inside <Router>'s subtree — useRoute
+// All the shell-level hooks (useRoute, useActiveVariant, useInputClaim,
+// useSessionEngaged, the morph effect) MUST run inside <Router>'s
+// subtree — useRoute
 // looks up RouterContext and would never see updates if called from
 // App itself, since App is what mounts the Router. Splitting App into
 // a thin shell + ShellBody (the actual UI + state) is the standard
@@ -320,7 +342,12 @@ function ShellBody() {
   // when this value actually changes (same-mode route navigations
   // stay in the same `headingTo` and don't fire the morph).
   const route = useRoute();
-  const routeMode: RouteMode = route.path.startsWith('/settings')
+  // Routes with a side rail: anything in ROUTES with mode='side', plus
+  // /settings/* (sub-paths share the side mode), plus the implicit
+  // /chat route. /chat doesn't appear in chrome but it's a real path.
+  const _routeMode: RouteMode = route.path.startsWith('/settings')
+    ? 'side'
+    : route.path === '/chat'
     ? 'side'
     : ROUTES.find((r) => r.path === route.path)?.mode ?? 'full';
   // Some routes have an in-page sub-nav that's been promoted to the
@@ -328,8 +355,18 @@ function ShellBody() {
   // top of the assistant rail — same column as the chat — so the rail
   // reads as one continuous left chrome instead of a separate slot.
   const isSettings = route.path.startsWith('/settings');
-  const [focal, setFocal] = useInputFocal();
-  const headingTo = deriveHeadingTo(routeMode, focal);
+  const chatIsActivity = route.path === '/chat';
+  const claim = useInputClaim();
+  const sessionEngaged = useSessionEngaged();
+  // Side rail visibility is gated on engagement, but every non-home
+  // route also implies engagement — so reaching e.g. /settings via
+  // direct nav (router push, deeplink) needs to flip the flag too.
+  // The chrome NavLink already does this for chrome clicks; this
+  // covers programmatic pushes (NavigationBus, settings sub-routes).
+  useEffect(() => {
+    if (!sessionEngaged && _routeMode === 'side') markSessionEngaged();
+  }, [sessionEngaged, _routeMode]);
+  const headingTo = deriveHeadingTo(sessionEngaged, claim != null, chatIsActivity);
   const chatShape = deriveChatShape(headingTo);
 
   // Three independent morph timelines — see the constants comment for
@@ -532,6 +569,15 @@ function ShellBody() {
                 <Route path="/gallery">
                   <GalleryPage />
                 </Route>
+                {/* /chat is special — there's no separate page
+                    component; the activity area is just the live chat
+                    surface, which we render below outside Routes since
+                    it needs to sit above the BottomInputBar. This empty
+                    Route exists only to register the path with the
+                    router so deeplinks resolve. */}
+                <Route path="/chat">
+                  <Box />
+                </Route>
               </Box>
               {/* SideMenuInput — absolute overlay on the left.
                   Rendered FIRST so BottomInputBar overlays it in
@@ -544,8 +590,14 @@ function ShellBody() {
                 position: 'absolute', left: 0, top: 0, bottom: 0, width: sideWidth,
               }}>
                 {isSettings ? <SettingsNav maxHeight={subnavMaxH} /> : null}
-                {chatShape === 'side' ? (
-                  <ConditionalAssistantChat shape="side" onToggleShape={() => setFocal(true)} />
+                {/* Rail's chat slot — always 'side' shape when the rail
+                    is visible. Shows live transcript when there's an
+                    active session, history list otherwise. Stays in
+                    place across the chat-route morph so the user can
+                    still scan history while the live chat is in the
+                    activity area. */}
+                {sessionEngaged ? (
+                  <ConditionalAssistantChat shape="side" />
                 ) : null}
                 {/* InputStrip is pinned with flexShrink:0 so a tall
                     sub-nav or chat history can never push it past the
@@ -557,13 +609,12 @@ function ShellBody() {
                   </Box>
                 ) : null}
               </S.AppSideMenuInput>
-              {/* Full-mode chat overlay — fills the activity content
+              {/* /chat activity surface — fills the activity content
                   area, leaves space for the side rail (left: sideWidth)
                   and the bottom InputStrip (bottom: paddingBottom). The
-                  activity stays mounted underneath; we just cover it.
-                  When focal releases (state C → B), this unmounts and
-                  the activity surfaces again. */}
-              {chatShape === 'full' ? (
+                  rail's chat slot keeps the history list in view; this
+                  one shows the live transcript. */}
+              {chatShape === 'activity' ? (
                 <Box style={{
                   position: 'absolute',
                   left: sideWidth, top: 0, right: 0,
@@ -572,7 +623,7 @@ function ShellBody() {
                   paddingTop: 24, paddingBottom: 16,
                   flexDirection: 'column',
                 }}>
-                  <ConditionalAssistantChat shape="full" onToggleShape={() => setFocal(false)} />
+                  <ConditionalAssistantChat shape="activity" />
                 </Box>
               ) : null}
               {/* BottomInputBar — outer conditional removes it from the

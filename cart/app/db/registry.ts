@@ -29,12 +29,14 @@ export const ENTITY_TO_BUCKET: Record<string, BucketId> = {
   'user-manifest': 'user',
   'workspace': 'user',
 
-  // ── assistant (29) ────────────────────────────────────────────────
+  // ── assistant (31) ────────────────────────────────────────────────
   'capability': 'assistant',
   'character': 'assistant',
   'character-archetype': 'assistant',
   'character-compatibility': 'assistant',
   'character-quirk': 'assistant',
+  'chat-session': 'assistant',
+  'chat-turn': 'assistant',
   'composition': 'assistant',
   'composition-source-kind': 'assistant',
   'constraint': 'assistant',

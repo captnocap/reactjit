@@ -14,6 +14,7 @@ import { useState, useRef } from 'react';
 import { TextEditor } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
 import { useBreakpoint } from '@reactjit/runtime/theme';
+import { useRoute } from '@reactjit/runtime/router';
 import { busEmit } from '@reactjit/runtime/hooks/useIFTTT';
 import { CommandComposerHeader } from './gallery/components/command-composer/CommandComposerHeader';
 import { CommandComposerFooter } from './gallery/components/command-composer/CommandComposerFooter';
@@ -24,6 +25,7 @@ import type {
 } from './gallery/data/command-composer';
 import { resolveTokens, TokenMatch } from './tokens';
 import { askAssistant } from './chat/store';
+import { useInputClaim, getInputClaim, markSessionEngaged, getSessionEngaged } from './shell';
 
 const LEFT_SHORTCUTS = [
   { id: 'tag-file', key: '@', label: 'tag file' },
@@ -45,6 +47,8 @@ function tokenToChip(m: TokenMatch): CommandComposerChipData {
 
 export function InputStrip() {
   const bp = useBreakpoint();
+  const claim = useInputClaim();
+  const route = useRoute();
   // At `sm` the composer drops its optional attachment header and shortcut
   // footer. The required surface is the prompt input + send rail;
   // everything else tucks away.
@@ -55,9 +59,32 @@ export function InputStrip() {
 
   const matches = resolveTokens(draft);
 
+  const handleChange = (next: string) => {
+    setDraft(next);
+    // First non-empty keystroke from cold-home state commits the user
+    // to a working session: side rail appears, the chat takes over the
+    // activity area at /chat. Subsequent keystrokes are no-ops — the
+    // engaged flag is sticky.
+    if (next.length > 0 && !getSessionEngaged() && route.path === '/') {
+      markSessionEngaged();
+      busEmit('app:navigate', '/chat');
+    }
+  };
+
   const submit = () => {
     const text = draftRef.current.trim();
     if (!text) return;
+    // A claim from an activity wins over chat — the InputStrip is
+    // currently the activity's input surface and typing should go
+    // there. The activity is responsible for releasing the claim
+    // (Escape / blur / explicit close) when it's done.
+    const held = getInputClaim();
+    if (held) {
+      void Promise.resolve(held.onSubmit(text)).catch(() => {});
+      setDraft('');
+      draftRef.current = '';
+      return;
+    }
     const tokens = resolveTokens(text);
     for (const m of tokens) {
       if (m.token.type === 'route') busEmit('app:navigate', m.token.path);
@@ -72,6 +99,8 @@ export function InputStrip() {
     setDraft('');
     draftRef.current = '';
   };
+
+  const placeholder = claim?.placeholder ?? 'Ask, or @-mention a place to open…';
 
   const attachments: CommandComposerChipData[] = [];
   const hasAttachments = attachments.length > 0;
@@ -107,9 +136,9 @@ export function InputStrip() {
           <S.CommandComposerPromptFlow>
             <TextEditor
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={handleChange}
               onSubmit={submit}
-              placeholder="Ask, or @-mention a place to open…"
+              placeholder={placeholder}
               style={{
                 width: '100%',
                 minHeight: 24,

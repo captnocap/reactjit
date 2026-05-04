@@ -68,8 +68,19 @@ export type ChatAction = {
   primary?: boolean;              // first action in the row gets emphasis.
 };
 
-/** Chat shape derived from the shell's `headingTo`:
- *  - 'hidden' on home (no chat)
- *  - 'side'   on activity-docked (state B)
- *  - 'full'   on activity-focal  (state C)                             */
-export type ChatShape = 'hidden' | 'side' | 'full';
+/** Where the live chat surface renders. The side rail is the 95% case;
+ *  'activity' is reserved for the dedicated /chat route. 'hidden' covers
+ *  state 1 (no session committed yet — no rail at all). */
+export type ChatShape = 'hidden' | 'side' | 'activity';
+
+/** A persisted chat session — one conversation. Many of these accumulate
+ *  per user; the rail's empty-chat state lists them so the user can
+ *  resume any past conversation. Stored in the `assistant` bucket as
+ *  entity `chat-session`. Turns are linked by `session_id`. */
+export interface ChatSession {
+  id: string;
+  title: string;          // first user turn truncated, or '(untitled)' until set.
+  created_at: string;     // ISO.
+  updated_at: string;     // ISO. Bumped on each new turn for sort order.
+  turn_count: number;     // denormalized for the rail history list.
+}
