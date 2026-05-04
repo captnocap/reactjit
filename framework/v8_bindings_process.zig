@@ -20,6 +20,7 @@ const builtin = @import("builtin");
 const v8 = @import("v8");
 const v8_runtime = @import("v8_runtime.zig");
 const process = @import("process.zig");
+const event_bus = @import("event_bus.zig");
 
 const alloc = std.heap.c_allocator;
 
@@ -210,10 +211,27 @@ fn hostSpawn(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         .pipe_stdout = true,
         .pipe_stderr = true,
     }) catch {
+        var pbuf: [512]u8 = undefined;
+        if (std.fmt.bufPrint(&pbuf, "{{\"cmd\":\"{s}\",\"argc\":{d}}}", .{ cmd_slice, argv_count })) |p| {
+            _ = event_bus.emit("proc.spawn.failed", "v8_bindings_process", null, p);
+        } else |_| {
+            _ = event_bus.emit("proc.spawn.failed", "v8_bindings_process", null, "{}");
+        }
         const ret = info.getReturnValue();
         ret.set(v8.Integer.initI32(info.getIsolate(), 0));
         return;
     };
+
+    // Successful spawn — auto-importance lands "spawn" at 0.6.
+    // We log cmd + pid + argc (not the full argv — could contain
+    // sensitive data; if a debugger needs more, the cart can pass it
+    // through bus.emit on its own).
+    var spawn_buf: [512]u8 = undefined;
+    if (std.fmt.bufPrint(&spawn_buf, "{{\"cmd\":\"{s}\",\"pid\":{d},\"argc\":{d}}}", .{ cmd_slice, piped.process.pid, argv_count })) |p| {
+        _ = event_bus.emit("proc.spawn", "v8_bindings_process", null, p);
+    } else |_| {
+        _ = event_bus.emit("proc.spawn", "v8_bindings_process", null, "{}");
+    }
 
     const e = alloc.create(Entry) catch {
         // Best effort cleanup; the process is already spawned.
@@ -445,8 +463,7 @@ fn readProcSample(pid: c_int) ?ProcSample {
         const n = file.read(&buf) catch return null;
         var line_iter = std.mem.splitScalar(u8, buf[0..n], '\n');
         while (line_iter.next()) |line| {
-            if (std.mem.startsWith(u8, line, "VmRSS:")) rss = parseFirstU64(line) * 1024
-            else if (std.mem.startsWith(u8, line, "VmSize:")) vsize = parseFirstU64(line) * 1024;
+            if (std.mem.startsWith(u8, line, "VmRSS:")) rss = parseFirstU64(line) * 1024 else if (std.mem.startsWith(u8, line, "VmSize:")) vsize = parseFirstU64(line) * 1024;
         }
     }
 
@@ -487,7 +504,8 @@ fn emitRamSample(pid: c_int, rss: u64, vsize: u64, total: u64) void {
     const chan = std.fmt.bufPrint(&chan_buf, "proc:ram:{d}", .{pid}) catch return;
     var pl_buf: [256]u8 = undefined;
     const percent_thousand: u64 = if (total > 0) (rss * 1000) / total else 0;
-    const pl = std.fmt.bufPrint(&pl_buf,
+    const pl = std.fmt.bufPrint(
+        &pl_buf,
         "{{\"pid\":{d},\"id\":{d},\"rss\":{d},\"vsize\":{d},\"memTotal\":{d},\"percent\":{d}.{d:0>3}}}",
         .{ pid, pid, rss, vsize, total, percent_thousand / 1000, percent_thousand % 1000 },
     ) catch return;
@@ -498,7 +516,8 @@ fn emitCpuSample(pid: c_int, utime: u64, stime: u64, delta: u64, interval_ms: u3
     var chan_buf: [64]u8 = undefined;
     const chan = std.fmt.bufPrint(&chan_buf, "proc:cpu:{d}", .{pid}) catch return;
     var pl_buf: [192]u8 = undefined;
-    const pl = std.fmt.bufPrint(&pl_buf,
+    const pl = std.fmt.bufPrint(
+        &pl_buf,
         "{{\"pid\":{d},\"id\":{d},\"utime\":{d},\"stime\":{d},\"delta\":{d},\"intervalMs\":{d}}}",
         .{ pid, pid, utime, stime, delta, interval_ms },
     ) catch return;
@@ -574,7 +593,8 @@ fn hostProcStat(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     var json_buf: [256]u8 = undefined;
     const total = systemMemTotal();
     const percent_thousand: u64 = if (total > 0) (sample.rss * 1000) / total else 0;
-    const json = std.fmt.bufPrint(&json_buf,
+    const json = std.fmt.bufPrint(
+        &json_buf,
         "{{\"pid\":{d},\"rss\":{d},\"vsize\":{d},\"utime\":{d},\"stime\":{d},\"memTotal\":{d},\"percent\":{d}.{d:0>3}}}",
         .{ pid, sample.rss, sample.vsize, sample.utime, sample.stime, total, percent_thousand / 1000, percent_thousand % 1000 },
     ) catch return;

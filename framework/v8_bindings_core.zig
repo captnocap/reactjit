@@ -20,7 +20,9 @@ const filedrop = @import("filedrop.zig");
 const localstore = @import("localstore.zig");
 const fswatch = @import("fswatch.zig");
 const latches = @import("latches.zig");
+const animations = @import("animations.zig");
 const system_signals = @import("system_signals.zig");
+const event_bus = @import("event_bus.zig");
 const c = @import("c.zig").imports;
 
 var g_content_store: std.AutoHashMap(u32, []u8) = undefined;
@@ -95,6 +97,24 @@ fn hostFlush(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         std.heap.c_allocator.free(owned);
         return;
     };
+
+    // Bus telemetry. Auto-importance lands "host.flush" at 0.5; that
+    // would put every reconciler tick at the default console gate. Pin
+    // it down to "noisy" tier so steady-state flushes persist quietly
+    // and only outliers (large flushes — surfaced separately below)
+    // bubble up.
+    var pbuf: [64]u8 = undefined;
+    if (std.fmt.bufPrint(&pbuf, "{{\"bytes\":{d}}}", .{owned.len})) |p| {
+        _ = event_bus.emitWithImportance("host.flush", "v8_bindings_core", 0.15, null, p);
+    } else |_| {}
+    // Outlier gate — anything past 256K is worth flagging. Below that
+    // is the steady-state noise we don't want surfacing.
+    if (owned.len >= 256 * 1024) {
+        var pbuf2: [64]u8 = undefined;
+        if (std.fmt.bufPrint(&pbuf2, "{{\"bytes\":{d}}}", .{owned.len})) |p2| {
+            _ = event_bus.emitWithImportance("host.flush.large", "v8_bindings_core", 0.7, null, p2);
+        } else |_| {}
+    }
 }
 
 fn hostTerminalSetCwd(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -259,6 +279,73 @@ fn hostLatchGet(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     };
     defer std.heap.c_allocator.free(key);
     setReturnNumber(info, latches.get(key));
+}
+
+// __anim_register(latchKey: string, curveName: string, loopName: string,
+//                 from: number, to: number, durationMs: number) -> number
+//
+// Registers a host-side animation. Returns the animation id (>0) on
+// success, 0 on failure (pool full, key too long, etc). The cart
+// stores the id and calls __anim_unregister(id) on cleanup.
+fn hostAnimRegister(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 6) {
+        setReturnNumber(info, 0);
+        return;
+    }
+    const key = argToStringAlloc(info, 0) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    defer std.heap.c_allocator.free(key);
+    const curve_name = argToStringAlloc(info, 1) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    defer std.heap.c_allocator.free(curve_name);
+    const loop_name = argToStringAlloc(info, 2) orelse {
+        setReturnNumber(info, 0);
+        return;
+    };
+    defer std.heap.c_allocator.free(loop_name);
+    const from = argToF64(info, 3) orelse 0;
+    const to = argToF64(info, 4) orelse 0;
+    const duration_ms = argToF64(info, 5) orelse 1000;
+    // Optional 7th arg: start_offset_ms (default 0). Lets callers
+    // stagger N animations that share a curve so each has a different
+    // phase — the wave-with-offset pattern.
+    const start_offset_ms: i64 = blk: {
+        if (info.length() < 7) break :blk 0;
+        const v = argToF64(info, 6) orelse break :blk 0;
+        break :blk @intFromFloat(v);
+    };
+
+    const curve = animations.CurveType.fromString(curve_name);
+    const loop: animations.LoopMode = blk: {
+        if (std.mem.eql(u8, loop_name, "once")) break :blk .once;
+        if (std.mem.eql(u8, loop_name, "pingpong")) break :blk .pingpong;
+        break :blk .cycle;
+    };
+    const now_ms: i64 = @as(i64, @truncate(@divFloor(std.time.nanoTimestamp(), 1_000_000)));
+    const id = animations.register(
+        key,
+        curve,
+        loop,
+        @floatCast(from),
+        @floatCast(to),
+        @floatCast(duration_ms),
+        now_ms,
+        start_offset_ms,
+    );
+    setReturnNumber(info, @floatFromInt(id));
+}
+
+fn hostAnimUnregister(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    if (info.length() < 1) return;
+    const id_f = argToF64(info, 0) orelse return;
+    const id: u32 = @intFromFloat(id_f);
+    animations.unregister(id);
 }
 
 fn hostGetState(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
@@ -1095,6 +1182,8 @@ pub fn registerCore(vm: anytype) void {
     v8_runtime.registerHostFn("__getState", hostGetState);
     v8_runtime.registerHostFn("__latchSet", hostLatchSet);
     v8_runtime.registerHostFn("__latchGet", hostLatchGet);
+    v8_runtime.registerHostFn("__anim_register", hostAnimRegister);
+    v8_runtime.registerHostFn("__anim_unregister", hostAnimUnregister);
     v8_runtime.registerHostFn("__getStateString", hostGetStateString);
     v8_runtime.registerHostFn("__markDirty", hostMarkDirty);
     v8_runtime.registerHostFn("getMouseX", hostGetMouseX);

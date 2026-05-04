@@ -34,6 +34,7 @@
 //!   client.close();
 
 const std = @import("std");
+const event_bus = @import("../event_bus.zig");
 
 // ════════════════════════════════════════════════════════════════════════
 // Constants
@@ -64,8 +65,8 @@ pub const MAX_MESSAGES_PER_POLL = 32;
 
 const RecvBuffer = struct {
     buf: [MAX_MSG_SIZE]u8 = undefined,
-    len: usize = 0,        // bytes occupied (read_pos..len is the live region)
-    read_pos: usize = 0,   // first byte not yet drained
+    len: usize = 0, // bytes occupied (read_pos..len is the live region)
+    read_pos: usize = 0, // first byte not yet drained
 
     /// Append raw bytes from a read.
     ///
@@ -95,10 +96,37 @@ const RecvBuffer = struct {
 
         const space = self.buf.len - self.len;
         if (data.len > space) {
+            const dropped = data.len - space;
             std.debug.print(
                 "[ipc] RecvBuffer OVERFLOW — dropping {d} bytes; bump MAX_MSG_SIZE (cap={d}, len={d}, incoming={d})\n",
-                .{ data.len - space, self.buf.len, self.len, data.len },
+                .{ dropped, self.buf.len, self.len, data.len },
             );
+            // Bus event at near-fatal importance — this is THE bug class
+            // that just cost two days. Anyone tailing the bus during a
+            // mystery "blank window" will see this immediately.
+            var pbuf: [192]u8 = undefined;
+            if (std.fmt.bufPrint(
+                &pbuf,
+                "{{\"dropped\":{d},\"cap\":{d},\"len\":{d},\"incoming\":{d}}}",
+                .{ dropped, self.buf.len, self.len, data.len },
+            )) |p| {
+                _ = event_bus.emit("ipc.overflow", "framework/net/ipc.zig", null, p);
+            } else |_| {
+                _ = event_bus.emit("ipc.overflow", "framework/net/ipc.zig", null, "{}");
+            }
+        } else if (self.len + data.len > self.buf.len / 2 and data.len >= 4096) {
+            // Early warning: ≥50% capacity used and a non-trivial chunk
+            // just landed. Lets us see "headed for overflow" before the
+            // cliff. Manual mid-importance — auto-rule would land at 0.5
+            // (no keyword), but this is genuinely worth surfacing.
+            var pbuf: [128]u8 = undefined;
+            if (std.fmt.bufPrint(
+                &pbuf,
+                "{{\"len\":{d},\"cap\":{d},\"incoming\":{d}}}",
+                .{ self.len, self.buf.len, data.len },
+            )) |p| {
+                _ = event_bus.emitWithImportance("ipc.recv.large", "framework/net/ipc.zig", 0.65, null, p);
+            } else |_| {}
         }
         const n = @min(data.len, space);
         if (n > 0) {

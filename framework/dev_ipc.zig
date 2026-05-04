@@ -18,6 +18,7 @@
 //! Pushes are queued for the application layer to handle between frames.
 
 const std = @import("std");
+const event_bus = @import("event_bus.zig");
 const log = std.log.scoped(.dev_ipc);
 
 pub const SOCKET_PATH = "/tmp/reactjit.sock";
@@ -154,6 +155,35 @@ fn handleClient(client_fd: std.posix.socket_t) !void {
     try queued.append(alloc, .{ .name = name_copy, .bundle = bundle });
     try writeAll(client_fd, "OK\n");
     log.info("pushed '{s}' ({d} bytes)", .{ name_copy, bundle_len });
+
+    // Bus event. Peer PID lets us spot the orphan-watcher race we hit
+    // earlier — if two different PIDs alternate in the bus log pushing
+    // the same cart, that's the failure mode (zombie watchers fighting
+    // for the active tab). Without this signal we'd just see the active
+    // tab flapping with no clue who's responsible.
+    const peer = peerPidOrZero(client_fd);
+    var pbuf: [192]u8 = undefined;
+    if (std.fmt.bufPrint(
+        &pbuf,
+        "{{\"cart\":\"{s}\",\"bytes\":{d},\"peer_pid\":{d}}}",
+        .{ name_copy, bundle_len, peer },
+    )) |p| {
+        _ = event_bus.emit("bundle.push", "framework/dev_ipc.zig", null, p);
+    } else |_| {
+        _ = event_bus.emit("bundle.push", "framework/dev_ipc.zig", null, "{}");
+    }
+}
+
+const Ucred = extern struct { pid: i32, uid: u32, gid: u32 };
+const SOL_SOCKET: c_int = 1;
+const SO_PEERCRED: c_int = 17;
+extern fn getsockopt(s: c_int, level: c_int, optname: c_int, optval: ?*anyopaque, optlen: ?*u32) c_int;
+
+fn peerPidOrZero(fd: std.posix.socket_t) i32 {
+    var cred: Ucred = .{ .pid = 0, .uid = 0, .gid = 0 };
+    var len: u32 = @sizeOf(Ucred);
+    if (getsockopt(@as(c_int, @intCast(fd)), SOL_SOCKET, SO_PEERCRED, &cred, &len) != 0) return 0;
+    return cred.pid;
 }
 
 fn writeAll(fd: std.posix.socket_t, data: []const u8) !void {

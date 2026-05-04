@@ -30,11 +30,14 @@ const gpu = if (IS_LIB) struct {
     }
 } else @import("framework/gpu/gpu.zig");
 const latches = @import("framework/latches.zig");
+const animations = @import("framework/animations.zig");
 const windows = @import("framework/windows.zig");
 const ipc = @import("framework/net/ipc.zig");
 const qjs_runtime = @import("framework/qjs_runtime.zig"); // kept for non-VM state (input, telemetry, dock resize, pty)
 const v8_runtime = @import("framework/v8_runtime.zig");
 const v8_bindings_core = @import("framework/v8_bindings_core.zig");
+const v8_bindings_eventbus = @import("framework/v8_bindings_eventbus.zig");
+const event_bus = @import("framework/event_bus.zig");
 // Conditional @import — when has_X is false the binding file is NEVER
 // parsed, so its string literals (host-fn names like "getFps", "__zig_call")
 // don't bleed into .rodata/DWARF of the final binary. The "_real = @import(...)"
@@ -184,6 +187,10 @@ const INGREDIENTS = [_]Ingredient{
     // hook-file presence is degenerate; it's always shipped because the
     // framework boilerplate in the bundle always references it.
     .{ .name = "core", .required = true, .grep_prefix = "", .reg_fn = "registerCore", .mod = v8_bindings_core },
+    // Observability bus — always-on. The whole point is that every cart
+    // gets free crash/overflow/perf diagnostics with no opt-in. Cost is
+    // five host fns and a circular ring; nothing the cart has to import.
+    .{ .name = "eventbus", .required = true, .grep_prefix = "", .reg_fn = "registerEventBus", .mod = v8_bindings_eventbus },
     // Everything below is source-gated: scripts/ship reads the esbuild
     // metafile and only flips the matching -Dhas-X=true if a JS file
     // that calls into the binding is actually shipped.
@@ -247,13 +254,19 @@ var g_children_ids: std.AutoHashMap(u32, std.ArrayList(u32)) = undefined;
 /// would require scanning every entry of `g_children_ids` per mutation.
 var g_parent_id: std.AutoHashMap(u32, u32) = undefined;
 
-/// Set of nodes with a `latch_height_key` style binding. The pre-frame
-/// `syncLatchesToNodes` pass iterates this set when `latches.isDirty()`
-/// and writes the current latch value into `node.style.height`. Adding
-/// to the set: applyStyle sees `"latch:KEY"` for height. Removing:
-/// currently never (subtree teardown is OK to leave stale entries; the
-/// node lookup will fail and the entry effectively becomes a no-op).
+/// Sets of nodes with `latch_*_key` style bindings, one per supported
+/// style field. The pre-frame `syncLatchesToNodes` pass iterates each
+/// set when `latches.isDirty()` and writes the current latch value into
+/// the corresponding `node.style.*` field. Adding to a set: applyStyle
+/// sees `"latch:KEY"` for that field. Removing: currently never
+/// (subtree teardown is OK to leave stale entries; the node lookup will
+/// fail and the entry effectively becomes a no-op).
 var g_latch_height_nodes: std.AutoHashMap(u32, void) = undefined;
+var g_latch_width_nodes: std.AutoHashMap(u32, void) = undefined;
+var g_latch_left_nodes: std.AutoHashMap(u32, void) = undefined;
+var g_latch_top_nodes: std.AutoHashMap(u32, void) = undefined;
+var g_latch_right_nodes: std.AutoHashMap(u32, void) = undefined;
+var g_latch_bottom_nodes: std.AutoHashMap(u32, void) = undefined;
 var g_root_child_ids: std.ArrayList(u32) = .{};
 var g_window_owner_by_node_id: std.AutoHashMap(u32, u32) = undefined;
 const WindowBinding = struct {
@@ -1012,43 +1025,52 @@ fn nodeTransitionConfig(node: *Node) transition_mod.TransitionConfig {
     };
 }
 
+/// Generic latch-or-pct style applier. Handles `style.X = "latch:KEY"`
+/// for any layout-affecting style field by registering the node in the
+/// per-field registry and seeding the style with the current latch
+/// value. Falls back to literal pct/number parsing if the value isn't
+/// a latch token. Mirror of the original height-only path generalized
+/// across width/left/top/right/bottom.
+fn applyLatchOrPct(
+    node: *Node,
+    val: std.json.Value,
+    latch_field: *?[]const u8,
+    style_field: *?f32,
+    nodes_set: *std.AutoHashMap(u32, void),
+) void {
+    if (val == .string and std.mem.startsWith(u8, val.string, "latch:")) {
+        const suffix = val.string[6..];
+        if (latch_field.*) |old| g_alloc.free(old);
+        const owned = g_alloc.dupe(u8, suffix) catch null;
+        latch_field.* = owned;
+        // Seed with whatever the latch currently holds so first-frame
+        // layout has a sensible value before any tick fires.
+        style_field.* = latches.getF32(suffix);
+        // Find this node's id (linear scan g_node_by_id; called only at
+        // applyStyle time, not per-frame). Add to the registry.
+        var it = g_node_by_id.iterator();
+        while (it.next()) |entry| {
+            if (entry.value_ptr.* == node) {
+                nodes_set.put(entry.key_ptr.*, {}) catch {};
+                break;
+            }
+        }
+    } else if (jsonMaybePct(val)) |f| {
+        style_field.* = f;
+        // Clear any prior latch binding when the value becomes literal.
+        if (latch_field.*) |old| {
+            g_alloc.free(old);
+            latch_field.* = null;
+        }
+    }
+}
+
 fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value, is_update: bool) void {
     const eq = std.mem.eql;
     if (eq(u8, key, "width")) {
-        if (jsonMaybePct(val)) |f| node.style.width = f;
+        applyLatchOrPct(node, val, &node.latch_width_key, &node.style.width, &g_latch_width_nodes);
     } else if (eq(u8, key, "height")) {
-        // `style.height = "latch:KEY"` binds the height to a host-owned
-        // latch value (see framework/latches.zig). Cart code mutates the
-        // latch via __latchSet; the pre-frame sync writes the current
-        // value into style.height before layout runs. No React
-        // reconciliation per tick.
-        if (val == .string and std.mem.startsWith(u8, val.string, "latch:")) {
-            const suffix = val.string[6..];
-            // Free a prior latch binding if this is an UPDATE replacing it.
-            if (node.latch_height_key) |old| g_alloc.free(old);
-            const owned = g_alloc.dupe(u8, suffix) catch null;
-            node.latch_height_key = owned;
-            // Seed style.height with whatever the latch currently holds
-            // so first-frame layout has a sensible value before any tick.
-            node.style.height = latches.getF32(suffix);
-            // Find this node's id (linear scan g_node_by_id; called only
-            // at applyStyle time, not per-frame). Add to the registry.
-            var it = g_node_by_id.iterator();
-            while (it.next()) |entry| {
-                if (entry.value_ptr.* == node) {
-                    g_latch_height_nodes.put(entry.key_ptr.*, {}) catch {};
-                    break;
-                }
-            }
-        } else if (jsonMaybePct(val)) |f| {
-            node.style.height = f;
-            // Clear any prior latch binding when the height becomes a
-            // literal value again.
-            if (node.latch_height_key) |old| {
-                g_alloc.free(old);
-                node.latch_height_key = null;
-            }
-        }
+        applyLatchOrPct(node, val, &node.latch_height_key, &node.style.height, &g_latch_height_nodes);
     } else if (eq(u8, key, "minWidth")) {
         if (jsonMaybePct(val)) |f| node.style.min_width = f;
     } else if (eq(u8, key, "maxWidth")) {
@@ -1126,13 +1148,13 @@ fn applyStyleEntry(node: *Node, key: []const u8, val: std.json.Value, is_update:
     } else if (eq(u8, key, "position")) {
         if (val == .string) node.style.position = parsePosition(val.string);
     } else if (eq(u8, key, "top")) {
-        if (jsonMaybePct(val)) |f| node.style.top = f;
+        applyLatchOrPct(node, val, &node.latch_top_key, &node.style.top, &g_latch_top_nodes);
     } else if (eq(u8, key, "left")) {
-        if (jsonMaybePct(val)) |f| node.style.left = f;
+        applyLatchOrPct(node, val, &node.latch_left_key, &node.style.left, &g_latch_left_nodes);
     } else if (eq(u8, key, "right")) {
-        if (jsonMaybePct(val)) |f| node.style.right = f;
+        applyLatchOrPct(node, val, &node.latch_right_key, &node.style.right, &g_latch_right_nodes);
     } else if (eq(u8, key, "bottom")) {
-        if (jsonMaybePct(val)) |f| node.style.bottom = f;
+        applyLatchOrPct(node, val, &node.latch_bottom_key, &node.style.bottom, &g_latch_bottom_nodes);
     } else if (eq(u8, key, "aspectRatio")) {
         if (jsonFloat(val)) |f| node.style.aspect_ratio = f;
     } else if (eq(u8, key, "borderWidth")) {
@@ -1854,6 +1876,60 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             if (jsonBool(v)) |b| node.scene3d_show_grid = b;
         } else if (std.mem.eql(u8, k, "scene3dShowAxes")) {
             if (jsonBool(v)) |b| node.scene3d_show_axes = b;
+        } else if (std.mem.eql(u8, k, "scene3dTexW")) {
+            if (jsonInt(v)) |i| node.scene3d_tex_w = if (i > 0 and i < 65536) @intCast(i) else 0;
+        } else if (std.mem.eql(u8, k, "scene3dTexH")) {
+            if (jsonInt(v)) |i| node.scene3d_tex_h = if (i > 0 and i < 65536) @intCast(i) else 0;
+        } else if (std.mem.eql(u8, k, "scene3dTexData")) {
+            // RRGGBBAA hex string, 8 chars per pixel. Length must equal
+            // 8 * w * h. Decoded into a fresh RGBA byte buffer owned by
+            // g_alloc; the gpu/3d.zig texture cache reads the pointer
+            // and hashes (w, h, ptr) to dedupe uploads.
+            if (v == .string) {
+                const hex = v.string;
+                if (hex.len % 8 == 0 and hex.len > 0) {
+                    const px_count = hex.len / 8;
+                    const buf = g_alloc.alloc(u8, px_count * 4) catch null;
+                    if (buf) |out| {
+                        var ok: bool = true;
+                        var i: usize = 0;
+                        while (i < px_count) : (i += 1) {
+                            const slice = hex[i * 8 .. i * 8 + 8];
+                            const r = std.fmt.parseInt(u8, slice[0..2], 16) catch {
+                                ok = false;
+                                break;
+                            };
+                            const g = std.fmt.parseInt(u8, slice[2..4], 16) catch {
+                                ok = false;
+                                break;
+                            };
+                            const b = std.fmt.parseInt(u8, slice[4..6], 16) catch {
+                                ok = false;
+                                break;
+                            };
+                            const a = std.fmt.parseInt(u8, slice[6..8], 16) catch {
+                                ok = false;
+                                break;
+                            };
+                            out[i * 4 + 0] = r;
+                            out[i * 4 + 1] = g;
+                            out[i * 4 + 2] = b;
+                            out[i * 4 + 3] = a;
+                        }
+                        if (ok) {
+                            // Replace any prior texture buffer this node held —
+                            // React commits update the prop in-place rather than
+                            // through a node teardown, so without this swap each
+                            // archetype/seed/frame change would orphan the old
+                            // buffer.
+                            if (node.scene3d_tex_rgba) |old| g_alloc.free(old);
+                            node.scene3d_tex_rgba = out;
+                        } else {
+                            g_alloc.free(out);
+                        }
+                    }
+                }
+            }
         } else if (std.mem.eql(u8, k, "devtoolsViz")) {
             // Inspector overlay mode for this node:
             //   'sparkline' | 'wireframe' | 'node_tree' | 'inspector_overlay' | 'none'
@@ -2476,13 +2552,35 @@ fn drainPendingFlushes() void {
 /// nodes) sweep.
 fn syncLatchesToNodes() void {
     if (!latches.isDirty()) return;
-    var it = g_latch_height_nodes.keyIterator();
-    while (it.next()) |id_ptr| {
-        const id = id_ptr.*;
-        const node = g_node_by_id.get(id) orelse continue;
-        if (node.latch_height_key) |key| {
-            node.style.height = latches.getF32(key);
-        }
+    var hit = g_latch_height_nodes.keyIterator();
+    while (hit.next()) |id_ptr| {
+        const node = g_node_by_id.get(id_ptr.*) orelse continue;
+        if (node.latch_height_key) |key| node.style.height = latches.getF32(key);
+    }
+    var wit = g_latch_width_nodes.keyIterator();
+    while (wit.next()) |id_ptr| {
+        const node = g_node_by_id.get(id_ptr.*) orelse continue;
+        if (node.latch_width_key) |key| node.style.width = latches.getF32(key);
+    }
+    var lit = g_latch_left_nodes.keyIterator();
+    while (lit.next()) |id_ptr| {
+        const node = g_node_by_id.get(id_ptr.*) orelse continue;
+        if (node.latch_left_key) |key| node.style.left = latches.getF32(key);
+    }
+    var tit = g_latch_top_nodes.keyIterator();
+    while (tit.next()) |id_ptr| {
+        const node = g_node_by_id.get(id_ptr.*) orelse continue;
+        if (node.latch_top_key) |key| node.style.top = latches.getF32(key);
+    }
+    var rit = g_latch_right_nodes.keyIterator();
+    while (rit.next()) |id_ptr| {
+        const node = g_node_by_id.get(id_ptr.*) orelse continue;
+        if (node.latch_right_key) |key| node.style.right = latches.getF32(key);
+    }
+    var bit = g_latch_bottom_nodes.keyIterator();
+    while (bit.next()) |id_ptr| {
+        const node = g_node_by_id.get(id_ptr.*) orelse continue;
+        if (node.latch_bottom_key) |key| node.style.bottom = latches.getF32(key);
     }
     latches.clearDirty();
     g_dirty = true;
@@ -2966,6 +3064,12 @@ fn clearTreeStateForReload() void {
     g_children_ids.clearRetainingCapacity();
     g_parent_id.clearRetainingCapacity();
     g_latch_height_nodes.clearRetainingCapacity();
+    g_latch_width_nodes.clearRetainingCapacity();
+    g_latch_left_nodes.clearRetainingCapacity();
+    g_latch_top_nodes.clearRetainingCapacity();
+    g_latch_right_nodes.clearRetainingCapacity();
+    g_latch_bottom_nodes.clearRetainingCapacity();
+    animations.clearAll();
     latches.clearAll();
     g_window_owner_by_node_id.clearRetainingCapacity();
     g_scroll_prop_slots.clearRetainingCapacity();
@@ -3163,7 +3267,9 @@ fn appInit() void {
 
 fn appTick(now: u32) void {
     // ── PROBE: first-tick milestones (only first 3 ticks log) ──
-    const _probe_n = struct { var v: u32 = 0; };
+    const _probe_n = struct {
+        var v: u32 = 0;
+    };
     _probe_n.v += 1;
     const _probe = _probe_n.v <= 3;
     if (_probe) std.debug.print("[probe-tick] #{d} entry now={d}\n", .{ _probe_n.v, now });
@@ -3205,6 +3311,12 @@ fn appTick(now: u32) void {
     // Must happen BEFORE rebuildTree so the tree reflects the new g_node_by_id.
     drainPendingFlushes();
     if (_probe) std.debug.print("[probe-tick] #{d} after drainPendingFlushes\n", .{_probe_n.v});
+    // Host-side animation tick. Walks the animation registry and writes
+    // current values into latches; syncLatchesToNodes then propagates
+    // those into node.style. Cart-side `useHostAnimation` registers
+    // animations via __anim_register / __anim_unregister.
+    const _now_ms_for_anim: i64 = @as(i64, @truncate(@divFloor(std.time.nanoTimestamp(), 1_000_000)));
+    animations.tickAll(_now_ms_for_anim);
     syncLatchesToNodes();
     windows.tickIndependent();
     cleanupClosedHostWindows();
@@ -3354,6 +3466,12 @@ fn appShutdown() void {
 pub fn main() !void {
     if (IS_LIB) return;
 
+    // Bring up the observability bus before anything else so that boot-time
+    // events (window-child detection, dev-mode bundle read, IPC start) all
+    // land in the log instead of vanishing pre-bus. Best-effort — failure
+    // (e.g. no $HOME) leaves emit() as a no-op and the runtime keeps going.
+    event_bus.init();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     g_alloc = gpa.allocator();
     g_arena = std.heap.ArenaAllocator.init(g_alloc);
@@ -3361,6 +3479,11 @@ pub fn main() !void {
     g_children_ids = std.AutoHashMap(u32, std.ArrayList(u32)).init(g_alloc);
     g_parent_id = std.AutoHashMap(u32, u32).init(g_alloc);
     g_latch_height_nodes = std.AutoHashMap(u32, void).init(g_alloc);
+    g_latch_width_nodes = std.AutoHashMap(u32, void).init(g_alloc);
+    g_latch_left_nodes = std.AutoHashMap(u32, void).init(g_alloc);
+    g_latch_top_nodes = std.AutoHashMap(u32, void).init(g_alloc);
+    g_latch_right_nodes = std.AutoHashMap(u32, void).init(g_alloc);
+    g_latch_bottom_nodes = std.AutoHashMap(u32, void).init(g_alloc);
     g_window_owner_by_node_id = std.AutoHashMap(u32, u32).init(g_alloc);
     g_window_by_node_id = std.AutoHashMap(u32, WindowBinding).init(g_alloc);
     g_scroll_prop_slots = std.AutoHashMap(u32, void).init(g_alloc);
