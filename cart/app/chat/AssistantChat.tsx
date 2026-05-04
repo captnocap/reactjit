@@ -35,20 +35,23 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + '…';
 }
 
-function ChatHistoryList() {
+function ChatHistoryList({ excludeId }: { excludeId?: string | null }) {
   const sessions = useChatSessions();
-  if (sessions.length === 0) {
+  const visible = excludeId ? sessions.filter(s => s.id !== excludeId) : sessions;
+  if (visible.length === 0) {
     return (
       <Box style={{ padding: 16 }}>
         <Text style={{ color: 'theme:ink-mute', fontSize: 12 }}>
-          No past chats. Type a message to start.
+          {sessions.length === 0
+            ? 'No past chats. Type a message to start.'
+            : 'No other chats yet.'}
         </Text>
       </Box>
     );
   }
   return (
     <Box style={{ flexDirection: 'column', padding: 8 }}>
-      {sessions.map((s) => (
+      {visible.map((s) => (
         <Pressable
           key={s.id}
           onPress={() => loadSession(s.id)}
@@ -59,7 +62,7 @@ function ChatHistoryList() {
         >
           <Text style={{ color: 'theme:ink', fontSize: 13 }}>{truncate(s.title, 60)}</Text>
           <Text style={{ color: 'theme:ink-mute', fontSize: 11, marginTop: 2 }}>
-            {s.turn_count} turn{s.turn_count === 1 ? '' : 's'}
+            {s.turn_count} turn{s.turn_count === 1 ? '' : 'S'}
           </Text>
         </Pressable>
       ))}
@@ -67,7 +70,25 @@ function ChatHistoryList() {
   );
 }
 
-export function AssistantChat({ shape }: { shape: ChatShape }) {
+/** AssistantChat renders the chat surface in one of three roles:
+ *  - shape='hidden'   → null (cold home)
+ *  - shape='side'     → rail slot. When `chatIsActivity` is true the
+ *                       live chat is already painted in the activity
+ *                       area, so the rail pivots to a history list of
+ *                       OTHER chats (the current session is filtered
+ *                       out so we don't show the same conversation
+ *                       twice). Otherwise it shows the live transcript
+ *                       (or history list when no current session).
+ *  - shape='activity' → /chat's content area. Always live transcript;
+ *                       empty state when there's no current session.
+ */
+export function AssistantChat({
+  shape,
+  chatIsActivity = false,
+}: {
+  shape: ChatShape;
+  chatIsActivity?: boolean;
+}) {
   const turns = useChatTurns();
   const status = useChatStatus();
   const currentId = useCurrentSessionId();
@@ -77,6 +98,10 @@ export function AssistantChat({ shape }: { shape: ChatShape }) {
   const showLift = shape === 'activity';
   const turnCount = turns.length;
   const hasActiveSession = currentId !== null && turnCount > 0;
+  // The rail always shows OTHER chats when the live chat owns the
+  // activity area — otherwise the user sees the same conversation
+  // duplicated in two panels at once.
+  const railShowsHistory = isSide && (chatIsActivity || !hasActiveSession);
 
   // Header subline shows live phase/error so the user can see what the
   // session is doing — esp. when the asst turn is empty (init / loading
@@ -105,7 +130,7 @@ export function AssistantChat({ shape }: { shape: ChatShape }) {
           {isSide ? (
             <S.AppChatPanelHeaderState>
               <S.AppChatPanelHeaderStateText>
-                {hasActiveSession ? 'ACTIVE' : 'HISTORY'}
+                {railShowsHistory ? 'HISTORY' : 'ACTIVE'}
               </S.AppChatPanelHeaderStateText>
             </S.AppChatPanelHeaderState>
           ) : null}
@@ -126,12 +151,8 @@ export function AssistantChat({ shape }: { shape: ChatShape }) {
       ) : null}
 
       <S.AppChatTranscript>
-        {/* Side rail with no active session shows the history list so
-            the user can resume. Activity view always shows the live
-            transcript (empty when no turns — the InputStrip is right
-            below it, ready to fire). */}
-        {!hasActiveSession && isSide ? (
-          <ChatHistoryList />
+        {railShowsHistory ? (
+          <ChatHistoryList excludeId={chatIsActivity ? currentId : null} />
         ) : (
           turns.map((t) => (
             <AssistantTurn key={t.id} turn={t} showLift={showLift} />

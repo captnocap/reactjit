@@ -198,15 +198,22 @@ function ConditionalInputStrip() {
 }
 
 // Chat is gated on onboarding completion plus the shape derivation in
-// ShellBody. 'side' renders in the rail (with live transcript or
-// history list); 'activity' fills the /chat route's content area;
-// 'hidden' is the cold-start fallback. Thread state survives the slot
-// swap via the module-level store in `chat/store.ts`.
-function ConditionalAssistantChat({ shape }: { shape: ChatShape }) {
+// ShellBody. 'side' renders in the rail (with live transcript, or a
+// history list when the live chat is in the activity area); 'activity'
+// fills the /chat route's content area; 'hidden' is the cold-start
+// fallback. Thread state survives the slot swap via the module-level
+// store in `chat/store.ts`.
+function ConditionalAssistantChat({
+  shape,
+  chatIsActivity,
+}: {
+  shape: ChatShape;
+  chatIsActivity?: boolean;
+}) {
   const onb = useOnboarding();
   if (onb.loading || !onb.complete) return null;
   if (shape === 'hidden') return null;
-  return <AssistantChat shape={shape} />;
+  return <AssistantChat shape={shape} chatIsActivity={chatIsActivity} />;
 }
 
 // ── Morph constants + helpers ────────────────────────────────────────
@@ -584,7 +591,7 @@ function ShellBody() {
                     still scan history while the live chat is in the
                     activity area. */}
                 {railVisible ? (
-                  <ConditionalAssistantChat shape="side" />
+                  <ConditionalAssistantChat shape="side" chatIsActivity={chatIsActivity} />
                 ) : null}
                 {/* InputStrip is pinned with flexShrink:0 so a tall
                     sub-nav or chat history can never push it past the
