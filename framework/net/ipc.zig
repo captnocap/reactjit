@@ -39,7 +39,12 @@ const std = @import("std");
 // Constants
 // ════════════════════════════════════════════════════════════════════════
 
-const MAX_MSG_SIZE = 262144; // max bytes per NDJSON line (256K — room for tree responses + telemetry)
+// Receive-buffer size — has to be larger than the largest INITIAL FLUSH a
+// parent ever queues up before the child connects. font_lab's first paint
+// alone runs ~330KB; more elaborate carts go higher. The old 256K cap was
+// silently truncating once a flush exceeded it, corrupting JSON mid-token
+// and leaving the child window blank with no error log.
+const MAX_MSG_SIZE = 4 * 1024 * 1024; // 4MB
 const READ_BUF_SIZE = 8192; // per-read chunk
 
 // ════════════════════════════════════════════════════════════════════════
@@ -61,9 +66,18 @@ const RecvBuffer = struct {
     buf: [MAX_MSG_SIZE]u8 = undefined,
     len: usize = 0,
 
-    /// Append raw bytes from a read.
+    /// Append raw bytes from a read. Loudly logs overflow rather than
+    /// silently truncating — a dropped byte mid-message corrupts JSON
+    /// downstream and used to surface as "blank window, no error" because
+    /// nothing here ever complained.
     fn append(self: *RecvBuffer, data: []const u8) void {
         const space = self.buf.len - self.len;
+        if (data.len > space) {
+            std.debug.print(
+                "[ipc] RecvBuffer OVERFLOW — dropping {d} bytes; bump MAX_MSG_SIZE (cap={d}, len={d}, incoming={d})\n",
+                .{ data.len - space, self.buf.len, self.len, data.len },
+            );
+        }
         const n = @min(data.len, space);
         if (n > 0) {
             @memcpy(self.buf[self.len..][0..n], data[0..n]);
