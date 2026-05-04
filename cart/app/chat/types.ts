@@ -17,6 +17,11 @@ export type AssistantTurn =
       body: string;
       surface?: ChatSurface;      // optional embedded card.
       lift?: boolean;             // shows the ▸ LIFT affordance in full.
+      /** True while the model is still generating this turn. The render
+       *  layer wraps the content area in a pixelate filter that
+       *  oscillates while pending and tweens out on flip-to-false so
+       *  the surface "materializes" from a scrambled placeholder. */
+      pending?: boolean;
     }
   | {
       id: string;

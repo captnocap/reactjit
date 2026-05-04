@@ -19,7 +19,7 @@ import { useEffect, useRef } from 'react';
 import { useRoute } from '@reactjit/runtime/router';
 import { parseIntent, type Node } from '@reactjit/runtime/intent/parser';
 import { useAssistantChat } from './useAssistantChat';
-import { appendTurn, nextTurnId, setAsker, setChatStatus, updateTurnBody, updateTurnSurface } from './store';
+import { appendTurn, nextTurnId, setAsker, setChatStatus, setTurnPending, updateTurnBody, updateTurnSurface } from './store';
 import {
   grantPermission,
   invokeTool,
@@ -153,7 +153,10 @@ export function AssistantChatProvider() {
   useEffect(() => {
     // Stream a synthesized prompt into a freshly-appended assistant
     // turn. Used by both the normal user-text path and the
-    // tool/grant-protocol paths.
+    // tool/grant-protocol paths. The asst turn is expected to have been
+    // appended with `pending: true`; we clear that here once the final
+    // reply (body or surface) has landed so the render layer can play
+    // its reveal animation.
     const driveAssistantTurn = async (asstId: string, prompt: string): Promise<string> => {
       const stripLeading = (s: string) => s.replace(/^[ \t]+/, '');
       try {
@@ -171,10 +174,12 @@ export function AssistantChatProvider() {
             }
           } catch { /* parse failure → leave prose body in place */ }
         }
+        setTurnPending(asstId, false);
         return final;
       } catch (err: any) {
         const msg = err && err.message ? err.message : String(err);
         updateTurnBody(asstId, `[error] ${msg}`);
+        setTurnPending(asstId, false);
         throw err;
       }
     };
@@ -195,7 +200,7 @@ export function AssistantChatProvider() {
         const userId = nextTurnId('u');
         const asstId = nextTurnId('a');
         appendTurn({ id: userId, author: 'user', timestamp: ts, body: friendlyToolLabel(toolCall) });
-        appendTurn({ id: asstId, author: 'asst', timestamp: ts, body: '' });
+        appendTurn({ id: asstId, author: 'asst', timestamp: ts, body: '', pending: true });
         const result = await invokeTool(toolCall);
         const resultJson = JSON.stringify(result);
         return driveAssistantTurn(asstId, `[tool-result] tool=${toolCall.name} ${resultJson}`);
@@ -213,7 +218,7 @@ export function AssistantChatProvider() {
           id: userId, author: 'user', timestamp: ts,
           body: `→ grant ${grant.tool} on ${grant.scope}`,
         });
-        appendTurn({ id: asstId, author: 'asst', timestamp: ts, body: '' });
+        appendTurn({ id: asstId, author: 'asst', timestamp: ts, body: '', pending: true });
         try {
           await grantPermission({ tool: grant.tool, scope: grant.scope });
         } catch (e: any) {

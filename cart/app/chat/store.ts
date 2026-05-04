@@ -207,6 +207,23 @@ export function updateTurnBody(id: string, body: string): void {
   _notify();
 }
 
+/** Mark or clear an asst turn's `pending` flag. The render layer reads
+ *  this to drive the generating-pixelate animation. Provider sets true
+ *  when appending the empty asst turn and false once the final reply
+ *  (body or surface) has landed. */
+export function setTurnPending(id: string, pending: boolean): void {
+  const i = _turns.findIndex((t) => t.id === id);
+  if (i < 0) return;
+  const cur = _turns[i];
+  if (cur.author !== 'asst') return;
+  const next: any = { ...cur };
+  if (pending) next.pending = true;
+  else delete next.pending;
+  _turns = [..._turns.slice(0, i), next, ..._turns.slice(i + 1)];
+  if (_currentSessionId) _writeTurn(_currentSessionId, next);
+  _notify();
+}
+
 /** Attach (or clear) an embedded surface card on an assistant turn.
  *  Provider calls this after parseIntent on the finalized reply when
  *  the model emitted chat-loom tags. Pass `null` to drop a surface. */
