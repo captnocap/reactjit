@@ -87,22 +87,42 @@ const RecvBuffer = struct {
 
     /// Extract complete lines (terminated by \n) into the output slice.
     /// Returns how many messages were extracted. Compacts remaining data.
+    ///
+    /// IMPORTANT: only consumes bytes for lines that were actually written
+    /// into `out`. The previous version advanced past every `\n` regardless
+    /// of whether the line fit in `out`, silently destroying any messages
+    /// past the MAX_MESSAGES_PER_POLL cap. With 32-cap and a fat ~3000-line
+    /// initial flush, that meant 99% of mutations vanished and the child
+    /// window painted blank. Now lines past the cap stay in `buf` for the
+    /// next drain call so a poll-loop in the caller can extract them.
     fn drain(self: *RecvBuffer, out: []Message) usize {
         var count: usize = 0;
-        var start: usize = 0;
+        var line_start: usize = 0;
+        var consumed: usize = 0;
 
         for (0..self.len) |i| {
             if (self.buf[i] == '\n') {
-                const line = self.buf[start..i];
-                if (line.len > 0 and count < out.len) {
-                    out[count] = .{ .data = line };
-                    count += 1;
+                const line = self.buf[line_start..i];
+                line_start = i + 1;
+                if (line.len == 0) {
+                    // Empty line — just consume the newline, no out slot used.
+                    consumed = i + 1;
+                    continue;
                 }
-                start = i + 1;
+                if (count >= out.len) {
+                    // out is full; leave this and following lines in buf.
+                    break;
+                }
+                out[count] = .{ .data = line };
+                count += 1;
+                consumed = i + 1;
             }
         }
 
-        // Compact: move unconsumed bytes to front
+        // Compact: move unconsumed bytes to front (this includes any lines
+        // we didn't extract because `out` filled up, plus any partial
+        // trailing line that hadn't yet seen its newline).
+        const start = consumed;
         if (start > 0) {
             const remaining = self.len - start;
             if (remaining > 0) {
