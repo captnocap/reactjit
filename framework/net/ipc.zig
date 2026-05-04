@@ -64,13 +64,35 @@ pub const MAX_MESSAGES_PER_POLL = 32;
 
 const RecvBuffer = struct {
     buf: [MAX_MSG_SIZE]u8 = undefined,
-    len: usize = 0,
+    len: usize = 0,        // bytes occupied (read_pos..len is the live region)
+    read_pos: usize = 0,   // first byte not yet drained
 
-    /// Append raw bytes from a read. Loudly logs overflow rather than
-    /// silently truncating — a dropped byte mid-message corrupts JSON
-    /// downstream and used to surface as "blank window, no error" because
-    /// nothing here ever complained.
+    /// Append raw bytes from a read.
+    ///
+    /// Compaction happens HERE, never inside drain. drain returns slices
+    /// that point into `buf`; if drain compacted on the way out, those
+    /// slices would silently start reading whatever bytes the compaction
+    /// shoved into their range. That manifested as "first letter dropped",
+    /// "tile missing its number", "half the tree gone" — random partial
+    /// corruption depending on which lines drain extracted vs. which lines
+    /// got slid in over them.
+    ///
+    /// Doing the compaction at the start of append is safe because by then
+    /// the caller is done iterating any messages from the previous drain.
     fn append(self: *RecvBuffer, data: []const u8) void {
+        // Reclaim space by sliding the live region (read_pos..len) to the
+        // front. Slices returned from earlier drain calls are invalidated
+        // here — by contract the caller has finished using them before the
+        // next poll().
+        if (self.read_pos > 0) {
+            const remaining = self.len - self.read_pos;
+            if (remaining > 0) {
+                std.mem.copyForwards(u8, self.buf[0..remaining], self.buf[self.read_pos..self.len]);
+            }
+            self.len = remaining;
+            self.read_pos = 0;
+        }
+
         const space = self.buf.len - self.len;
         if (data.len > space) {
             std.debug.print(
@@ -86,51 +108,30 @@ const RecvBuffer = struct {
     }
 
     /// Extract complete lines (terminated by \n) into the output slice.
-    /// Returns how many messages were extracted. Compacts remaining data.
+    /// Returns how many messages were written into `out`. Lines past the
+    /// out-slice cap stay in the buffer for the caller's next drain call.
     ///
-    /// IMPORTANT: only consumes bytes for lines that were actually written
-    /// into `out`. The previous version advanced past every `\n` regardless
-    /// of whether the line fit in `out`, silently destroying any messages
-    /// past the MAX_MESSAGES_PER_POLL cap. With 32-cap and a fat ~3000-line
-    /// initial flush, that meant 99% of mutations vanished and the child
-    /// window painted blank. Now lines past the cap stay in `buf` for the
-    /// next drain call so a poll-loop in the caller can extract them.
+    /// Slices in `out` are valid until the next call to `append` — by
+    /// then the caller is expected to have iterated them.
     fn drain(self: *RecvBuffer, out: []Message) usize {
         var count: usize = 0;
-        var line_start: usize = 0;
-        var consumed: usize = 0;
-
-        for (0..self.len) |i| {
-            if (self.buf[i] == '\n') {
-                const line = self.buf[line_start..i];
-                line_start = i + 1;
-                if (line.len == 0) {
-                    // Empty line — just consume the newline, no out slot used.
-                    consumed = i + 1;
-                    continue;
-                }
-                if (count >= out.len) {
-                    // out is full; leave this and following lines in buf.
-                    break;
-                }
-                out[count] = .{ .data = line };
-                count += 1;
-                consumed = i + 1;
+        var i: usize = self.read_pos;
+        while (i < self.len) : (i += 1) {
+            if (self.buf[i] != '\n') continue;
+            const line_end = i;
+            const new_read_pos = i + 1;
+            const line = self.buf[self.read_pos..line_end];
+            self.read_pos = new_read_pos;
+            if (line.len == 0) continue; // empty line — consume newline, no out slot
+            if (count >= out.len) {
+                // out is full — rewind read_pos back to the start of this
+                // line so the next drain call picks it up.
+                self.read_pos = line_end - line.len;
+                break;
             }
+            out[count] = .{ .data = line };
+            count += 1;
         }
-
-        // Compact: move unconsumed bytes to front (this includes any lines
-        // we didn't extract because `out` filled up, plus any partial
-        // trailing line that hadn't yet seen its newline).
-        const start = consumed;
-        if (start > 0) {
-            const remaining = self.len - start;
-            if (remaining > 0) {
-                std.mem.copyForwards(u8, self.buf[0..remaining], self.buf[start..self.len]);
-            }
-            self.len = remaining;
-        }
-
         return count;
     }
 };
