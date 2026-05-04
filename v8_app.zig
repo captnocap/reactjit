@@ -1574,12 +1574,43 @@ fn routeCommandToHostWindow(cmd: std.json.Value) void {
         }
     }
 
+    // APPEND/INSERT_BEFORE/REMOVE with parentId == window_id can't replay
+    // verbatim on the child — the Window node itself was never CREATE'd
+    // there (we filter it above). Translate into the *_ROOT / *_FROM_ROOT
+    // variants so the child anchors the subtree on its own root list.
     var line: std.ArrayList(u8) = .{};
     defer line.deinit(g_alloc);
     line.appendSlice(g_alloc, "{\"type\":\"mutations\",\"commands\":[") catch return;
-    line.writer(g_alloc).print("{f}", .{std.json.fmt(cmd, .{})}) catch return;
+
+    var translated: ?[]const u8 = null;
+    const op_str = op_v.string;
+    if (std.mem.eql(u8, op_str, "APPEND") or std.mem.eql(u8, op_str, "INSERT_BEFORE") or std.mem.eql(u8, op_str, "REMOVE")) {
+        if (cmd.object.get("parentId")) |pid_v| if (jsonInt(pid_v)) |pid| if (@as(u32, @intCast(pid)) == window_id) {
+            const cid_v = cmd.object.get("childId") orelse return;
+            const cid = jsonInt(cid_v) orelse return;
+            if (std.mem.eql(u8, op_str, "APPEND")) {
+                line.writer(g_alloc).print("{{\"op\":\"APPEND_TO_ROOT\",\"childId\":{d}}}", .{cid}) catch return;
+                translated = "APPEND_TO_ROOT";
+            } else if (std.mem.eql(u8, op_str, "INSERT_BEFORE")) {
+                const bid_v = cmd.object.get("beforeId") orelse return;
+                const bid = jsonInt(bid_v) orelse return;
+                line.writer(g_alloc).print("{{\"op\":\"INSERT_BEFORE_ROOT\",\"childId\":{d},\"beforeId\":{d}}}", .{ cid, bid }) catch return;
+                translated = "INSERT_BEFORE_ROOT";
+            } else { // REMOVE
+                line.writer(g_alloc).print("{{\"op\":\"REMOVE_FROM_ROOT\",\"childId\":{d}}}", .{cid}) catch return;
+                translated = "REMOVE_FROM_ROOT";
+            }
+        };
+    }
+    if (translated == null) {
+        line.writer(g_alloc).print("{f}", .{std.json.fmt(cmd, .{})}) catch return;
+    }
     line.appendSlice(g_alloc, "]}") catch return;
-    std.debug.print("[window-route/parent] window={d} slot={d} op={s} bytes={d}\n", .{ window_id, binding.slot, op_v.string, line.items.len });
+    if (translated) |t| {
+        std.debug.print("[window-route/parent] window={d} slot={d} op={s}→{s} bytes={d}\n", .{ window_id, binding.slot, op_str, t, line.items.len });
+    } else {
+        std.debug.print("[window-route/parent] window={d} slot={d} op={s} bytes={d}\n", .{ window_id, binding.slot, op_str, line.items.len });
+    }
     windows.sendLineToChild(binding.slot, line.items);
 }
 
@@ -1688,10 +1719,6 @@ fn applyProps(node: *Node, props: std.json.Value, type_name: ?[]const u8) void {
             // Path or URL to a video. framework/videos.zig hooks the paint
             // pass and decodes lazily — no audio yet, just frames.
             if (dupJsonText(v)) |s| node.video_src = s;
-        } else if (std.mem.eql(u8, k, "cartridgeSrc")) {
-            // Embedded cartridge (zig-out/bin/<name>) — engine.zig:619 walks
-            // the tree and lifts these into nested host instances.
-            if (dupJsonText(v)) |s| node.cartridge_src = s;
         } else if (std.mem.eql(u8, k, "href")) {
             if (dupJsonText(v)) |s| node.href = s;
         } else if (std.mem.eql(u8, k, "tooltip")) {

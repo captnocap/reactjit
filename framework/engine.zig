@@ -528,45 +528,6 @@ var scrollbar_drag_cached_max_scroll: f32 = 0;
 var scrollbar_hover_slot: u32 = 0;
 var scrollbar_hover_axis: ScrollbarAxis = .vertical;
 
-/// Walk the node tree looking for nodes with cartridge_src set.
-/// For each one found, load the .so (if not already loaded) and set
-/// the cartridge node's children to the loaded app's root children.
-fn scanCartridgeNodes(node: *Node) void {
-    if (node.cartridge_src) |src| {
-        // Check if already loaded (children non-empty means we already set it up)
-        if (node.children.len == 0) {
-            const idx = cart.load(src) catch |err| {
-                std.debug.print("[engine] Failed to load cartridge {s}: {}\n", .{ src, err });
-                return;
-            };
-            if (cart.get(idx)) |cr| {
-                // Set this node's children to the cartridge's root children
-                node.children = cr.root.children;
-                // Inherit background color if the cartridge root has one
-                if (cr.root.style.background_color != null and node.style.background_color == null) {
-                    node.style.background_color = cr.root.style.background_color;
-                }
-                std.debug.print("[engine] Loaded cartridge: {s}\n", .{cr.titleSlice()});
-            }
-        } else {
-            // Already loaded — refresh children from the active root
-            // (the cartridge's tick may have changed the tree)
-            for (0..cart.count()) |i| {
-                if (cart.get(i)) |cr| {
-                    if (std.mem.eql(u8, cr.soPathSlice(), src)) {
-                        node.children = cr.root.children;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    // Recurse into children
-    for (node.children) |*child| {
-        scanCartridgeNodes(child);
-    }
-}
-
 fn findNodeByScrollSlot(node: *Node, slot: u32) ?*Node {
     if (slot == 0) return null;
     if (node.scroll_persist_slot == slot) return node;
@@ -765,10 +726,13 @@ fn updateHover(root: *Node, mx: f32, my: f32) void {
             js_vm.callGlobal("__endJsEvent");
             state_mod.markDirty();
         }
-        // Tooltip: show if node carries tooltip text
+        // Tooltip: show if node carries tooltip text. `node.computed` is in
+        // content space — translate to screen space by subtracting the
+        // cumulative scroll offset of every scroll-ancestor.
         if (node.tooltip) |tt| {
             const r = node.computed;
-            tooltip.show(tt, r.x, r.y, r.w, r.h);
+            const off = events.cumulativeScrollOffset(root, node);
+            tooltip.show(tt, r.x - off.sx, r.y - off.sy, r.w, r.h);
         } else {
             tooltip.hide();
         }
@@ -872,6 +836,12 @@ fn windowHitTestCallback(
     const pt = point orelse return c.SDL_HITTEST_NORMAL;
     const mx: f32 = @floatFromInt(pt.x);
     const my: f32 = @floatFromInt(pt.y);
+
+    // Scrollbars sit on the inner edge of scroll containers and aren't real
+    // DOM nodes, so they lose to any window_resize node along the same window
+    // edge. Give them priority — otherwise the right-edge vertical scrollbar
+    // is unclickable because SDL grabs the click for a window resize.
+    if (hitTestScrollbar(root, mx, my)) |_| return c.SDL_HITTEST_NORMAL;
 
     // Resize still uses SDL's native hit-test. Drag regions are handled in the
     // event loop so the framework can count clicks before moving the window.
@@ -1111,11 +1081,13 @@ fn runJsHandlerExpr(expr: []const u8) void {
     state_mod.markDirty();
 }
 
-fn measureCallback(t: []const u8, font_size: u16, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool, bold: bool) layout.TextMetrics {
+fn measureCallback(t: []const u8, font_size: u16, font_family_id: u8, max_width: f32, letter_spacing: f32, line_height: f32, max_lines: u16, no_wrap: bool, bold: bool) layout.TextMetrics {
     if (g_text_engine) |te| {
         // gpu_text holds the active-weight flag — set it for the duration of
         // the measurement so glyph advances pull from the right atlas face,
         // then restore. Mirrors the paint path (drawNodeTextCommon).
+        gpu.setFontFamily(font_family_id);
+        defer gpu.setFontFamily(0);
         gpu.setBold(bold);
         defer gpu.setBold(false);
         return te.measureTextWrappedEx(t, font_size, max_width, letter_spacing, line_height, max_lines, no_wrap, bold);
@@ -1141,6 +1113,7 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     if (node.line_height > 0) gpu.setLineHeightOverride(node.line_height);
     if (node.letter_spacing != 0) gpu.setLetterSpacing(node.letter_spacing);
     const bold = node.font_weight >= 600;
+    if (node.font_family_id != 0) gpu.setFontFamily(node.font_family_id);
     if (bold) gpu.setBold(true);
     const draw_width = if (node.no_wrap) @as(f32, 0) else max_width;
     // Route through the text engine so paint shares the wordWrap algorithm
@@ -1162,6 +1135,7 @@ fn drawNodeTextCommon(node: *Node, text: []const u8, x: f32, y: f32, max_width: 
     if (node.line_height > 0) gpu.setLineHeightOverride(0);
     if (node.letter_spacing != 0) gpu.setLetterSpacing(0);
     if (bold) gpu.setBold(false);
+    if (node.font_family_id != 0) gpu.setFontFamily(0);
     if (node.inline_glyphs) |glyphs| {
         paintInlineGlyphs(glyphs, node.font_size);
     }
@@ -1275,7 +1249,6 @@ fn nodedumpTag(node: *Node) []const u8 {
     if (node.video_src != null) return "Video";
     if (node.render_src != null) return "Render";
     if (node.input_id != null) return "TextInput";
-    if (node.cartridge_src != null) return "Cartridge";
     if (node.effect_type != null) return "Effect";
     if (node.scene3d) return "Scene3D";
     if (node.handlers.on_press != null or node.handlers.js_on_press != null or node.handlers.lua_on_press != null) return "Pressable";
@@ -2348,11 +2321,6 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
     const pr = node.style.padRight();
     const pb = node.style.padBottom();
     const inner_h = @max(@as(f32, 0), r.h - pt - pb);
-    const show_focus_ring = input.isFocused(id) and !input.isMultiline(id) and node.input_color_rows == null;
-    if (show_focus_ring) {
-        const pad: f32 = 4;
-        gpu.drawRect(r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2, 0, 0, 0, 0, 5, 1.5, 1.5, 1.5, 1.5, 0.30);
-    }
     const typed = input.getText(id);
     const is_placeholder = typed.len == 0;
     const is_multiline = input.isMultiline(id);
@@ -2362,6 +2330,7 @@ noinline fn paintTextInput(node: *Node, id: u8) void {
         const metrics = measureCallback(
             if (!is_placeholder) typed else (node.placeholder orelse ""),
             node.font_size,
+            node.font_family_id,
             max_w,
             node.letter_spacing,
             node.line_height,
@@ -2904,6 +2873,24 @@ pub fn run(config_in: AppConfig) !void {
     js_vm.initVM();
     defer js_vm.deinit();
 
+    // IFTTT host-fn no-op stubs — telemetry/system_signals fire these
+    // unconditionally via v8_runtime.evalExpr at ~1Hz. The cart bundle
+    // (runtime/index.tsx) installs the real shims via useIFTTT.ts, but
+    // window-child processes go through the same engine startup WITHOUT
+    // ever loading the cart bundle, so without this every system poll
+    // floods the child's stderr with ReferenceErrors. Defining no-ops
+    // up front means the worst case is "silently dropped event" rather
+    // than "log spam every second forever." useIFTTT.ts later overwrites
+    // these with the real emit dispatchers in the parent host.
+    js_vm.evalScript(
+        "for (const k of [" ++
+        "'__ifttt_onKeyDown','__ifttt_onKeyUp','__ifttt_onClipboardChange'," ++
+        "'__ifttt_onSystemFocus','__ifttt_onSystemDrop','__ifttt_onSystemCursor'," ++
+        "'__ifttt_onSystemSlowFrame','__ifttt_onSystemHang'," ++
+        "'__ifttt_onSystemRam','__ifttt_onSystemVram','__ifttt_onSystemResize'" ++
+        "]) if (typeof globalThis[k] !== 'function') globalThis[k] = () => {};"
+    );
+
     // LuaJIT logic VM (main-thread — events, state, conditionals)
     luajit_runtime.initVM();
     defer luajit_runtime.deinit();
@@ -2958,7 +2945,6 @@ pub fn run(config_in: AppConfig) !void {
 
     // Main loop
     var running = true;
-    var g_carts_scanned = false;
     var fps_frames: u32 = 0;
     var fps_last: u64 = c.SDL_GetTicks();
     // Last time stderr telemetry was printed. Separate from fps_last so the
@@ -3878,12 +3864,9 @@ pub fn run(config_in: AppConfig) !void {
         }
         const phase_t1 = std.time.microTimestamp();
 
-        // Tick all loaded cartridges + scan for new <Cartridge> nodes (first frame only)
+        // Tick all loaded cartridges (dev_shell QJS path; no-op in V8 mode where
+        // <Cartridge> is implemented entirely in JS via runtime/cartridge_loader).
         if (cart.count() > 0) cart.tickAll(@truncate(c.SDL_GetTicks()));
-        if (!g_carts_scanned) {
-            g_carts_scanned = true;
-            scanCartridgeNodes(config.root);
-        }
 
         // (devtools tick removed — inspector lives in tsz-tools)
 
