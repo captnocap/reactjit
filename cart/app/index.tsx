@@ -28,6 +28,7 @@ import {
 } from './shell';
 import { AssistantChat } from './chat/AssistantChat';
 import { AssistantChatProvider } from './chat/AssistantChatProvider';
+import ChatPage from './chat/page';
 import { useChatHasAny } from './chat/store';
 import type { ChatShape } from './chat/types';
 
@@ -563,14 +564,8 @@ function ShellBody() {
                 <Route path="/gallery">
                   <GalleryPage />
                 </Route>
-                {/* /chat is special — there's no separate page
-                    component; the activity area is just the live chat
-                    surface, which we render below outside Routes since
-                    it needs to sit above the BottomInputBar. This empty
-                    Route exists only to register the path with the
-                    router so deeplinks resolve. */}
                 <Route path="/chat">
-                  <Box />
+                  <ChatPage />
                 </Route>
               </Box>
               {/* SideMenuInput — absolute overlay on the left.
@@ -603,23 +598,9 @@ function ShellBody() {
                   </Box>
                 ) : null}
               </S.AppSideMenuInput>
-              {/* /chat activity surface — fills the activity content
-                  area, leaves space for the side rail (left: sideWidth)
-                  and the bottom InputStrip (bottom: paddingBottom). The
-                  rail's chat slot keeps the history list in view; this
-                  one shows the live transcript. */}
-              {chatShape === 'activity' ? (
-                <Box style={{
-                  position: 'absolute',
-                  left: sideWidth, top: 0, right: 0,
-                  bottom: paddingBottom,
-                  paddingLeft: 24, paddingRight: 24,
-                  paddingTop: 24, paddingBottom: 16,
-                  flexDirection: 'column',
-                }}>
-                  <ConditionalAssistantChat shape="activity" />
-                </Box>
-              ) : null}
+              {/* /chat activity surface lives in the Route block above,
+                  not as an absolute overlay — the rail's chat slot keeps
+                  the history list in view via the side-rail render. */}
               {/* BottomInputBar — outer conditional removes it from the
                   tree when isSide. Inner display:'flex' is explicit
                   (avoids any framework ambiguity). Height comes from
