@@ -55,7 +55,7 @@ pub const WindowKind = enum {
     independent,
 };
 
-const MAX_WINDOWS = 8;
+const MAX_WINDOWS = 32;
 
 pub const WindowSlot = struct {
     active: bool = false,
