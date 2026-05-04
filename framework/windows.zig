@@ -398,18 +398,28 @@ pub fn setRoot(idx: usize, root: *Node) void {
     layout.markLayoutDirty();
 }
 
+/// Per-mutation send/queue logs are gated behind ZIGOS_TRACE_IPC=1. A fat
+/// initial cart paint is ~3000 mutations and the per-line logs drown
+/// everything else. Once-per-window logs (spawn/accept/flush/recv) stay
+/// on unconditionally.
+fn ipcTracePerMessage() bool {
+    const env = std.posix.getenv("ZIGOS_TRACE_IPC") orelse return false;
+    return env.len > 0 and env[0] != '0';
+}
+
 /// Queue or send one NDJSON message to an independent child window.
 pub fn sendLineToChild(idx: usize, line: []const u8) void {
     if (idx >= MAX_WINDOWS or !slots[idx].active or slots[idx].kind != .independent) return;
+    const trace = ipcTracePerMessage();
     if (slots[idx].server) |*server| {
         if (server.connected() and server.sendLine(line)) {
-            std.debug.print("[window-ipc/parent] send slot={d} bytes={d}\n", .{ idx, line.len });
+            if (trace) std.debug.print("[window-ipc/parent] send slot={d} bytes={d}\n", .{ idx, line.len });
             return;
         }
     }
     slots[idx].pending.appendSlice(std.heap.c_allocator, line) catch return;
     slots[idx].pending.append(std.heap.c_allocator, '\n') catch {};
-    std.debug.print("[window-ipc/parent] queue slot={d} bytes={d} pending={d}\n", .{
+    if (trace) std.debug.print("[window-ipc/parent] queue slot={d} bytes={d} pending={d}\n", .{
         idx,
         line.len,
         slots[idx].pending.items.len,

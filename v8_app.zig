@@ -1606,10 +1606,18 @@ fn routeCommandToHostWindow(cmd: std.json.Value) void {
         line.writer(g_alloc).print("{f}", .{std.json.fmt(cmd, .{})}) catch return;
     }
     line.appendSlice(g_alloc, "]}") catch return;
-    if (translated) |t| {
-        std.debug.print("[window-route/parent] window={d} slot={d} op={s}→{s} bytes={d}\n", .{ window_id, binding.slot, op_str, t, line.items.len });
-    } else {
-        std.debug.print("[window-route/parent] window={d} slot={d} op={s} bytes={d}\n", .{ window_id, binding.slot, op_str, line.items.len });
+    // Per-mutation log — gated behind ZIGOS_TRACE_IPC=1 to avoid drowning
+    // the rest of the host log on a fat initial cart paint.
+    const trace_ipc = blk: {
+        const env = std.posix.getenv("ZIGOS_TRACE_IPC") orelse break :blk false;
+        break :blk env.len > 0 and env[0] != '0';
+    };
+    if (trace_ipc) {
+        if (translated) |t| {
+            std.debug.print("[window-route/parent] window={d} slot={d} op={s}→{s} bytes={d}\n", .{ window_id, binding.slot, op_str, t, line.items.len });
+        } else {
+            std.debug.print("[window-route/parent] window={d} slot={d} op={s} bytes={d}\n", .{ window_id, binding.slot, op_str, line.items.len });
+        }
     }
     windows.sendLineToChild(binding.slot, line.items);
 }
@@ -3263,7 +3271,12 @@ fn childDispatchEvent(id: u32, handler: []const u8) void {
 }
 
 fn childApplyMessage(line: []const u8) void {
-    std.debug.print("[window-child] recv bytes={d} {s}\n", .{ line.len, line });
+    // Per-message recv/apply lines gated behind ZIGOS_TRACE_IPC=1.
+    const trace = blk: {
+        const env = std.posix.getenv("ZIGOS_TRACE_IPC") orelse break :blk false;
+        break :blk env.len > 0 and env[0] != '0';
+    };
+    if (trace) std.debug.print("[window-child] recv bytes={d} {s}\n", .{ line.len, line });
     const parsed = std.json.parseFromSlice(std.json.Value, g_alloc, line, .{}) catch return;
     defer parsed.deinit();
     if (parsed.value != .object) return;
@@ -3275,7 +3288,7 @@ fn childApplyMessage(line: []const u8) void {
     if (!std.mem.eql(u8, typ_v.string, "mutations") and !std.mem.eql(u8, typ_v.string, "init")) return;
     const commands_v = parsed.value.object.get("commands") orelse return;
     if (commands_v != .array) return;
-    std.debug.print("[window-child] apply commands={d}\n", .{commands_v.array.items.len});
+    if (trace) std.debug.print("[window-child] apply commands={d}\n", .{commands_v.array.items.len});
     for (commands_v.array.items) |cmd| applyCommand(cmd) catch |err| {
         std.debug.print("[window-child] apply error: {s}\n", .{@errorName(err)});
     };
