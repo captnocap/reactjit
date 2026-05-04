@@ -20,6 +20,19 @@ import { useRoute } from '@reactjit/runtime/router';
 import { parseIntent, type Node } from '@reactjit/runtime/intent/parser';
 import { useAssistantChat } from './useAssistantChat';
 import { appendTurn, nextTurnId, setAsker, setChatStatus, updateTurnBody, updateTurnSurface } from './store';
+import {
+  grantPermission,
+  invokeTool,
+  parseGrantReply,
+  parseToolReply,
+  registerBuiltinTools,
+  setRouteRef,
+  type ToolCall,
+} from '../tools';
+
+// Run the cart's tool registration exactly once per process. Importing
+// this module is the trigger; the registry no-ops on subsequent calls.
+registerBuiltinTools();
 
 // Loom system prompt — teaches the model the tag DSL the persistent
 // chat parses with `parseIntent`. Always-on for v1; promoted to a
@@ -61,7 +74,16 @@ Rules:
 - A <Submit>'s reply attribute is a template — every {fieldKey} is replaced with that field's current value. Always use this so you control the format.
 - The user will reply with the interpolated string. When you receive a form submission, respond with a confirmation card showing what was received.
 - Plain text outside any tag is allowed for short prose.
-- No other tags. No HTML. No markdown.`;
+- No other tags. No HTML. No markdown.
+
+Tools:
+- You can drive app actions (navigate, read/write the user's data) by emitting a Btn whose reply uses the @tool/ protocol:
+    <Btn reply="@tool/navigate?json={"path":"/settings"}">Open settings</Btn>
+- The reply format is @tool/NAME?json=<URL-encoded JSON args>. Discover available tools by emitting <Btn reply='@tool/list-tools?json={}'>list tools</Btn> on the very first turn (or whenever you need fresh capability info).
+- Permission gates: every tool call goes through the user's grant store. If the user hasn't granted the required (tool, scope) pair, the dispatcher returns a permission_required result and you should respond with a grant card:
+    <Btn reply="@grant/TOOL/SCOPE">Grant TOOL on SCOPE</Btn>
+- Once granted, re-issue the original tool call. Do not loop on a denied call without first asking the user.
+- Tool results land back in the next user turn, framed as: [tool-result] ok=BOOL ...details. Read it and respond accordingly.`;
 
 function hasIntentTags(nodes: Node[]): boolean {
   return nodes.some((n) => n.kind !== 'text');
@@ -73,6 +95,18 @@ function nowHHMMSS(): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+function friendlyToolLabel(call: ToolCall): string {
+  const a = call.args ?? {};
+  if (call.name === 'navigate' && typeof a.path === 'string') return `→ navigate ${a.path}`;
+  if (call.name === 'getRoute') return `→ getRoute`;
+  if (call.name.endsWith('-entity') && typeof a.name === 'string') {
+    const id = typeof a.id === 'string' ? `/${a.id}` : '';
+    return `→ ${call.name} ${a.name}${id}`;
+  }
+  if (call.name === 'list-tools' || call.name === 'list-entities') return `→ ${call.name}`;
+  return `→ ${call.name}`;
+}
+
 export function AssistantChatProvider() {
   const chat = useAssistantChat();
   const route = useRoute();
@@ -82,6 +116,12 @@ export function AssistantChatProvider() {
   // captured the first time setAsker ran.
   const routeRef = useRef<string>(route.path);
   routeRef.current = route.path;
+
+  // Publish the route ref to the tools module so the `getRoute` tool
+  // resolves to the live path. setRouteRef stores the ref by reference,
+  // not by value, so subsequent updates to routeRef.current flow
+  // through without further calls.
+  useEffect(() => { setRouteRef(routeRef); }, []);
 
   // Last route the assistant was told about. Compare on each ask:
   //   - first ask of the session → prepend "User is on route X"
@@ -111,23 +151,87 @@ export function AssistantChatProvider() {
   }, [chat.phase, chat.lastStatus, chat.error]);
 
   useEffect(() => {
+    // Stream a synthesized prompt into a freshly-appended assistant
+    // turn. Used by both the normal user-text path and the
+    // tool/grant-protocol paths.
+    const driveAssistantTurn = async (asstId: string, prompt: string): Promise<string> => {
+      const stripLeading = (s: string) => s.replace(/^[ \t]+/, '');
+      try {
+        const final = await chat.ask(prompt, {
+          onPart: (partial) => updateTurnBody(asstId, stripLeading(partial)),
+        });
+        const finalText = final && final.length > 0 ? stripLeading(final) : '';
+        if (finalText) updateTurnBody(asstId, finalText);
+        if (finalText) {
+          try {
+            const nodes = parseIntent(finalText);
+            if (hasIntentTags(nodes)) {
+              updateTurnSurface(asstId, { kind: 'intent', nodes });
+              updateTurnBody(asstId, '');
+            }
+          } catch { /* parse failure → leave prose body in place */ }
+        }
+        return final;
+      } catch (err: any) {
+        const msg = err && err.message ? err.message : String(err);
+        updateTurnBody(asstId, `[error] ${msg}`);
+        throw err;
+      }
+    };
+
     const orchestratedAsk = async (text: string): Promise<string> => {
       const ts = nowHHMMSS();
+
+      // ── Tool-protocol interception ────────────────────────────────
+      //
+      // A Btn click that emits @tool/NAME?json=... is a request to run
+      // a registered tool — not text the user typed. Intercept before
+      // the normal chat flow: render a friendly user turn, dispatch
+      // through the permission-gated invokeTool, then drive the asst
+      // turn with a `[tool-result]` synth-prompt so the model can
+      // react.
+      const toolCall = parseToolReply(text);
+      if (toolCall) {
+        const userId = nextTurnId('u');
+        const asstId = nextTurnId('a');
+        appendTurn({ id: userId, author: 'user', timestamp: ts, body: friendlyToolLabel(toolCall) });
+        appendTurn({ id: asstId, author: 'asst', timestamp: ts, body: '' });
+        const result = await invokeTool(toolCall);
+        const resultJson = JSON.stringify(result);
+        return driveAssistantTurn(asstId, `[tool-result] tool=${toolCall.name} ${resultJson}`);
+      }
+
+      // ── Grant-protocol interception ───────────────────────────────
+      //
+      // @grant/TOOL/SCOPE writes a permission row through to pg, then
+      // signals the model so it can re-issue the original tool call.
+      const grant = parseGrantReply(text);
+      if (grant) {
+        const userId = nextTurnId('u');
+        const asstId = nextTurnId('a');
+        appendTurn({
+          id: userId, author: 'user', timestamp: ts,
+          body: `→ grant ${grant.tool} on ${grant.scope}`,
+        });
+        appendTurn({ id: asstId, author: 'asst', timestamp: ts, body: '' });
+        try {
+          await grantPermission({ tool: grant.tool, scope: grant.scope });
+        } catch (e: any) {
+          updateTurnBody(asstId, `[error] grant failed: ${e?.message ?? String(e)}`);
+          throw e;
+        }
+        return driveAssistantTurn(
+          asstId,
+          `[grant] tool=${grant.tool} scope=${grant.scope} now in effect. Re-issue the previous tool call now.`,
+        );
+      }
+
+      // ── Normal user-text path ─────────────────────────────────────
       const userId = nextTurnId('u');
       const asstId = nextTurnId('a');
 
-      appendTurn({
-        id: userId,
-        author: 'user',
-        timestamp: ts,
-        body: text,
-      });
-      appendTurn({
-        id: asstId,
-        author: 'asst',
-        timestamp: ts,
-        body: '',
-      });
+      appendTurn({ id: userId, author: 'user', timestamp: ts, body: text });
+      appendTurn({ id: asstId, author: 'asst', timestamp: ts, body: '' });
 
       // Build the actual prompt sent to Claude — prepend a route note
       // when this is the first send or the route has changed since the
@@ -151,40 +255,7 @@ export function AssistantChatProvider() {
       }
 
       const promptForClaude = loomPrelude + routeNote + text;
-
-      try {
-        // Trim only LEADING whitespace — some models emit a leading
-        // space as their first token (tokenizer artifact, especially
-        // BPE-style tokenizers) which renders as a visible indent
-        // because the chat row's first character is the body. We
-        // preserve trailing whitespace in case the model is mid-word.
-        const stripLeading = (s: string) => s.replace(/^[ \t]+/, '');
-        const final = await chat.ask(promptForClaude, {
-          onPart: (partial) => updateTurnBody(asstId, stripLeading(partial)),
-        });
-        const finalText = final && final.length > 0 ? stripLeading(final) : '';
-        if (finalText) updateTurnBody(asstId, finalText);
-
-        // Loom always-on: try to parse the finalized reply. If the
-        // model emitted any non-text tags, attach an intent surface
-        // and clear the body (the raw `[<Title>...]` text would
-        // otherwise render alongside the rendered card). If parsing
-        // yields only text nodes, leave the prose body alone.
-        if (finalText) {
-          try {
-            const nodes = parseIntent(finalText);
-            if (hasIntentTags(nodes)) {
-              updateTurnSurface(asstId, { kind: 'intent', nodes });
-              updateTurnBody(asstId, '');
-            }
-          } catch { /* parse failure → leave prose body in place */ }
-        }
-        return final;
-      } catch (err: any) {
-        const msg = err && err.message ? err.message : String(err);
-        updateTurnBody(asstId, `[error] ${msg}`);
-        throw err;
-      }
+      return driveAssistantTurn(asstId, promptForClaude);
     };
 
     setAsker(orchestratedAsk);

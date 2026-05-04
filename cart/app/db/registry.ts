@@ -9,7 +9,7 @@
 import type { BucketId } from './buckets';
 
 export const ENTITY_TO_BUCKET: Record<string, BucketId> = {
-  // ── user (18) ─────────────────────────────────────────────────────
+  // ── user (19) ─────────────────────────────────────────────────────
   'avatar': 'user',
   'calendar-dimension': 'user',
   'command-composer': 'user',
@@ -23,6 +23,7 @@ export const ENTITY_TO_BUCKET: Record<string, BucketId> = {
   'privacy': 'user',
   'role-assignment': 'user',
   'settings': 'user',
+  'tool-permission': 'user',
   'toolbar': 'user',
   'user': 'user',
   'user-intervention': 'user',
