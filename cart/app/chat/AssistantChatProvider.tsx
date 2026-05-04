@@ -17,8 +17,55 @@
 
 import { useEffect, useRef } from 'react';
 import { useRoute } from '@reactjit/runtime/router';
+import { parseIntent, type Node } from '@reactjit/runtime/intent/parser';
 import { useAssistantChat } from './useAssistantChat';
-import { appendTurn, nextTurnId, setAsker, setChatStatus, updateTurnBody } from './store';
+import { appendTurn, nextTurnId, setAsker, setChatStatus, updateTurnBody, updateTurnSurface } from './store';
+
+// Loom system prompt — teaches the model the tag DSL the persistent
+// chat parses with `parseIntent`. Always-on for v1; promoted to a
+// settings toggle once we've confirmed it works across both Claude
+// and local-runtime backends. Mirrors the prompt the chat-loom probe
+// cart used (cart/testing_carts/chat-loom.tsx) but lives here because
+// the persistent chat is now the only place loom rendering ships.
+const LOOM_SYSTEM_PROMPT = `You respond to the user with an interactive chat surface, not prose.
+
+Wrap your entire response in [ ... ]. Inside, compose a small tree from these tags ONLY:
+
+  <Title>large heading text</Title>
+  <Text>body paragraph text</Text>
+  <Card>group related content in a padded surface</Card>
+  <Row>arrange children horizontally</Row>
+  <Col>arrange children vertically</Col>
+  <List>one item per line</List>
+  <Btn reply="what to send back when clicked">label shown to user</Btn>
+
+Display tags (use freely to make the surface read like a real UI):
+
+  <Badge tone=success>label</Badge>     // tones: neutral, success, warning, error, info — bare word, no quotes
+  <Code lang=ts>...code text...</Code>  // formatted code block; lang is bare
+  <Divider />                           // horizontal separator inside a Col
+  <Kbd>Cmd+S</Kbd>                      // inline keyboard chip
+  <Spacer size=md />                    // vertical/horizontal gap; size: sm, md, lg
+
+Forms (use when collecting structured input):
+
+  <Form>
+    <Field name="fieldKey" label="Label shown above" placeholder="hint text" />
+    <Field name="another" label="..." />
+    <Submit reply="message template with {fieldKey} interpolation">Submit label</Submit>
+  </Form>
+
+Rules:
+- Always wrap output in [ ... ].
+- Use <Btn> for single-choice picks. Use <Form> when you need multiple values.
+- A <Submit>'s reply attribute is a template — every {fieldKey} is replaced with that field's current value. Always use this so you control the format.
+- The user will reply with the interpolated string. When you receive a form submission, respond with a confirmation card showing what was received.
+- Plain text outside any tag is allowed for short prose.
+- No other tags. No HTML. No markdown.`;
+
+function hasIntentTags(nodes: Node[]): boolean {
+  return nodes.some((n) => n.kind !== 'text');
+}
 
 function nowHHMMSS(): string {
   const d = new Date();
@@ -44,6 +91,12 @@ export function AssistantChatProvider() {
   // sent to Claude as a [system-style] note so it stays oriented
   // without polluting the chat surface.
   const lastSentRouteRef = useRef<string | null>(null);
+
+  // First-ever send of this provider's lifetime — used to prepend the
+  // loom system prompt exactly once. Neither useClaudeChat nor
+  // useLocalChat exposes a system-prompt knob, so the prompt rides on
+  // the first user message (matches the pattern in cart/browse-agent.tsx).
+  const loomPromptSentRef = useRef(false);
 
   // Publish hook state to the chat-status store so AssistantChat's
   // header can render live phase/status/error. Without this, every
@@ -88,7 +141,16 @@ export function AssistantChatProvider() {
         routeNote = `[Context: User has moved from ${lastSentRouteRef.current} to ${currentRoute}.]\n\n`;
       }
       lastSentRouteRef.current = currentRoute;
-      const promptForClaude = routeNote + text;
+
+      // Prepend the loom system prompt on the very first send. Backend
+      // hooks have no system-prompt parameter; this is the only seam.
+      let loomPrelude = '';
+      if (!loomPromptSentRef.current) {
+        loomPrelude = `${LOOM_SYSTEM_PROMPT}\n\n`;
+        loomPromptSentRef.current = true;
+      }
+
+      const promptForClaude = loomPrelude + routeNote + text;
 
       try {
         // Trim only LEADING whitespace — some models emit a leading
@@ -100,7 +162,23 @@ export function AssistantChatProvider() {
         const final = await chat.ask(promptForClaude, {
           onPart: (partial) => updateTurnBody(asstId, stripLeading(partial)),
         });
-        if (final && final.length > 0) updateTurnBody(asstId, stripLeading(final));
+        const finalText = final && final.length > 0 ? stripLeading(final) : '';
+        if (finalText) updateTurnBody(asstId, finalText);
+
+        // Loom always-on: try to parse the finalized reply. If the
+        // model emitted any non-text tags, attach an intent surface
+        // and clear the body (the raw `[<Title>...]` text would
+        // otherwise render alongside the rendered card). If parsing
+        // yields only text nodes, leave the prose body alone.
+        if (finalText) {
+          try {
+            const nodes = parseIntent(finalText);
+            if (hasIntentTags(nodes)) {
+              updateTurnSurface(asstId, { kind: 'intent', nodes });
+              updateTurnBody(asstId, '');
+            }
+          } catch { /* parse failure → leave prose body in place */ }
+        }
         return final;
       } catch (err: any) {
         const msg = err && err.message ? err.message : String(err);

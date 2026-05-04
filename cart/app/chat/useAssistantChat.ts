@@ -18,7 +18,7 @@
 // inactive hook spins idle — for useLocalChat that means an empty
 // model path, which short-circuits the worker spawn.
 
-import { useCRUD } from '@reactjit/runtime/hooks';
+import { useCRUD } from '../db';
 import { useClaudeChat } from '@reactjit/runtime/hooks/useClaudeChat';
 import { useLocalChat } from '@reactjit/runtime/hooks/useLocalChat';
 import { callHost, hasHost } from '@reactjit/runtime/ffi';

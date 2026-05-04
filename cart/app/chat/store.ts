@@ -12,7 +12,7 @@
 // is the simplest version of this that doesn't fight the renderer.
 
 import * as React from 'react';
-import type { AssistantTurn } from './types';
+import type { AssistantTurn, ChatSurface } from './types';
 
 // Empty by default — turns flow in via `appendTurn` from the
 // AssistantChatProvider as the user submits and Claude replies. The
@@ -58,6 +58,21 @@ export function updateTurnBody(id: string, body: string): void {
     { ...cur, body } as AssistantTurn,
     ..._turns.slice(i + 1),
   ];
+  _notify();
+}
+
+/** Attach (or clear) an embedded surface card on an assistant turn.
+ *  Provider calls this after parseIntent on the finalized reply when
+ *  the model emitted chat-loom tags. Pass `null` to drop a surface. */
+export function updateTurnSurface(id: string, surface: ChatSurface | null): void {
+  const i = _turns.findIndex((t) => t.id === id);
+  if (i < 0) return;
+  const cur = _turns[i];
+  if (cur.author !== 'asst') return;
+  const next: any = { ...cur };
+  if (surface == null) delete next.surface;
+  else next.surface = surface;
+  _turns = [..._turns.slice(0, i), next, ..._turns.slice(i + 1)];
   _notify();
 }
 

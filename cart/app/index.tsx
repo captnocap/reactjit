@@ -7,16 +7,17 @@ import { Route, Router, useNavigate, useRoute } from '@reactjit/runtime/router';
 import { installBrowserShims } from '@reactjit/runtime/hooks';
 import { useBreakpoint, useActiveVariant, setVariant } from '@reactjit/runtime/theme';
 import { TooltipRoot } from '@reactjit/runtime/tooltip/Tooltip';
-import { Home, Info, Maximize, Minimize, Settings, User2, X } from '@reactjit/runtime/icons/icons';
+import { Home, LayoutGrid, Maximize, Minimize, Settings, User2, X } from '@reactjit/runtime/icons/icons';
 import { callHost } from '@reactjit/runtime/ffi';
 import { applyGalleryTheme, getActiveGalleryThemeId, useGalleryTheme } from './gallery/gallery-theme';
 import { classifiers as S } from '@reactjit/core';
 import { useIFTTT } from '@reactjit/runtime/hooks/useIFTTT';
 import IndexPage from './page.tsx';
-import AboutPage from './about/page.tsx';
 import SettingsPage, { SettingsNav } from './settings/page.tsx';
 import SweatshopPage from './sweatshop/page';
 import CharacterPage from './character/page';
+import ComposerPage from './composer/page';
+import GalleryPage from './gallery';
 import { OnboardingProvider, useOnboarding } from './onboarding/state.tsx';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
@@ -37,9 +38,10 @@ type RouteMode = 'full' | 'side';
 const ROUTES: Array<{ path: string; label: string; icon: number[][]; mode: RouteMode }> = [
   { path: '/',                  label: 'Home',      icon: Home,     mode: 'full' },
   { path: '/settings',          label: 'Settings',  icon: Settings, mode: 'side' },
-  { path: '/about',             label: 'About',     icon: Info,     mode: 'full' },
   { path: '/activity/sweatshop', label: 'Sweatshop', icon: Settings, mode: 'side' },
+  { path: '/composer',           label: 'Composer',  icon: Settings, mode: 'side' },
   { path: '/character',          label: 'Character', icon: User2,    mode: 'side' },
+  { path: '/gallery',            label: 'Gallery',   icon: LayoutGrid, mode: 'side' },
 ];
 
 function NavLink({ path, label, icon }: { path: string; label: string; icon: number[][] }) {
@@ -512,9 +514,6 @@ function ShellBody() {
                 <Route path="/">
                   <IndexPage />
                 </Route>
-                <Route path="/about">
-                  <AboutPage />
-                </Route>
                 <Route path="/settings">
                   <SettingsPage />
                 </Route>
@@ -524,8 +523,14 @@ function ShellBody() {
                 <Route path="/activity/sweatshop">
                   <SweatshopPage />
                 </Route>
+                <Route path="/composer">
+                  <ComposerPage />
+                </Route>
                 <Route path="/character">
                   <CharacterPage />
+                </Route>
+                <Route path="/gallery">
+                  <GalleryPage />
                 </Route>
               </Box>
               {/* SideMenuInput — absolute overlay on the left.

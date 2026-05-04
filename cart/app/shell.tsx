@@ -101,7 +101,7 @@ export const RAIL_SUBNAV_MAX_FRAC = 0.4;
 // inside the iframe — so the active section needs a shell-level store
 // the page and the HUD nav can both read/write.
 
-let _settingsSection = 'profile';
+let _settingsSection = 'user';
 const _sectionSubs = new Set<() => void>();
 
 export function setSettingsSection(value: string): void {
