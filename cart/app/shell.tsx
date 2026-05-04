@@ -1,20 +1,17 @@
 // Shell-level UI state for cart/app.
 //
-// Two stores live here:
+// One store lives here: inputClaim. The InputStrip is shared by chat
+// and any activity that wants to capture text. Activities call
+// `claimInput({...})` in response to a user gesture (clicking a card,
+// opening a field). While a claim is held, the strip's onSubmit
+// routes to that claim instead of askAssistant() and the strip morphs
+// to its full-bottom position. Releasing pops back to the previous
+// owner (chat).
 //
-//   - inputClaim: the InputStrip is shared by chat and any activity
-//     that wants to capture text. Activities call `claimInput({...})` in
-//     response to a user gesture (clicking a card, opening a field).
-//     While a claim is held, the strip's onSubmit routes to that claim
-//     instead of askAssistant() and the strip morphs to its full-bottom
-//     position. Releasing pops back to the previous owner (chat).
-//
-//   - sessionEngaged: sticky boolean. Flips true the first time the
-//     user does anything that commits to a working session — clicks a
-//     route, or starts typing in the InputStrip on home. Once true it
-//     stays true for the cart lifetime; the side rail is gated on this.
-//     State 1 (cold-home, full-width input, no rail) is the only state
-//     where this is false.
+// Side-rail visibility is NOT stored here — it's derived in ShellBody
+// from `(route.path !== '/') || hasChatAny`. That keeps rail-on-home
+// gated on the user actually having a chat, so revisiting home after
+// poking around in Settings doesn't strand the rail visible.
 //
 // Plain module-level stores + subscribe pattern, mirroring the theme
 // variant store in runtime/theme.tsx.
@@ -79,41 +76,6 @@ export function getInputClaim(): InputClaim | null {
 /** Hook — returns the current claim or null. */
 export function useInputClaim(): InputClaim | null {
   return React.useSyncExternalStore(_subscribeClaim, _getClaim, _getClaim);
-}
-
-// ── Session engagement (sticky once true) ────────────────────────────
-
-let _engaged = false;
-const _engagedSubs = new Set<() => void>();
-
-function _notifyEngaged(): void {
-  for (const s of _engagedSubs) s();
-}
-
-function _subscribeEngaged(fn: () => void): () => void {
-  _engagedSubs.add(fn);
-  return () => { _engagedSubs.delete(fn); };
-}
-
-function _getEngaged(): boolean {
-  return _engaged;
-}
-
-/** Flip sessionEngaged to true. Idempotent. Called by the route layer on
- *  any non-home navigation, and by the InputStrip on first keystroke
- *  while on home. Never flips back. */
-export function markSessionEngaged(): void {
-  if (_engaged) return;
-  _engaged = true;
-  _notifyEngaged();
-}
-
-export function getSessionEngaged(): boolean {
-  return _engaged;
-}
-
-export function useSessionEngaged(): boolean {
-  return React.useSyncExternalStore(_subscribeEngaged, _getEngaged, _getEngaged);
 }
 
 // ── HUD insets ───────────────────────────────────────────────────────

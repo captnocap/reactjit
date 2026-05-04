@@ -271,6 +271,28 @@ export function useCurrentSessionId(): string | null {
   return React.useSyncExternalStore(_subscribe, getCurrentSessionId, getCurrentSessionId);
 }
 
+/** True iff the cart has any chat presence — current session has turns
+ *  OR the persisted session list is non-empty. The shell uses this to
+ *  decide whether the side rail should follow the user back to home,
+ *  matching the user's intuition that the chat "follows me" once it
+ *  exists. The hook subscribes to both stores so it re-renders on
+ *  appendTurn AND on session-list changes. */
+function _getHasAny(): boolean {
+  return _turns.length > 0 || _sessions.length > 0;
+}
+export function useChatHasAny(): boolean {
+  React.useEffect(() => { void ensureChatLoaded(); }, []);
+  // Subscribe to BOTH the turn store and the session store. We pick
+  // turn-store as the primary subscription target (since useSyncExternalStore
+  // only takes one) and trip the session-store via a side-effect hook
+  // that forces a re-render when it fires.
+  const [, force] = React.useState(0);
+  React.useEffect(() => {
+    return _subscribeSessions(() => force((n) => (n + 1) | 0));
+  }, []);
+  return React.useSyncExternalStore(_subscribe, _getHasAny, _getHasAny);
+}
+
 // ── Asker (provider → input strip seam) ──────────────────────────────
 //
 // `<AssistantChatProvider>` mounts inside ShellBody, owns the

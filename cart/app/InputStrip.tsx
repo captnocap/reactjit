@@ -25,7 +25,7 @@ import type {
 } from './gallery/data/command-composer';
 import { resolveTokens, TokenMatch } from './tokens';
 import { askAssistant } from './chat/store';
-import { useInputClaim, getInputClaim, markSessionEngaged, getSessionEngaged } from './shell';
+import { useInputClaim, getInputClaim } from './shell';
 
 const LEFT_SHORTCUTS = [
   { id: 'tag-file', key: '@', label: 'tag file' },
@@ -61,12 +61,13 @@ export function InputStrip() {
 
   const handleChange = (next: string) => {
     setDraft(next);
-    // First non-empty keystroke from cold-home state commits the user
-    // to a working session: side rail appears, the chat takes over the
-    // activity area at /chat. Subsequent keystrokes are no-ops — the
-    // engaged flag is sticky.
-    if (next.length > 0 && !getSessionEngaged() && route.path === '/') {
-      markSessionEngaged();
+    // First non-empty keystroke from cold home auto-navigates to /chat.
+    // The route flip is what surfaces the rail (rail visibility is
+    // derived from `path !== '/' || hasChat` in ShellBody) and the
+    // chat-as-activity full view; the user's text is preserved here
+    // and submits to chat from whichever slot the InputStrip ends up
+    // in once the morph settles.
+    if (next.length > 0 && route.path === '/') {
       busEmit('app:navigate', '/chat');
     }
   };
