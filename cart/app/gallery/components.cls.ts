@@ -5,7 +5,7 @@
  * consume `<S.Foo>`; raw `<Box style={...}>` is forbidden in this cart
  * (gate enforces).
  *
- * Token namespace (set by cart/component-gallery/gallery-theme.ts → runtime):
+ * Token namespace (set by cart/app/gallery/gallery-theme.ts → runtime):
  *
  *   Colors (strings):
  *     bg / bg1 / bg2                  surfaces
@@ -51,7 +51,7 @@ import { classifier } from '@reactjit/core';
 // cart/app can match its routes paddingBottom to it without owning a
 // duplicate fallback constant. Single source of truth: change once here
 // and both the slot and the page reflow stay in sync.
-export const APP_BOTTOM_BAR_H = 226;
+export const APP_BOTTOM_BAR_H = 166;
 
 classifier({
 
@@ -750,11 +750,11 @@ classifier({
 
   CommandComposerFooter: { type: 'Box', style: { flexDirection: 'row',
     alignItems: 'center',
-    height: 34,
-    paddingLeft: 12, paddingRight: 14,
+    height: 28,
+    paddingLeft: 8, paddingRight: 10,
     borderTopWidth: 1,
     borderColor: 'theme:rule',
-    gap: 10,
+    gap: 8,
     backgroundColor: 'theme:bg1',
   }},
 
@@ -779,16 +779,16 @@ classifier({
 
   CommandComposerShortcutGroup: { type: 'Box', style: { flexDirection: 'row',
     alignItems: 'center',
-    height: 24,
+    height: 18,
     flexShrink: 0,
-    gap: 8,
+    gap: 5,
   }},
 
   CommandComposerFooterShortcuts: { type: 'Box', style: { flexDirection: 'row',
     alignItems: 'center',
-    height: 24,
+    height: 18,
     flexShrink: 0,
-    gap: 16,
+    gap: 10,
   }},
 
   CommandComposerPromptFlow: { type: 'Box', style: { flexDirection: 'row',
@@ -861,11 +861,11 @@ classifier({
   }},
 
   CommandComposerKeycap: { type: 'Box', style: {
-    minWidth: 28,
-    height: 24,
+    minWidth: 20,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 6, paddingRight: 6,
+    paddingLeft: 4, paddingRight: 4,
     borderWidth: 1,
     borderColor: 'theme:accentHot',
     backgroundColor: 'theme:bg2',
@@ -906,14 +906,16 @@ classifier({
                              style: { fontFamily: 'theme:fontMono', letterSpacing: 4, lineHeight: 11, whiteSpace: 'pre' } },
   CommandComposerMutedText: { type: 'Text', size: 12, color: 'theme:inkDim',
                               style: { fontFamily: 'theme:fontMono', lineHeight: 14, whiteSpace: 'pre' } },
-  CommandComposerShortcutText: { type: 'Text', size: 12, color: 'theme:inkDim',
-                                 style: { fontFamily: 'theme:fontMono', flexShrink: 0, lineHeight: 14, whiteSpace: 'pre' } },
+  CommandComposerShortcutText: { type: 'Text', size: 10, color: 'theme:inkDim',
+                                 style: { fontFamily: 'theme:fontMono', flexShrink: 0, lineHeight: 12, whiteSpace: 'pre' } },
   CommandComposerPromptText: { type: 'Text', size: 18, color: 'theme:ink',
                                style: { fontFamily: 'theme:fontSans', lineHeight: 22 } },
   CommandComposerTokenText: { type: 'Text', size: 13, color: 'theme:accent',
                               style: { fontFamily: 'theme:fontMono', lineHeight: 16, whiteSpace: 'pre' } },
   CommandComposerHotText: { type: 'Text', size: 13, color: 'theme:accentHot',
                             style: { fontFamily: 'theme:fontMono', lineHeight: 16, whiteSpace: 'pre' } },
+  CommandComposerKeycapText: { type: 'Text', size: 10, color: 'theme:accentHot',
+                               style: { fontFamily: 'theme:fontMono', lineHeight: 12, whiteSpace: 'pre' } },
   CommandComposerWarnText: { type: 'Text', size: 13, color: 'theme:warn',
                              style: { fontFamily: 'theme:fontMono', lineHeight: 16, whiteSpace: 'pre' } },
   CommandComposerSuccessText: { type: 'Text', size: 13, color: 'theme:ok',
@@ -2845,9 +2847,9 @@ classifier({
   //   Menu representations — launcher / hub surfaces
   //
   //   Compositional vocabulary for menu tiles. Every menu shape in
-  //   `cart/component-gallery/components/menu-*` is built by stacking
+  //   `cart/app/gallery/components/menu-*` is built by stacking
   //   these primitives. Each tile is a single artboard surface; the
-  //   *form* varies, the entries (cart/component-gallery/data/menu-entry.ts)
+  //   *form* varies, the entries (cart/app/gallery/data/menu-entry.ts)
   //   stay constant.
   // ══════════════════════════════════════════════════════════════
 
@@ -3645,16 +3647,9 @@ classifier({
   // morph values applied as inline styles.
   AppBottomInputBar: { type: 'Box', style: {
     width: '100%',
-    height: APP_BOTTOM_BAR_H,
     flexShrink: 0,
     overflow: 'hidden',
-    // Anchor the input to the bar's bottom — the classifier height is
-    // a slight over-estimate of CommandComposerFrame's natural height,
-    // so without flex-end the input would float a few pixels above the
-    // floor. The over-allocated gap above the input fills with theme:bg
-    // (matches the page bg).
     flexDirection: 'column',
-    justifyContent: 'flex-end',
     backgroundColor: 'theme:bg',
   }},
 
@@ -3924,6 +3919,51 @@ classifier({
     gap: 14,
     overflow: 'scroll',
   }},
+
+  // Chat-history list (rail's chat slot when no live session, OR when on
+  // /chat and the live transcript is in the activity area).
+  AppChatHistoryList: { type: 'Box', style: {
+    flexDirection: 'column',
+    gap: 4,
+    paddingTop: 8, paddingBottom: 8,
+    paddingLeft: 6, paddingRight: 6,
+  }},
+
+  AppChatHistoryRow: { type: 'Pressable', style: {
+    flexDirection: 'column',
+    gap: 2,
+    paddingTop: 8, paddingBottom: 8,
+    paddingLeft: 10, paddingRight: 10,
+    borderLeftWidth: 2,
+    borderColor: 'theme:rule',
+    backgroundColor: 'theme:bg1',
+  }},
+
+  AppChatHistoryRowActive: { type: 'Pressable', style: {
+    flexDirection: 'column',
+    gap: 2,
+    paddingTop: 8, paddingBottom: 8,
+    paddingLeft: 10, paddingRight: 10,
+    borderLeftWidth: 2,
+    borderColor: 'theme:accent',
+    backgroundColor: 'theme:bg2',
+  }},
+
+  AppChatHistoryRowTitle: { type: 'Text', size: 12, color: 'theme:ink',
+                            style: { fontFamily: 'theme:fontSans', lineHeight: 16 } },
+
+  AppChatHistoryRowMeta: { type: 'Text', size: 9, color: 'theme:inkDimmer',
+                           style: { fontFamily: 'theme:fontMono', letterSpacing: 1, lineHeight: 11, whiteSpace: 'pre' } },
+
+  AppChatHistoryEmpty: { type: 'Box', style: {
+    paddingTop: 20, paddingBottom: 20,
+    paddingLeft: 14, paddingRight: 14,
+    flexDirection: 'column',
+    gap: 6,
+  }},
+
+  AppChatHistoryEmptyText: { type: 'Text', size: 11, color: 'theme:inkDim',
+                             style: { fontFamily: 'theme:fontMono', letterSpacing: 1, lineHeight: 14, whiteSpace: 'pre' } },
 
   AppChatTurn: { type: 'Box', style: {
     flexDirection: 'column',

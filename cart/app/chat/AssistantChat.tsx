@@ -19,7 +19,6 @@
 // the swap.
 
 import { classifiers as S } from '@reactjit/core';
-import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
 import type { ChatShape } from './types';
 import {
   loadSession,
@@ -35,38 +34,52 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n - 1) + '…';
 }
 
-function ChatHistoryList({ excludeId }: { excludeId?: string | null }) {
+function relTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return 'JUST NOW';
+  if (m < 60) return `${m}M AGO`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}H AGO`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d}D AGO`;
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+function ChatHistoryList({
+  excludeId,
+  activeId,
+}: {
+  excludeId?: string | null;
+  activeId?: string | null;
+}) {
   const sessions = useChatSessions();
-  const visible = excludeId ? sessions.filter(s => s.id !== excludeId) : sessions;
+  const visible = excludeId ? sessions.filter((s) => s.id !== excludeId) : sessions;
   if (visible.length === 0) {
     return (
-      <Box style={{ padding: 16 }}>
-        <Text style={{ color: 'theme:ink-mute', fontSize: 12 }}>
+      <S.AppChatHistoryEmpty>
+        <S.AppChatHistoryEmptyText>
           {sessions.length === 0
-            ? 'No past chats. Type a message to start.'
-            : 'No other chats yet.'}
-        </Text>
-      </Box>
+            ? 'NO PAST CHATS — TYPE BELOW TO START ONE.'
+            : 'NO OTHER CHATS.'}
+        </S.AppChatHistoryEmptyText>
+      </S.AppChatHistoryEmpty>
     );
   }
   return (
-    <Box style={{ flexDirection: 'column', padding: 8 }}>
-      {visible.map((s) => (
-        <Pressable
-          key={s.id}
-          onPress={() => loadSession(s.id)}
-          style={{
-            paddingTop: 8, paddingBottom: 8, paddingLeft: 12, paddingRight: 12,
-            flexDirection: 'column',
-          }}
-        >
-          <Text style={{ color: 'theme:ink', fontSize: 13 }}>{truncate(s.title, 60)}</Text>
-          <Text style={{ color: 'theme:ink-mute', fontSize: 11, marginTop: 2 }}>
-            {s.turn_count} turn{s.turn_count === 1 ? '' : 'S'}
-          </Text>
-        </Pressable>
-      ))}
-    </Box>
+    <S.AppChatHistoryList>
+      {visible.map((s) => {
+        const Row = s.id === activeId ? S.AppChatHistoryRowActive : S.AppChatHistoryRow;
+        const meta = `${s.turn_count} TURN${s.turn_count === 1 ? '' : 'S'} · ${relTime(s.updated_at)}`;
+        return (
+          <Row key={s.id} onPress={() => loadSession(s.id)}>
+            <S.AppChatHistoryRowTitle>{truncate(s.title || '(untitled)', 56)}</S.AppChatHistoryRowTitle>
+            <S.AppChatHistoryRowMeta>{meta}</S.AppChatHistoryRowMeta>
+          </Row>
+        );
+      })}
+    </S.AppChatHistoryList>
   );
 }
 
@@ -152,15 +165,18 @@ export function AssistantChat({
 
       <S.AppChatTranscript>
         {railShowsHistory ? (
-          <ChatHistoryList excludeId={chatIsActivity ? currentId : null} />
+          <ChatHistoryList
+            excludeId={chatIsActivity ? currentId : null}
+            activeId={chatIsActivity ? null : currentId}
+          />
         ) : turnCount === 0 ? (
-          <Box style={{ padding: 16 }}>
-            <Text style={{ color: 'theme:ink-mute', fontSize: 12 }}>
+          <S.AppChatHistoryEmpty>
+            <S.AppChatHistoryEmptyText>
               {currentId
-                ? 'This chat has no messages yet. Type below to start it up again.'
-                : 'Type a message to start a new chat.'}
-            </Text>
-          </Box>
+                ? 'THIS CHAT HAS NO MESSAGES YET — TYPE BELOW TO PICK IT BACK UP.'
+                : 'TYPE BELOW TO START A NEW CHAT.'}
+            </S.AppChatHistoryEmptyText>
+          </S.AppChatHistoryEmpty>
         ) : (
           turns.map((t) => (
             <AssistantTurn key={t.id} turn={t} showLift={showLift} />
