@@ -3283,8 +3283,17 @@ fn childApplyMessage(line: []const u8) void {
 
 fn childTick(_: u32) void {
     var client = &(g_child_client orelse return);
-    const messages = client.poll();
-    for (messages) |msg| childApplyMessage(msg.data);
+    // Drain the WHOLE socket backlog this tick. ipc.Client.poll() is
+    // capped at MAX_MESSAGES_PER_POLL (32) per call to keep msg_out small,
+    // but a fat initial flush can be ~3000 messages. Without this loop,
+    // the window painted gradually over ~88 ticks (~1.5s @ 60fps) — long
+    // enough to look "broken" before it filled in. Looping until poll
+    // returns nothing makes the whole tree land in a single frame.
+    while (true) {
+        const messages = client.poll();
+        if (messages.len == 0) break;
+        for (messages) |msg| childApplyMessage(msg.data);
+    }
     if (g_child_auto_dismiss_ms > 0 and g_child_started_ms > 0) {
         const now_ms = std.time.milliTimestamp();
         if (now_ms - g_child_started_ms >= @as(i64, @intCast(g_child_auto_dismiss_ms))) {
