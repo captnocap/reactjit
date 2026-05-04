@@ -153,6 +153,14 @@ export function AssistantChat({
       <S.AppChatTranscript>
         {railShowsHistory ? (
           <ChatHistoryList excludeId={chatIsActivity ? currentId : null} />
+        ) : turnCount === 0 ? (
+          <Box style={{ padding: 16 }}>
+            <Text style={{ color: 'theme:ink-mute', fontSize: 12 }}>
+              {currentId
+                ? 'This chat has no messages yet. Type below to start it up again.'
+                : 'Type a message to start a new chat.'}
+            </Text>
+          </Box>
         ) : (
           turns.map((t) => (
             <AssistantTurn key={t.id} turn={t} showLift={showLift} />
