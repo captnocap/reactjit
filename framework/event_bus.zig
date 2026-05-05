@@ -222,6 +222,139 @@ fn writeLine(
     f.writeAll(buf.items) catch {};
 }
 
+// ── std.log adapter ────────────────────────────────────────────────────
+//
+// Wire as `pub const std_options = .{ .logFn = event_bus.fromStdLog }`
+// in v8_app.zig. Every `std.log.info/warn/err/debug` call in the
+// framework then routes through here — bus first, optional stderr
+// fallthrough for warns/errs so the terminal still surfaces real
+// problems even if the eventlog window is closed.
+//
+// Importance map (level → imp):
+//   .err   → 0.85   (eligible for stderr)
+//   .warn  → 0.70   (eligible for stderr)
+//   .info  → 0.30   (bus-only)
+//   .debug → 0.15   (bus-only)
+//
+// Re-entrancy: every helper inside swallows errors with `catch`; nothing
+// here calls `std.log.*`, so there's no recursion into the override.
+
+fn writeJsonString(writer: anytype, s: []const u8) !void {
+    try writer.writeByte('"');
+    for (s) |c| switch (c) {
+        '"' => try writer.writeAll("\\\""),
+        '\\' => try writer.writeAll("\\\\"),
+        '\n' => try writer.writeAll("\\n"),
+        '\r' => try writer.writeAll("\\r"),
+        '\t' => try writer.writeAll("\\t"),
+        0x00...0x07, 0x0B, 0x0E...0x1F => try writer.print("\\u{x:0>4}", .{c}),
+        else => try writer.writeByte(c),
+    };
+    try writer.writeByte('"');
+}
+
+pub fn fromStdLog(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    var msg_buf: [4096]u8 = undefined;
+    const msg_full: []const u8 = std.fmt.bufPrint(&msg_buf, format, args) catch blk: {
+        // Format too long — truncate. (Don't try to mark with an ellipsis;
+        // we'd need three bytes for U+2026 and the bounds tracking isn't
+        // worth it. Truncated logs are rare and obviously truncated.)
+        const n = msg_buf.len;
+        msg_buf[n - 3] = '.';
+        msg_buf[n - 2] = '.';
+        msg_buf[n - 1] = '.';
+        break :blk msg_buf[0..];
+    };
+
+    const lvl_str = @tagName(level);
+    const scope_str = @tagName(scope);
+
+    // Console gate — errors and warns ALWAYS hit stderr regardless of bus
+    // state. This guarantees boot-time failures (before init() runs) are
+    // visible. Lower levels are bus-only; if the bus is dead they're lost,
+    // which is the documented best-effort contract.
+    if (level == .err or level == .warn) {
+        const stderr = std.fs.File.stderr();
+        var line_buf: [4200]u8 = undefined;
+        const line = std.fmt.bufPrint(&line_buf, "[{s}/{s}] {s}\n", .{ lvl_str, scope_str, msg_full }) catch msg_full;
+        stderr.writeAll(line) catch {};
+    }
+
+    if (!g_inited) return;
+
+    const importance: f32 = switch (level) {
+        .err => 0.85,
+        .warn => 0.70,
+        .info => 0.30,
+        .debug => 0.15,
+    };
+
+    var pbuf: std.ArrayList(u8) = .{};
+    defer pbuf.deinit(alloc);
+    const w = pbuf.writer(alloc);
+    w.writeAll("{\"msg\":") catch return;
+    writeJsonString(w, msg_full) catch return;
+    w.writeAll(",\"scope\":") catch return;
+    writeJsonString(w, scope_str) catch return;
+    w.writeAll(",\"level\":") catch return;
+    writeJsonString(w, lvl_str) catch return;
+    w.writeAll("}") catch return;
+
+    var src_buf: [80]u8 = undefined;
+    const src = std.fmt.bufPrint(&src_buf, "log:{s}", .{scope_str}) catch "log:?";
+
+    const event_type = switch (level) {
+        .err => "log.err",
+        .warn => "log.warn",
+        .info => "log.info",
+        .debug => "log.debug",
+    };
+
+    _ = emitWithImportance(event_type, src, importance, null, pbuf.items);
+}
+
+/// JS-side log adapter — paired with the __hostLog host fn. Severity:
+///   0 = log/info  → js.log  imp 0.30 (bus-only)
+///   1 = warn      → js.warn imp 0.70 (bus + stderr)
+///   2 = error     → js.err  imp 0.85 (bus + stderr)
+/// Stderr fallthrough fires regardless of bus state so JS-side errors
+/// remain visible during pre-bus boot or post-deinit shutdown.
+pub fn emitJsLog(severity: i32, msg: []const u8) u64 {
+    if (severity >= 1) {
+        const stderr = std.fs.File.stderr();
+        var line_buf: [4200]u8 = undefined;
+        const tag: []const u8 = if (severity >= 2) "[js.err]" else "[js.warn]";
+        const line = std.fmt.bufPrint(&line_buf, "{s} {s}\n", .{ tag, msg }) catch msg;
+        stderr.writeAll(line) catch {};
+    }
+    if (!g_inited) return 0;
+
+    const importance: f32 = switch (severity) {
+        2 => 0.85,
+        1 => 0.70,
+        else => 0.30,
+    };
+    const event_type: []const u8 = switch (severity) {
+        2 => "js.err",
+        1 => "js.warn",
+        else => "js.log",
+    };
+
+    var pbuf: std.ArrayList(u8) = .{};
+    defer pbuf.deinit(alloc);
+    const w = pbuf.writer(alloc);
+    w.writeAll("{\"msg\":") catch return 0;
+    writeJsonString(w, msg) catch return 0;
+    w.writeAll("}") catch return 0;
+
+    return emitWithImportance(event_type, "js", importance, null, pbuf.items);
+}
+
 /// Build a JSON array of recent events with importance >= min_importance,
 /// newest first, capped at max_count. Caller owns the returned slice.
 /// Returns "[]" when uninitialized or when the ring is empty.

@@ -38,6 +38,15 @@ const v8_runtime = @import("framework/v8_runtime.zig");
 const v8_bindings_core = @import("framework/v8_bindings_core.zig");
 const v8_bindings_eventbus = @import("framework/v8_bindings_eventbus.zig");
 const event_bus = @import("framework/event_bus.zig");
+
+// Override std.log so every framework `std.log.info/warn/err` call routes
+// through the bus. Single chokepoint; no call-site rewrites needed. Errors
+// and warns ALSO go to stderr (preserved fallthrough); info/debug land on
+// the bus only. The terminal becomes quiet for normal operation.
+pub const std_options: std.Options = .{
+    .logFn = event_bus.fromStdLog,
+};
+
 // Conditional @import — when has_X is false the binding file is NEVER
 // parsed, so its string literals (host-fn names like "getFps", "__zig_call")
 // don't bleed into .rodata/DWARF of the final binary. The "_real = @import(...)"
@@ -2679,6 +2688,14 @@ fn destroyDetachedNode(id: u32) void {
     }
     _ = g_children_ids.remove(id);
     if (g_node_by_id.get(id)) |node| {
+        // Per-mesh diffuse texture buffer is owned by g_alloc — free
+        // before the node memory itself is destroyed so the bytes don't
+        // orphan when a textured mesh unmounts (route change / parent
+        // teardown).
+        if (node.scene3d_tex_rgba) |buf| {
+            g_alloc.free(buf);
+            node.scene3d_tex_rgba = null;
+        }
         g_alloc.destroy(node);
     }
     _ = g_node_by_id.remove(id);

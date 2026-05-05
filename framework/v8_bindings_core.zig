@@ -193,9 +193,13 @@ fn hostReleaseFileBuffer(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c)
 fn hostLog(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     if (info.length() < 2) return;
+    const sev = argToI32(info, 0) orelse 0;
     const msg = argToStringAlloc(info, 1) orelse return;
     defer std.heap.c_allocator.free(msg);
-    std.log.info("[JS] {s}", .{msg});
+    // Route JS console.log/warn/error through the bus instead of std.log.
+    // (Going through std.log would round-trip back into the bus via the
+    // logFn override, which works but adds noise in scope=default.)
+    _ = event_bus.emitJsLog(sev, msg);
 }
 
 fn hostJsEval(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
