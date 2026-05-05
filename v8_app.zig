@@ -3210,6 +3210,15 @@ fn appInit() void {
     windows.setJsDispatchFn(dispatchWindowEvent);
     v8_bindings_sdk.registerSdk({});
 
+    // Bridge the dev-mode flag to JS so runtime/index.tsx can wrap the
+    // active cart's tree with a sibling eventlog Window. Keep it small —
+    // just a single boolean global; runtime checks it once at mount time.
+    if (DEV_MODE) {
+        v8_runtime.evalScript("globalThis.__DEV_MODE = true;");
+    } else {
+        v8_runtime.evalScript("globalThis.__DEV_MODE = false;");
+    }
+
     // Polyfills — V8 has no setTimeout/setInterval/console.log. QJS path
     // installs an equivalent block from qjs_runtime.initVM; mirror the minimal
     // subset here so the bundle boot (React + runtime/index.tsx) succeeds.

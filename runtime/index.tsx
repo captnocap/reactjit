@@ -24,9 +24,16 @@
   }
 }
 
-// require() because this file mutates React (installAutoHotState wraps useState).
-// ES `import * as React` yields an immutable namespace and breaks the patch.
+// require() (not import) because __hostModules below hands the React module
+// object to guest carts; ES namespaces are immutable / not the real module.
 const React: any = require('react');
+
+// Patch React.useEffect / useLayoutEffect to record per-component timing
+// and dep-flip data. The patching happens at effect_tracker's module
+// init (see comment at the bottom of effect_tracker.ts) so React is
+// patched BEFORE @cart-entry's named imports destructure useEffect.
+// Read stats via globalThis.__getTopEffects(N).
+import './effect_tracker';
 
 // Side-effect import: useIFTTT installs the real top-level set of host-fn
 // shims, replacing the no-ops above with real emit-bus dispatchers.
@@ -260,46 +267,20 @@ const Reconciler: any = require('react-reconciler');
 //
 // Graceful fallback: when __hot_get isn't registered (ship mode, older host,
 // etc.) the wrapper falls straight through to plain useState behavior.
-(function installAutoHotState() {
-  if ((React as any).__sw_useStateAutoPatched) return;
-  const realUseState = React.useState;
-  const realUseId = React.useId;
-  const realUseCallback = React.useCallback;
-  if (typeof realUseState !== 'function' || typeof realUseId !== 'function' || typeof realUseCallback !== 'function') return;
-  React.useState = function useStateAutoHot<T>(initial: T | (() => T)) {
-    const id: string = realUseId.call(React);
-    const [value, setValue] = realUseState.call(React, () => {
-      const hg: any = (globalThis as any).__hot_get;
-      if (typeof hg === 'function') {
-        try {
-          const raw = hg(id);
-          if (raw != null) return JSON.parse(raw) as T;
-        } catch {}
-      }
-      const init = typeof initial === 'function' ? (initial as () => T)() : initial;
-      const hs: any = (globalThis as any).__hot_set;
-      if (typeof hs === 'function') {
-        try { hs(id, JSON.stringify(init)); } catch {}
-      }
-      return init;
-    });
-    const set = realUseCallback.call(React, (updater: any) => {
-      setValue((prev: T) => {
-        const next = typeof updater === 'function' ? updater(prev) : updater;
-        const hs: any = (globalThis as any).__hot_set;
-        if (typeof hs === 'function') {
-          try { hs(id, JSON.stringify(next)); } catch {}
-        }
-        return next;
-      });
-    }, [id]);
-    return [value, set];
-  };
-  (React as any).__sw_useStateAutoPatched = true;
-})();
+// Auto hot-state was disabled 2026-05-03: it silently snapshotted every
+// useState into the hotstate atom store and replayed it on the next reload.
+// When a cart's state schema drifted between edits (eg. composer's `query`
+// useState briefly held a non-string), the stale snapshot crash-looped the
+// new bundle on every hot reload. Carts that genuinely need cross-reload
+// persistence should call useHotState explicitly.
+//
+// (Original implementation kept in git history; restore from there if a
+// schema-versioned variant ever lands.)
 
 import { hostConfig, setTransportFlush, handlerRegistry } from '../renderer/hostConfig';
 import { prepareContext, releaseContext } from './effectContext';
+import { Window } from './primitives';
+import { EventLog } from './devEventLog';
 // @ts-ignore — bundle-time alias, resolved by esbuild-config.mjs (old path) or
 // scripts/cart-bundle.js via --alias:@cart-entry=<abs path> (v8cli path).
 import App from '@cart-entry';
@@ -529,4 +510,21 @@ if (typeof registerDispatch === 'function') {
 
 const reconciler = Reconciler(hostConfig);
 const container = reconciler.createContainer({ id: 0 }, 0, null, false, null, '', (_e: any) => {}, null);
-reconciler.updateContainer(React.createElement(App, {}), container, null, null);
+
+// Dev shell — when v8_app.zig sets globalThis.__DEV_MODE, wrap the cart's
+// App with a sibling <Window> hosting the EventLog. Same V8 isolate ⇒
+// shared event_bus state ⇒ the eventlog window sees every flush, every
+// IPC overflow, every spawn from the parent cart in real time. The cart
+// itself is unaware of any of this; in production __DEV_MODE is false
+// and we mount App raw, no extra primitive nodes emitted.
+const devShell = (globalThis as any).__DEV_MODE
+  ? React.createElement(React.Fragment, null,
+      React.createElement(App, {}),
+      React.createElement(
+        Window,
+        { title: 'EventLog · reactjit dev', width: 920, height: 620 },
+        React.createElement(EventLog, {}),
+      ),
+    )
+  : React.createElement(App, {});
+reconciler.updateContainer(devShell, container, null, null);
