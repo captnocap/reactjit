@@ -530,7 +530,7 @@ pub fn loadState() bool {
     if (restore_count > 0) {
         _dirty = true;
         layout.markLayoutDirty();
-        std.debug.print("[state] Restored {d} slots from previous session\n", .{restore_count});
+        log.print("[state] Restored {d} slots from previous session\n", .{restore_count});
     }
     return restore_count > 0;
 }

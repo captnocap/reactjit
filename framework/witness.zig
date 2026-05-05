@@ -17,6 +17,7 @@
 //!   ZIGOS_WITNESS=replay ./app          # replay and verify
 
 const std = @import("std");
+const log = @import("log.zig");
 const layout = @import("layout.zig");
 const Node = layout.Node;
 const state_mod = @import("state.zig");
@@ -268,16 +269,16 @@ pub fn init() void {
 
     if (std.mem.eql(u8, env, "record")) {
         mode = .record;
-        std.debug.print("[witness] RECORD mode — interactions will be saved\n", .{});
+        log.print("[witness] RECORD mode — interactions will be saved\n", .{});
     } else if (std.mem.eql(u8, env, "replay")) {
         mode = .replay;
-        std.debug.print("[witness] REPLAY mode — verifying against witness file\n", .{});
+        log.print("[witness] REPLAY mode — verifying against witness file\n", .{});
     } else if (std.mem.eql(u8, env, "autotest")) {
         mode = .autotest;
-        std.debug.print("[witness] AUTOTEST mode — discovering and clicking all interactive nodes\n", .{});
+        log.print("[witness] AUTOTEST mode — discovering and clicking all interactive nodes\n", .{});
     } else if (std.mem.eql(u8, env, "snapshot")) {
         mode = .snapshot;
-        std.debug.print("[witness] SNAPSHOT mode — dumping rendered text to autotest file\n", .{});
+        log.print("[witness] SNAPSHOT mode — dumping rendered text to autotest file\n", .{});
     }
 
     // Witness file path
@@ -440,20 +441,20 @@ fn printTextDiff(before: *const TextSnapshot, after: *const TextSnapshot) bool {
     for (0..max) |i| {
         if (i >= before.count) {
             const at = after.texts[i].buf[0..after.texts[i].len];
-            std.debug.print("  + \"{s}\"\n", .{at});
+            log.print("  + \"{s}\"\n", .{at});
             any_change = true;
             continue;
         }
         if (i >= after.count) {
             const bt = before.texts[i].buf[0..before.texts[i].len];
-            std.debug.print("  - \"{s}\"\n", .{bt});
+            log.print("  - \"{s}\"\n", .{bt});
             any_change = true;
             continue;
         }
         const bt = before.texts[i].buf[0..before.texts[i].len];
         const at = after.texts[i].buf[0..after.texts[i].len];
         if (!std.mem.eql(u8, bt, at)) {
-            std.debug.print("  \"{s}\" → \"{s}\"\n", .{ bt, at });
+            log.print("  \"{s}\" → \"{s}\"\n", .{ bt, at });
             any_change = true;
         }
     }
@@ -507,7 +508,7 @@ pub fn recordClick(hit_node: *Node) void {
 
     const target_name = actions[idx].target_name[0..actions[idx].target_name_len];
     const target_text = actions[idx].target_text[0..actions[idx].target_text_len];
-    std.debug.print("[witness] click #{d}: \"{s}\" (frame {d})\n", .{
+    log.print("[witness] click #{d}: \"{s}\" (frame {d})\n", .{
         idx,
         if (target_text.len > 0) target_text else target_name,
         frame_count,
@@ -524,19 +525,19 @@ pub fn recordClick(hit_node: *Node) void {
         switch (a.kind) {
             .int => {
                 if (a.int_val != b.int_val) {
-                    std.debug.print("  slot[{d}]: {d} → {d}\n", .{ si, b.int_val, a.int_val });
+                    log.print("  slot[{d}]: {d} → {d}\n", .{ si, b.int_val, a.int_val });
                     slot_change = true;
                 }
             },
             .float => {
                 if (@abs(a.float_val - b.float_val) > 0.001) {
-                    std.debug.print("  slot[{d}]: {d:.2} → {d:.2}\n", .{ si, b.float_val, a.float_val });
+                    log.print("  slot[{d}]: {d:.2} → {d:.2}\n", .{ si, b.float_val, a.float_val });
                     slot_change = true;
                 }
             },
             .boolean => {
                 if (a.bool_val != b.bool_val) {
-                    std.debug.print("  slot[{d}]: {} → {}\n", .{ si, b.bool_val, a.bool_val });
+                    log.print("  slot[{d}]: {} → {}\n", .{ si, b.bool_val, a.bool_val });
                     slot_change = true;
                 }
             },
@@ -544,14 +545,14 @@ pub fn recordClick(hit_node: *Node) void {
                 const sa = a.str_buf[0..a.str_len];
                 const sb = b.str_buf[0..b.str_len];
                 if (!std.mem.eql(u8, sa, sb)) {
-                    std.debug.print("  slot[{d}]: \"{s}\" → \"{s}\"\n", .{ si, sb, sa });
+                    log.print("  slot[{d}]: \"{s}\" → \"{s}\"\n", .{ si, sb, sa });
                     slot_change = true;
                 }
             },
         }
     }
     if (!slot_change) {
-        std.debug.print("  (text diff next frame)\n", .{});
+        log.print("  (text diff next frame)\n", .{});
     }
 }
 
@@ -573,7 +574,7 @@ pub fn recordScroll(mx: f32, my: f32, wx: f32, wy: f32) void {
     actions[idx].scroll_x = wx;
     actions[idx].scroll_y = wy;
 
-    std.debug.print("[witness] scroll @ ({d:.0},{d:.0}) delta=({d:.1},{d:.1}) frame={d}\n", .{
+    log.print("[witness] scroll @ ({d:.0},{d:.0}) delta=({d:.1},{d:.1}) frame={d}\n", .{
         mx, my, wx, wy, frame_count,
     });
 
@@ -594,8 +595,8 @@ pub fn tick(root: *Node) bool {
             snapshotTree(root);
             initial_state = snapshotState();
             initial_texts = snapshotTexts(root);
-            std.debug.print("\n\xe2\x95\x90\xe2\x95\x90 WITNESS RECORDING \xe2\x95\x90\xe2\x95\x90\n\n", .{});
-            std.debug.print("  {d} nodes, {d} state slots\n\n", .{
+            log.print("\n\xe2\x95\x90\xe2\x95\x90 WITNESS RECORDING \xe2\x95\x90\xe2\x95\x90\n\n", .{});
+            log.print("  {d} nodes, {d} state slots\n\n", .{
                 tree_node_count, initial_state.count,
             });
             // Print the full tree
@@ -609,14 +610,14 @@ pub fn tick(root: *Node) bool {
                 for (0..pad_len) |pi| pad[pi] = ' ';
                 const vis: []const u8 = if (tn.w <= 0 or tn.h <= 0) " !! ZERO" else "";
                 if (txt.len > 0) {
-                    std.debug.print("  {s}{s}  {d:.0}x{d:.0} @ ({d:.0},{d:.0}){s}  \"{s}\"\n", .{
+                    log.print("  {s}{s}  {d:.0}x{d:.0} @ ({d:.0},{d:.0}){s}  \"{s}\"\n", .{
                         pad[0..pad_len], if (name.len > 0) name else "?",
                         tn.w,            tn.h,
                         tn.x,            tn.y,
                         vis,             txt,
                     });
                 } else {
-                    std.debug.print("  {s}{s}  {d:.0}x{d:.0} @ ({d:.0},{d:.0}){s}{s}\n", .{
+                    log.print("  {s}{s}  {d:.0}x{d:.0} @ ({d:.0},{d:.0}){s}{s}\n", .{
                         pad[0..pad_len], if (name.len > 0) name else "?",
                         tn.w,            tn.h,
                         tn.x,            tn.y,
@@ -626,18 +627,18 @@ pub fn tick(root: *Node) bool {
             }
             // Print initial state
             if (initial_state.count > 0) {
-                std.debug.print("\n  State:\n", .{});
+                log.print("\n  State:\n", .{});
                 for (0..initial_state.count) |i| {
                     const s = &initial_state.slots[i];
                     switch (s.kind) {
-                        .int => std.debug.print("    slot[{d}]: {d}\n", .{ i, s.int_val }),
-                        .float => std.debug.print("    slot[{d}]: {d:.2}\n", .{ i, s.float_val }),
-                        .boolean => std.debug.print("    slot[{d}]: {}\n", .{ i, s.bool_val }),
-                        .string => std.debug.print("    slot[{d}]: \"{s}\"\n", .{ i, s.str_buf[0..s.str_len] }),
+                        .int => log.print("    slot[{d}]: {d}\n", .{ i, s.int_val }),
+                        .float => log.print("    slot[{d}]: {d:.2}\n", .{ i, s.float_val }),
+                        .boolean => log.print("    slot[{d}]: {}\n", .{ i, s.bool_val }),
+                        .string => log.print("    slot[{d}]: \"{s}\"\n", .{ i, s.str_buf[0..s.str_len] }),
                     }
                 }
             }
-            std.debug.print("\n  Interact with the app. Close window to save.\n\n", .{});
+            log.print("\n  Interact with the app. Close window to save.\n\n", .{});
         }
 
         // Deferred text snapshot: capture text on the frame AFTER a click
@@ -651,7 +652,7 @@ pub fn tick(root: *Node) bool {
             const texts_before = if (idx > 0) &actions[idx - 1].texts_after else &initial_texts;
             const text_changed = printTextDiff(texts_before, &actions[idx].texts_after);
             if (!text_changed) {
-                std.debug.print("  (no visible change)\n", .{});
+                log.print("  (no visible change)\n", .{});
             }
         }
 
@@ -682,33 +683,33 @@ fn replayTick(root: *Node) bool {
     // On settle frame: verify initial state and print what we're checking
     if (!replay_started) {
         replay_started = true;
-        std.debug.print("\n\xe2\x95\x90\xe2\x95\x90 WITNESS REPLAY \xe2\x95\x90\xe2\x95\x90\n\n", .{});
-        std.debug.print("  {d} tree nodes, {d} text strings, {d} actions to replay\n\n", .{
+        log.print("\n\xe2\x95\x90\xe2\x95\x90 WITNESS REPLAY \xe2\x95\x90\xe2\x95\x90\n\n", .{});
+        log.print("  {d} tree nodes, {d} text strings, {d} actions to replay\n\n", .{
             replay_tree_count, replay_initial_texts.count, replay_action_count,
         });
 
         // Show and verify initial visible text
         if (replay_initial_texts.count > 0) {
             const current_texts = snapshotTexts(root);
-            std.debug.print("  ── Initial text ──\n", .{});
+            log.print("  ── Initial text ──\n", .{});
             for (0..replay_initial_texts.count) |i| {
                 const expected = replay_initial_texts.texts[i].buf[0..replay_initial_texts.texts[i].len];
                 if (i < current_texts.count) {
                     const actual = current_texts.texts[i].buf[0..current_texts.texts[i].len];
                     if (std.mem.eql(u8, expected, actual)) {
-                        std.debug.print("    \xe2\x9c\x93 \"{s}\"\n", .{actual});
+                        log.print("    \xe2\x9c\x93 \"{s}\"\n", .{actual});
                     } else {
-                        std.debug.print("    \xe2\x9c\x97 expected \"{s}\", got \"{s}\"\n", .{ expected, actual });
+                        log.print("    \xe2\x9c\x97 expected \"{s}\", got \"{s}\"\n", .{ expected, actual });
                     }
                 } else {
-                    std.debug.print("    \xe2\x9c\x97 expected \"{s}\", MISSING\n", .{expected});
+                    log.print("    \xe2\x9c\x97 expected \"{s}\", MISSING\n", .{expected});
                 }
             }
             if (textsMatch(&replay_initial_texts, &current_texts)) {
-                std.debug.print("  initial text ... PASS\n\n", .{});
+                log.print("  initial text ... PASS\n\n", .{});
                 replay_passed += 1;
             } else {
-                std.debug.print("  initial text ... FAIL\n\n", .{});
+                log.print("  initial text ... FAIL\n\n", .{});
                 replay_failed += 1;
             }
         }
@@ -719,10 +720,10 @@ fn replayTick(root: *Node) bool {
         if (replay_tree_count > 0) {
             const diff = if (live_count > replay_tree_count) live_count - replay_tree_count else replay_tree_count - live_count;
             if (diff <= 2) {
-                std.debug.print("  tree structure ({d} nodes) ... PASS\n", .{live_count});
+                log.print("  tree structure ({d} nodes) ... PASS\n", .{live_count});
                 replay_passed += 1;
             } else {
-                std.debug.print("  tree structure ... FAIL (expected {d} nodes, got {d})\n", .{ replay_tree_count, live_count });
+                log.print("  tree structure ... FAIL (expected {d} nodes, got {d})\n", .{ replay_tree_count, live_count });
                 replay_failed += 1;
             }
         }
@@ -731,10 +732,10 @@ fn replayTick(root: *Node) bool {
         if (replay_initial_state.count > 0) {
             const current = snapshotState();
             if (statesMatch(&replay_initial_state, &current)) {
-                std.debug.print("  initial state ({d} slots) ... PASS\n", .{replay_initial_state.count});
+                log.print("  initial state ({d} slots) ... PASS\n", .{replay_initial_state.count});
                 replay_passed += 1;
             } else {
-                std.debug.print("  initial state ... FAIL\n", .{});
+                log.print("  initial state ... FAIL\n", .{});
                 printStateDiff(&replay_initial_state, &current);
                 replay_failed += 1;
             }
@@ -743,7 +744,7 @@ fn replayTick(root: *Node) bool {
         if (replay_action_count == 0) {
             return finishReplay();
         }
-        std.debug.print("\n  ── Replaying {d} clicks ──\n", .{replay_action_count});
+        log.print("\n  ── Replaying {d} clicks ──\n", .{replay_action_count});
     }
 
     // Verify frame: check text from PREVIOUS click (one frame delay for tree rebuild)
@@ -753,15 +754,15 @@ fn replayTick(root: *Node) bool {
         if (prev.texts_after.count > 0) {
             const current_texts = snapshotTexts(root);
             if (textsMatch(&prev.texts_after, &current_texts)) {
-                std.debug.print(" ... PASS\n", .{});
+                log.print(" ... PASS\n", .{});
                 replay_passed += 1;
             } else {
-                std.debug.print(" ... FAIL\n", .{});
+                log.print(" ... FAIL\n", .{});
                 _ = printTextDiff(&prev.texts_after, &current_texts);
                 replay_failed += 1;
             }
         } else {
-            std.debug.print(" ... PASS (no text baseline)\n", .{});
+            log.print(" ... PASS (no text baseline)\n", .{});
             replay_passed += 1;
         }
 
@@ -788,7 +789,7 @@ fn replayTick(root: *Node) bool {
         if (action.kind == .scroll) {
             // Scroll: send wheel event with mouse position
             testdriver.scrollAt(action.scroll_x, action.scroll_y, action.mouse_x, action.mouse_y);
-            std.debug.print("  [{d}/{d}] scroll ({d:.1},{d:.1}) @ ({d:.0},{d:.0})\n", .{
+            log.print("  [{d}/{d}] scroll ({d:.1},{d:.1}) @ ({d:.0},{d:.0})\n", .{
                 replay_idx + 1,  replay_action_count,
                 action.scroll_x, action.scroll_y,
                 action.mouse_x,  action.mouse_y,
@@ -832,9 +833,9 @@ fn replayTick(root: *Node) bool {
             }
         }
 
-        std.debug.print("  [{d}/{d}] click \"{s}\"", .{ replay_idx + 1, replay_action_count, label });
+        log.print("  [{d}/{d}] click \"{s}\"", .{ replay_idx + 1, replay_action_count, label });
         if (!clicked) {
-            std.debug.print(" ... FAIL (node not found)\n", .{});
+            log.print(" ... FAIL (node not found)\n", .{});
             replay_failed += 1;
         }
 
@@ -857,11 +858,11 @@ fn countLiveNodes(node: *Node, count: *u16) void {
 
 fn loadAutotest() void {
     const path = witness_path orelse {
-        std.debug.print("[autotest] ERROR: no test file (set ZIGOS_WITNESS_FILE)\n", .{});
+        log.print("[autotest] ERROR: no test file (set ZIGOS_WITNESS_FILE)\n", .{});
         return;
     };
     const file = std.fs.cwd().openFile(path, .{}) catch {
-        std.debug.print("[autotest] ERROR: cannot open {s}\n", .{path});
+        log.print("[autotest] ERROR: cannot open {s}\n", .{path});
         return;
     };
     defer file.close();
@@ -950,7 +951,7 @@ fn loadAutotest() void {
         }
     }
 
-    std.debug.print("[autotest] loaded {d} steps from {s}\n", .{ auto_step_count, path });
+    log.print("[autotest] loaded {d} steps from {s}\n", .{ auto_step_count, path });
 }
 
 fn parseAutoText(rest: []const u8, step: *AutoStep) void {
@@ -1234,8 +1235,7 @@ fn collectScrollContainersRecurse(node: *Node) void {
 /// don't need a target to find.
 fn stepNeedsTextTarget(kind: anytype) bool {
     return switch (kind) {
-        .click, .hover, .rightclick, .wheel, .wheelx, .expect,
-        .scroll, .color, .bg, .border, .styles, .focus, .type_text => true,
+        .click, .hover, .rightclick, .wheel, .wheelx, .expect, .scroll, .color, .bg, .border, .styles, .focus, .type_text => true,
         else => false,
     };
 }
@@ -1261,7 +1261,7 @@ fn startHunt(root: *Node, text: []const u8) void {
     hunt_exhausted = (hunt_container_count == 0);
     layout.markLayoutDirty();
 
-    std.debug.print("  [hunt] target \"{s}\" not in tree — scanning {d} scroll container(s)\n", .{ text, hunt_container_count });
+    log.print("  [hunt] target \"{s}\" not in tree — scanning {d} scroll container(s)\n", .{ text, hunt_container_count });
 }
 
 /// Called on every tick while `hunt_active`. Returns true the moment the
@@ -1275,7 +1275,7 @@ fn huntTick(root: *Node) bool {
     }
     const text = hunt_text_buf[0..hunt_text_len];
     if (query.find(root, .{ .text_contains = text }) != null) {
-        std.debug.print("  [hunt] found \"{s}\" after scrolling\n", .{text});
+        log.print("  [hunt] found \"{s}\" after scrolling\n", .{text});
         return true;
     }
     if (hunt_container_idx >= hunt_container_count) {
@@ -1285,7 +1285,7 @@ fn huntTick(root: *Node) bool {
         for (hunt_containers[0..hunt_container_count], 0..) |c, i| c.scroll_y = hunt_original_scrolls[i];
         layout.markLayoutDirty();
         hunt_exhausted = true;
-        std.debug.print("  [hunt] exhausted — \"{s}\" not reachable\n", .{text});
+        log.print("  [hunt] exhausted — \"{s}\" not reachable\n", .{text});
         return false;
     }
 
@@ -1937,15 +1937,15 @@ fn snapshotTick(root: *Node) bool {
 
 fn snapWriteFile() void {
     const path = witness_path orelse {
-        std.debug.print("[snapshot] no ZIGOS_WITNESS_FILE, printing to stderr\n", .{});
+        log.print("[snapshot] no ZIGOS_WITNESS_FILE, printing to stderr\n", .{});
         for (0..snap_line_count) |i| {
-            std.debug.print("{s}\n", .{snap_lines[i][0..snap_line_lens[i]]});
+            log.print("{s}\n", .{snap_lines[i][0..snap_line_lens[i]]});
         }
         return;
     };
 
     const file = std.fs.cwd().createFile(path, .{}) catch |err| {
-        std.debug.print("[snapshot] cannot create {s}: {}\n", .{ path, err });
+        log.print("[snapshot] cannot create {s}: {}\n", .{ path, err });
         return;
     };
     defer file.close();
@@ -1981,9 +1981,9 @@ fn snapWriteFile() void {
 
     file.writeAll(out_buf[0..pos]) catch {};
     if (snap_nil_count > 0) {
-        std.debug.print("[snapshot] wrote {d} expects + {d} clicks + {d} FAILS to {s}\n", .{ expect_count, click_count, snap_nil_count, path });
+        log.print("[snapshot] wrote {d} expects + {d} clicks + {d} FAILS to {s}\n", .{ expect_count, click_count, snap_nil_count, path });
     } else {
-        std.debug.print("[snapshot] wrote {d} expects + {d} clicks to {s}\n", .{ expect_count, click_count, path });
+        log.print("[snapshot] wrote {d} expects + {d} clicks to {s}\n", .{ expect_count, click_count, path });
     }
 }
 
@@ -1992,8 +1992,8 @@ fn autotestTick(root: *Node) bool {
 
     if (!auto_started) {
         auto_started = true;
-        std.debug.print("\n\xe2\x95\x90\xe2\x95\x90 AUTOTEST \xe2\x95\x90\xe2\x95\x90\n\n", .{});
-        std.debug.print("  {d} steps to execute\n\n", .{auto_step_count});
+        log.print("\n\xe2\x95\x90\xe2\x95\x90 AUTOTEST \xe2\x95\x90\xe2\x95\x90\n\n", .{});
+        log.print("  {d} steps to execute\n\n", .{auto_step_count});
         // Wait a few frames for initial render, then screenshot
         auto_settle_frames = 3;
         return false;
@@ -2040,7 +2040,7 @@ fn autotestTick(root: *Node) bool {
         auto_manifest_len += written.len;
 
         finishAutotest();
-        std.debug.print("\n\xe2\x95\x90\xe2\x95\x90 AUTOTEST RESULT: {d}/{d} passed \xe2\x95\x90\xe2\x95\x90\n\n", .{ auto_passed, total });
+        log.print("\n\xe2\x95\x90\xe2\x95\x90 AUTOTEST RESULT: {d}/{d} passed \xe2\x95\x90\xe2\x95\x90\n\n", .{ auto_passed, total });
         return true; // signal exit
     }
 
@@ -2072,92 +2072,92 @@ fn autotestTick(root: *Node) bool {
 
     switch (step.kind) {
         .click => {
-            std.debug.print("  [{d}/{d}] click \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] click \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (step.use_coord) {
                 testdriver.click(step.coord_x, step.coord_y);
-                std.debug.print(" ... OK (coord)\n", .{});
+                log.print(" ... OK (coord)\n", .{});
                 passed = true;
             } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.click(result.cx, result.cy);
-                std.debug.print(" ... OK\n", .{});
+                log.print(" ... OK\n", .{});
                 passed = true;
             } else {
                 var results: [32]query.QueryResult = undefined;
                 const found = findActionTargets(root, text, &results);
-                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+                log.print(" ... FAIL (not found, {d} matches)\n", .{found});
             }
         },
         .hover => {
-            std.debug.print("  [{d}/{d}] hover \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] hover \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (step.use_coord) {
                 testdriver.moveMouse(step.coord_x, step.coord_y);
-                std.debug.print(" ... OK (coord)\n", .{});
+                log.print(" ... OK (coord)\n", .{});
                 passed = true;
             } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.moveMouse(result.cx, result.cy);
-                std.debug.print(" ... OK\n", .{});
+                log.print(" ... OK\n", .{});
                 passed = true;
             } else {
                 var results: [32]query.QueryResult = undefined;
                 const found = findActionTargets(root, text, &results);
-                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+                log.print(" ... FAIL (not found, {d} matches)\n", .{found});
             }
         },
         .rightclick => {
-            std.debug.print("  [{d}/{d}] rightclick \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] rightclick \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (step.use_coord) {
                 testdriver.rightClick(step.coord_x, step.coord_y);
-                std.debug.print(" ... OK (coord)\n", .{});
+                log.print(" ... OK (coord)\n", .{});
                 passed = true;
             } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.rightClick(result.cx, result.cy);
-                std.debug.print(" ... OK\n", .{});
+                log.print(" ... OK\n", .{});
                 passed = true;
             } else {
                 var results: [32]query.QueryResult = undefined;
                 const found = findActionTargets(root, text, &results);
-                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+                log.print(" ... FAIL (not found, {d} matches)\n", .{found});
             }
         },
         .wheel => {
-            std.debug.print("  [{d}/{d}] wheel \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] wheel \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (step.use_coord) {
                 testdriver.scrollAt(0, -3, step.coord_x, step.coord_y);
-                std.debug.print(" ... OK (coord)\n", .{});
+                log.print(" ... OK (coord)\n", .{});
                 passed = true;
             } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.scrollAt(0, -3, result.cx, result.cy);
-                std.debug.print(" ... OK\n", .{});
+                log.print(" ... OK\n", .{});
                 passed = true;
             } else {
                 var results: [32]query.QueryResult = undefined;
                 const found = findActionTargets(root, text, &results);
-                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+                log.print(" ... FAIL (not found, {d} matches)\n", .{found});
             }
         },
         .wheelx => {
-            std.debug.print("  [{d}/{d}] wheelx \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] wheelx \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (step.use_coord) {
                 testdriver.scrollAt(-3, 0, step.coord_x, step.coord_y);
-                std.debug.print(" ... OK (coord)\n", .{});
+                log.print(" ... OK (coord)\n", .{});
                 passed = true;
             } else if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 testdriver.scrollAt(-3, 0, result.cx, result.cy);
-                std.debug.print(" ... OK\n", .{});
+                log.print(" ... OK\n", .{});
                 passed = true;
             } else {
                 var results: [32]query.QueryResult = undefined;
                 const found = findActionTargets(root, text, &results);
-                std.debug.print(" ... FAIL (not found, {d} matches)\n", .{found});
+                log.print(" ... FAIL (not found, {d} matches)\n", .{found});
             }
         },
         .expect => {
-            std.debug.print("  [{d}/{d}] expect \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] expect \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (query.find(root, .{ .text_contains = text })) |result| {
                 hit_result = result;
                 // Auto-scroll: if the node is inside a scroll container but not
@@ -2178,27 +2178,27 @@ fn autotestTick(root: *Node) bool {
                         hit_result = post_scroll;
                     }
                     expect_did_scroll = true;
-                    std.debug.print(" ... PASS (scrolled into view)\n", .{});
+                    log.print(" ... PASS (scrolled into view)\n", .{});
                 } else {
-                    std.debug.print(" ... PASS\n", .{});
+                    log.print(" ... PASS\n", .{});
                 }
                 passed = true;
             } else {
-                std.debug.print(" ... FAIL (not found)\n", .{});
+                log.print(" ... FAIL (not found)\n", .{});
             }
         },
         .reject => {
-            std.debug.print("  [{d}/{d}] reject \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] reject \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (query.find(root, .{ .text_contains = text })) |result| {
                 hit_result = result;
-                std.debug.print(" ... FAIL (still visible)\n", .{});
+                log.print(" ... FAIL (still visible)\n", .{});
             } else {
-                std.debug.print(" ... PASS\n", .{});
+                log.print(" ... PASS\n", .{});
                 passed = true;
             }
         },
         .scroll => {
-            std.debug.print("  [{d}/{d}] scroll \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] scroll \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (findActionTarget(root, text, step.occurrence)) |result| {
                 hit_result = result;
                 // Find the nearest scroll container ancestor and scroll to make this node visible
@@ -2217,41 +2217,41 @@ fn autotestTick(root: *Node) bool {
                     }
                     if (sp.scroll_y < 0) sp.scroll_y = 0;
                     layout.markLayoutDirty();
-                    std.debug.print(" ... OK (scrolled to y={d:.0})\n", .{sp.scroll_y});
+                    log.print(" ... OK (scrolled to y={d:.0})\n", .{sp.scroll_y});
                     passed = true;
                 } else {
-                    std.debug.print(" ... OK (no scroll needed)\n", .{});
+                    log.print(" ... OK (no scroll needed)\n", .{});
                     passed = true;
                 }
             } else {
-                std.debug.print(" ... FAIL (not found)\n", .{});
+                log.print(" ... FAIL (not found)\n", .{});
             }
         },
         .color => {
             var exp_hex: [7]u8 = undefined;
             const exp_str = colorToHex(step.expected_color, &exp_hex);
-            std.debug.print("  [{d}/{d}] color \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
+            log.print("  [{d}/{d}] color \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
             if (query.find(root, .{ .text_contains = text })) |result| {
                 hit_result = result;
                 if (result.node.text_color) |tc| {
                     if (colorEql(tc, step.expected_color)) {
-                        std.debug.print(" ... PASS\n", .{});
+                        log.print(" ... PASS\n", .{});
                         passed = true;
                     } else {
                         var got_hex: [7]u8 = undefined;
-                        std.debug.print(" ... FAIL (got {s})\n", .{colorToHex(tc, &got_hex)});
+                        log.print(" ... FAIL (got {s})\n", .{colorToHex(tc, &got_hex)});
                     }
                 } else {
-                    std.debug.print(" ... FAIL (no text_color set)\n", .{});
+                    log.print(" ... FAIL (no text_color set)\n", .{});
                 }
             } else {
-                std.debug.print(" ... FAIL (not found)\n", .{});
+                log.print(" ... FAIL (not found)\n", .{});
             }
         },
         .border => {
             var exp_hex: [7]u8 = undefined;
             const exp_str = colorToHex(step.expected_color, &exp_hex);
-            std.debug.print("  [{d}/{d}] border \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
+            log.print("  [{d}/{d}] border \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
             var border_node: ?*Node = null;
             findBorderNode(root, text, &border_node);
             if (border_node) |bn| {
@@ -2259,7 +2259,7 @@ fn autotestTick(root: *Node) bool {
                 if (bn.style.border_color) |actual_bc| {
                     if (bw > 0 and colorEql(actual_bc, step.expected_color)) {
                         // Data matches — emit BORDER_PIXEL for Python pixel verification
-                        std.debug.print(" ... VERIFY (width={d:.0})\n", .{bw});
+                        log.print(" ... VERIFY (width={d:.0})\n", .{bw});
                         const remaining = auto_manifest_buf[auto_manifest_len..];
                         const written = std.fmt.bufPrint(remaining, "BORDER_PIXEL|{d}|{d:.0},{d:.0},{d:.0},{d:.0}|{d:.0}|{s}\n", .{
                             auto_idx, bn.computed.x, bn.computed.y, bn.computed.w, bn.computed.h, bw, exp_str,
@@ -2276,16 +2276,16 @@ fn autotestTick(root: *Node) bool {
                             .cy = bn.computed.y + bn.computed.h / 2,
                         };
                     } else if (bw == 0) {
-                        std.debug.print(" ... FAIL (borderWidth=0)\n", .{});
+                        log.print(" ... FAIL (borderWidth=0)\n", .{});
                     } else {
                         var got_hex: [7]u8 = undefined;
-                        std.debug.print(" ... FAIL (got {s})\n", .{colorToHex(actual_bc, &got_hex)});
+                        log.print(" ... FAIL (got {s})\n", .{colorToHex(actual_bc, &got_hex)});
                     }
                 } else {
-                    std.debug.print(" ... FAIL (no borderColor set)\n", .{});
+                    log.print(" ... FAIL (no borderColor set)\n", .{});
                 }
             } else {
-                std.debug.print(" ... FAIL (text not found)\n", .{});
+                log.print(" ... FAIL (text not found)\n", .{});
             }
         },
         .styles => {
@@ -2302,7 +2302,7 @@ fn autotestTick(root: *Node) bool {
 
             if (std.mem.eql(u8, mode_str, "before")) {
                 const label = target orelse "(all)";
-                std.debug.print("  [{d}/{d}] styles before \"{s}\"", .{ auto_idx + 1, auto_step_count, label });
+                log.print("  [{d}/{d}] styles before \"{s}\"", .{ auto_idx + 1, auto_step_count, label });
                 // Find the target node and snapshot it + its parent subtree
                 const snap_root = if (target) |t| blk: {
                     if (query.find(root, .{ .text_contains = t })) |result| {
@@ -2314,13 +2314,13 @@ fn autotestTick(root: *Node) bool {
                 style_snap_before_count = 0;
                 snapshotStyles(snap_root, &style_snap_before, &style_snap_before_count, 0);
                 style_snap_has_before = true;
-                std.debug.print(" ... {d} nodes captured\n", .{style_snap_before_count});
+                log.print(" ... {d} nodes captured\n", .{style_snap_before_count});
                 passed = true;
             } else if (std.mem.eql(u8, mode_str, "after")) {
                 const label = target orelse "(all)";
-                std.debug.print("  [{d}/{d}] styles after \"{s}\"", .{ auto_idx + 1, auto_step_count, label });
+                log.print("  [{d}/{d}] styles after \"{s}\"", .{ auto_idx + 1, auto_step_count, label });
                 if (!style_snap_has_before) {
-                    std.debug.print(" ... FAIL (no 'before' snapshot)\n", .{});
+                    log.print(" ... FAIL (no 'before' snapshot)\n", .{});
                 } else {
                     const snap_root = if (target) |t| blk: {
                         if (query.find(root, .{ .text_contains = t })) |result| {
@@ -2334,36 +2334,36 @@ fn autotestTick(root: *Node) bool {
                     snapshotStyles(snap_root, &snap_after, &snap_after_count, 0);
                     const diffs = diffStyles(&style_snap_before, style_snap_before_count, &snap_after, snap_after_count);
                     if (diffs > 0) {
-                        std.debug.print(" ... PASS ({d} property changes)\n", .{diffs});
+                        log.print(" ... PASS ({d} property changes)\n", .{diffs});
                         passed = true;
                     } else {
-                        std.debug.print(" ... FAIL (0 changes — styles identical)\n", .{});
+                        log.print(" ... FAIL (0 changes — styles identical)\n", .{});
                     }
                     style_snap_has_before = false;
                 }
             } else {
-                std.debug.print("  [{d}/{d}] styles \"{s}\" ... FAIL (use 'before' or 'after')\n", .{ auto_idx + 1, auto_step_count, text });
+                log.print("  [{d}/{d}] styles \"{s}\" ... FAIL (use 'before' or 'after')\n", .{ auto_idx + 1, auto_step_count, text });
             }
         },
         .bg => {
             var exp_hex: [7]u8 = undefined;
             const exp_str = colorToHex(step.expected_color, &exp_hex);
-            std.debug.print("  [{d}/{d}] bg \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
+            log.print("  [{d}/{d}] bg \"{s}\" = {s}", .{ auto_idx + 1, auto_step_count, text, exp_str });
             if (query.find(root, .{ .text_contains = text })) |result| {
                 hit_result = result;
                 if (result.node.style.background_color) |bg_c| {
                     if (colorEql(bg_c, step.expected_color)) {
-                        std.debug.print(" ... PASS\n", .{});
+                        log.print(" ... PASS\n", .{});
                         passed = true;
                     } else {
                         var got_hex: [7]u8 = undefined;
-                        std.debug.print(" ... FAIL (got {s})\n", .{colorToHex(bg_c, &got_hex)});
+                        log.print(" ... FAIL (got {s})\n", .{colorToHex(bg_c, &got_hex)});
                     }
                 } else {
-                    std.debug.print(" ... FAIL (no background_color set)\n", .{});
+                    log.print(" ... FAIL (no background_color set)\n", .{});
                 }
             } else {
-                std.debug.print(" ... FAIL (not found)\n", .{});
+                log.print(" ... FAIL (not found)\n", .{});
             }
         },
 
@@ -2371,14 +2371,14 @@ fn autotestTick(root: *Node) bool {
 
         .focus => {
             // Click a TextInput node to focus it. Finds by placeholder or visible text.
-            std.debug.print("  [{d}/{d}] focus \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] focus \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             if (findTextInput(root, text)) |result| {
                 hit_result = result;
                 testdriver.click(result.cx, result.cy);
-                std.debug.print(" ... OK (input_id={d})\n", .{result.node.input_id orelse 255});
+                log.print(" ... OK (input_id={d})\n", .{result.node.input_id orelse 255});
                 passed = true;
             } else {
-                std.debug.print(" ... FAIL (no TextInput found)\n", .{});
+                log.print(" ... FAIL (no TextInput found)\n", .{});
             }
         },
 
@@ -2387,16 +2387,16 @@ fn autotestTick(root: *Node) bool {
             // input first. Otherwise type into whatever is focused (or first input).
             const target = step.target[0..step.target_len];
             if (target.len > 0) {
-                std.debug.print("  [{d}/{d}] type \"{s}\" into \"{s}\"", .{ auto_idx + 1, auto_step_count, text, target });
+                log.print("  [{d}/{d}] type \"{s}\" into \"{s}\"", .{ auto_idx + 1, auto_step_count, text, target });
                 if (findTextInput(root, target)) |result| {
                     hit_result = result;
                     testdriver.click(result.cx, result.cy);
                 } else {
-                    std.debug.print(" ... FAIL (target \"{s}\" not found)\n", .{target});
+                    log.print(" ... FAIL (target \"{s}\" not found)\n", .{target});
                     // still record failure
                 }
             } else {
-                std.debug.print("  [{d}/{d}] type \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+                log.print("  [{d}/{d}] type \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
                 // If nothing focused, try to find the first TextInput
                 if (input_mod.getFocusedId() == null) {
                     if (findFirstTextInput(root)) |result| {
@@ -2408,21 +2408,21 @@ fn autotestTick(root: *Node) bool {
             // Actually type the text
             if (input_mod.getFocusedId() != null) {
                 testdriver.typeText(text);
-                std.debug.print(" ... OK ({d} chars)\n", .{step.text_len});
+                log.print(" ... OK ({d} chars)\n", .{step.text_len});
                 passed = true;
             } else {
-                std.debug.print(" ... FAIL (no input focused)\n", .{});
+                log.print(" ... FAIL (no input focused)\n", .{});
             }
         },
 
         .key_press => {
             // Send a key event, optionally with modifiers.
             // For combos (ctrl+s), pushes modifier down, key down/up, modifier up.
-            std.debug.print("  [{d}/{d}] key \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
+            log.print("  [{d}/{d}] key \"{s}\"", .{ auto_idx + 1, auto_step_count, text });
             const ci = @import("c.zig").imports;
 
             if (step.key_code == 0) {
-                std.debug.print(" ... FAIL (unknown key)\n", .{});
+                log.print(" ... FAIL (unknown key)\n", .{});
             } else {
                 // Push modifier key-down events
                 if (step.key_ctrl) {
@@ -2494,20 +2494,20 @@ fn autotestTick(root: *Node) bool {
                     _ = ci.SDL_PushEvent(&ev);
                 }
 
-                std.debug.print(" ... OK\n", .{});
+                log.print(" ... OK\n", .{});
                 passed = true;
             }
         },
 
         .clear => {
             // Clear the currently focused TextInput
-            std.debug.print("  [{d}/{d}] clear", .{ auto_idx + 1, auto_step_count });
+            log.print("  [{d}/{d}] clear", .{ auto_idx + 1, auto_step_count });
             if (input_mod.getFocusedId()) |fid| {
                 input_mod.clear(fid);
-                std.debug.print(" ... OK (input {d})\n", .{fid});
+                log.print(" ... OK (input {d})\n", .{fid});
                 passed = true;
             } else {
-                std.debug.print(" ... FAIL (no input focused)\n", .{});
+                log.print(" ... FAIL (no input focused)\n", .{});
             }
         },
     }
@@ -2805,19 +2805,19 @@ fn diffStyles(before: *const [MAX_STYLE_ENTRIES]StyleEntry, before_count: u16, a
         if (node_changed) {
             diffs += 1;
             const name = if (b.text_len > 0) b.text[0..b.text_len] else "(box)";
-            std.debug.print("    changed: \"{s}\" d={d}", .{ name, b.depth });
-            if (b.padding_top != a.padding_top) std.debug.print(" pad:{d:.0}→{d:.0}", .{ b.padding_top, a.padding_top });
-            if (b.border_radius != a.border_radius) std.debug.print(" radius:{d:.0}→{d:.0}", .{ b.border_radius, a.border_radius });
-            if (b.gap != a.gap) std.debug.print(" gap:{d:.0}→{d:.0}", .{ b.gap, a.gap });
-            if (b.w != a.w) std.debug.print(" w:{d:.0}→{d:.0}", .{ b.w, a.w });
-            if (b.h != a.h) std.debug.print(" h:{d:.0}→{d:.0}", .{ b.h, a.h });
-            std.debug.print("\n", .{});
+            log.print("    changed: \"{s}\" d={d}", .{ name, b.depth });
+            if (b.padding_top != a.padding_top) log.print(" pad:{d:.0}→{d:.0}", .{ b.padding_top, a.padding_top });
+            if (b.border_radius != a.border_radius) log.print(" radius:{d:.0}→{d:.0}", .{ b.border_radius, a.border_radius });
+            if (b.gap != a.gap) log.print(" gap:{d:.0}→{d:.0}", .{ b.gap, a.gap });
+            if (b.w != a.w) log.print(" w:{d:.0}→{d:.0}", .{ b.w, a.w });
+            if (b.h != a.h) log.print(" h:{d:.0}→{d:.0}", .{ b.h, a.h });
+            log.print("\n", .{});
         }
     }
 
     // Also flag if node count changed
     if (before_count != after_count) {
-        std.debug.print("    node count: {d} → {d}\n", .{ before_count, after_count });
+        log.print("    node count: {d} → {d}\n", .{ before_count, after_count });
         diffs += 1;
     }
 
@@ -2895,7 +2895,7 @@ fn auditSourceTexts(root: *Node) void {
     // Also collect current frame's texts
     collectSeenTexts(root);
 
-    std.debug.print("\n  ── Source Text Audit ──\n", .{});
+    log.print("\n  ── Source Text Audit ──\n", .{});
     var found: u16 = 0;
     var missing: u16 = 0;
 
@@ -2905,7 +2905,7 @@ fn auditSourceTexts(root: *Node) void {
             found += 1;
         } else {
             missing += 1;
-            std.debug.print("    NEVER SEEN: \"{s}\"\n", .{text});
+            log.print("    NEVER SEEN: \"{s}\"\n", .{text});
         }
     }
 
@@ -2917,10 +2917,10 @@ fn auditSourceTexts(root: *Node) void {
     auto_manifest_len += written.len;
 
     if (missing > 0) {
-        std.debug.print("  source audit: {d}/{d} source texts ever appeared ({d} NEVER SEEN)\n", .{ found, expected_count, missing });
+        log.print("  source audit: {d}/{d} source texts ever appeared ({d} NEVER SEEN)\n", .{ found, expected_count, missing });
         auto_failed += missing;
     } else {
-        std.debug.print("  source audit: {d}/{d} source texts appeared during test\n", .{ found, expected_count });
+        log.print("  source audit: {d}/{d} source texts appeared during test\n", .{ found, expected_count });
     }
 }
 
@@ -2943,7 +2943,7 @@ fn isStyleValue(text: []const u8) bool {
 }
 
 fn auditColors(root: *Node) void {
-    std.debug.print("\n  ── Color Audit ──\n", .{});
+    log.print("\n  ── Color Audit ──\n", .{});
     var count: u16 = 0;
     var missing: u16 = 0;
     auditColorsRecurse(root, &count, &missing);
@@ -2956,9 +2956,9 @@ fn auditColors(root: *Node) void {
     auto_manifest_len += written.len;
 
     if (missing == 0) {
-        std.debug.print("  color audit: {d}/{d} text nodes have color set\n", .{ count, count });
+        log.print("  color audit: {d}/{d} text nodes have color set\n", .{ count, count });
     } else {
-        std.debug.print("  color audit: {d}/{d} text nodes missing color ({d} unset)\n", .{ count - missing, count, missing });
+        log.print("  color audit: {d}/{d} text nodes missing color ({d} unset)\n", .{ count - missing, count, missing });
     }
 }
 
@@ -2999,7 +2999,7 @@ fn dist2d(x1: f32, y1: f32, x2: f32, y2: f32) f32 {
 
 fn finishReplay() bool {
     const total = replay_passed + replay_failed;
-    std.debug.print("\n\xe2\x95\x90\xe2\x95\x90 WITNESS RESULT: {d}/{d} passed \xe2\x95\x90\xe2\x95\x90\n\n", .{ replay_passed, total });
+    log.print("\n\xe2\x95\x90\xe2\x95\x90 WITNESS RESULT: {d}/{d} passed \xe2\x95\x90\xe2\x95\x90\n\n", .{ replay_passed, total });
     return true; // signal engine to exit
 }
 
@@ -3007,33 +3007,33 @@ fn printStateDiff(expected: *const StateSnapshot, actual: *const StateSnapshot) 
     const max = @max(expected.count, actual.count);
     for (0..max) |i| {
         if (i >= expected.count or i >= actual.count) {
-            std.debug.print("    slot[{d}]: count mismatch\n", .{i});
+            log.print("    slot[{d}]: count mismatch\n", .{i});
             continue;
         }
         const e = &expected.slots[i];
         const a = &actual.slots[i];
         if (e.kind != a.kind) {
-            std.debug.print("    slot[{d}]: kind mismatch\n", .{i});
+            log.print("    slot[{d}]: kind mismatch\n", .{i});
             continue;
         }
         switch (e.kind) {
             .int => {
                 if (e.int_val != a.int_val)
-                    std.debug.print("    slot[{d}]: expected {d}, got {d}\n", .{ i, e.int_val, a.int_val });
+                    log.print("    slot[{d}]: expected {d}, got {d}\n", .{ i, e.int_val, a.int_val });
             },
             .float => {
                 if (@abs(e.float_val - a.float_val) > 0.001)
-                    std.debug.print("    slot[{d}]: expected {d:.3}, got {d:.3}\n", .{ i, e.float_val, a.float_val });
+                    log.print("    slot[{d}]: expected {d:.3}, got {d:.3}\n", .{ i, e.float_val, a.float_val });
             },
             .boolean => {
                 if (e.bool_val != a.bool_val)
-                    std.debug.print("    slot[{d}]: expected {}, got {}\n", .{ i, e.bool_val, a.bool_val });
+                    log.print("    slot[{d}]: expected {}, got {}\n", .{ i, e.bool_val, a.bool_val });
             },
             .string => {
                 const es = e.str_buf[0..e.str_len];
                 const as = a.str_buf[0..a.str_len];
                 if (!std.mem.eql(u8, es, as))
-                    std.debug.print("    slot[{d}]: expected \"{s}\", got \"{s}\"\n", .{ i, es, as });
+                    log.print("    slot[{d}]: expected \"{s}\", got \"{s}\"\n", .{ i, es, as });
             },
         }
     }
@@ -3047,12 +3047,12 @@ pub fn flush() void {
     if (!tree_captured and action_count == 0) return;
 
     const path = witness_path orelse {
-        std.debug.print("[witness] no ZIGOS_WITNESS_FILE set, cannot save\n", .{});
+        log.print("[witness] no ZIGOS_WITNESS_FILE set, cannot save\n", .{});
         return;
     };
 
     const file = std.fs.cwd().createFile(path, .{ .truncate = true }) catch |err| {
-        std.debug.print("[witness] cannot create {s}: {}\n", .{ path, err });
+        log.print("[witness] cannot create {s}: {}\n", .{ path, err });
         return;
     };
     defer file.close();
@@ -3115,7 +3115,7 @@ pub fn flush() void {
 
     emit(file, &buf, "DONE\n", .{});
 
-    std.debug.print("[witness] saved {d} tree nodes + {d} actions to {s}\n", .{
+    log.print("[witness] saved {d} tree nodes + {d} actions to {s}\n", .{
         tree_node_count, action_count, path,
     });
 }
@@ -3152,13 +3152,13 @@ fn writeStateToFile(file: std.fs.File, buf: []u8, snap: *const StateSnapshot) vo
 
 fn loadWitness() void {
     const path = witness_path orelse {
-        std.debug.print("[witness] no ZIGOS_WITNESS_FILE set for replay\n", .{});
+        log.print("[witness] no ZIGOS_WITNESS_FILE set for replay\n", .{});
         mode = .off;
         return;
     };
 
     const data = std.fs.cwd().readFileAlloc(std.heap.page_allocator, path, 4 * 1024 * 1024) catch |err| {
-        std.debug.print("[witness] cannot read {s}: {}\n", .{ path, err });
+        log.print("[witness] cannot read {s}: {}\n", .{ path, err });
         mode = .off;
         return;
     };
@@ -3379,7 +3379,7 @@ fn loadWitness() void {
         if (std.mem.eql(u8, line, "DONE")) break;
     }
 
-    std.debug.print("[witness] loaded: {d} tree nodes, {d} actions, {d} state slots\n", .{
+    log.print("[witness] loaded: {d} tree nodes, {d} actions, {d} state slots\n", .{
         replay_tree_count, replay_action_count, replay_initial_state.count,
     });
 }

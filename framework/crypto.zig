@@ -12,6 +12,7 @@
 //!   - Envelope encryption (XChaCha20-Poly1305)
 
 const std = @import("std");
+const log = @import("log.zig");
 const crypto = std.crypto;
 const HmacSha256 = crypto.auth.hmac.sha2.HmacSha256;
 const XChaCha20Poly1305 = crypto.aead.chacha_poly.XChaCha20Poly1305;
@@ -494,16 +495,16 @@ pub fn sanitizeHtml(input: []const u8, out: []u8) usize {
 // ════════════════════════════════════════════════════════════════════════
 
 fn printPass(name: [*:0]const u8) void {
-    std.debug.print("\x1b[32m  \xe2\x9c\x93 {s}\x1b[0m\n", .{name});
+    log.print("\x1b[32m  \xe2\x9c\x93 {s}\x1b[0m\n", .{name});
 }
 fn printFail(name: [*:0]const u8) void {
-    std.debug.print("\x1b[31m  \xe2\x9c\x97 {s}\x1b[0m\n", .{name});
+    log.print("\x1b[31m  \xe2\x9c\x97 {s}\x1b[0m\n", .{name});
 }
 
 export fn crypto_run_all_tests() callconv(.c) c_int {
     var passed: c_int = 0;
 
-    std.debug.print("\n\x1b[1mCrypto Test Suite\x1b[0m\n", .{});
+    log.print("\n\x1b[1mCrypto Test Suite\x1b[0m\n", .{});
 
     // 1. HMAC-SHA256 RFC 4231
     {
@@ -689,7 +690,7 @@ export fn crypto_run_all_tests() callconv(.c) c_int {
     }
 
     const color = if (passed == 13) "\x1b[32m" else "\x1b[33m";
-    std.debug.print("\n{s}{d}/13 tests passed\x1b[0m\n\n", .{ color, passed });
+    log.print("\n{s}{d}/13 tests passed\x1b[0m\n\n", .{ color, passed });
     return passed;
 }
 
@@ -699,7 +700,7 @@ export fn crypto_run_all_tests() callconv(.c) c_int {
 
 fn expectHex(expected: []const u8, actual: []const u8) !void {
     if (!std.mem.eql(u8, expected, actual)) {
-        std.debug.print("expected: {s}\n  actual: {s}\n", .{ expected, actual });
+        log.print("expected: {s}\n  actual: {s}\n", .{ expected, actual });
         return error.TestMismatch;
     }
 }

@@ -11,6 +11,7 @@
 //! Counter mode uses atomics (no mutex). Message mode uses a small ring buffer.
 
 const std = @import("std");
+const log = @import("log.zig");
 const zluajit = @import("zluajit");
 
 // ── Atomic counter bridge (zero-copy, for stress tests) ─────────────
@@ -255,7 +256,7 @@ pub fn logTelemetry() void {
     const per_sec = total - g_last_telemetry_total;
     g_last_telemetry_total = total;
     const latency = lua_worker_elapsed_us();
-    std.debug.print("[lua-worker] N={d} | processed: {d}/s | total: {d} | pending: {d} | latency: {d}us\n", .{
+    log.print("[lua-worker] N={d} | processed: {d}/s | total: {d} | pending: {d} | latency: {d}us\n", .{
         n, per_sec, total, pending - total, latency,
     });
 }

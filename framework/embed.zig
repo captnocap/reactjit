@@ -27,6 +27,7 @@
 //! the executable so it's self-contained.
 
 const std = @import("std");
+const log = @import("log.zig");
 const pg = @import("pg");
 const fpg = @import("pg.zig");
 
@@ -134,10 +135,71 @@ const c = struct {
     pub extern "c" fn llama_batch_init(n_tokens: i32, embd: i32, n_seq_max: i32) llama_batch;
     pub extern "c" fn llama_batch_free(batch: llama_batch) void;
     pub extern "c" fn llama_decode(ctx: ?*llama_context, batch: llama_batch) i32;
+    pub extern "c" fn llama_synchronize(ctx: ?*llama_context) void;
     pub extern "c" fn llama_get_embeddings(ctx: ?*llama_context) [*c]f32;
     pub extern "c" fn llama_get_embeddings_seq(ctx: ?*llama_context, seq_id: llama_seq_id) [*c]f32;
     pub extern "c" fn llama_get_logits_ith(ctx: ?*llama_context, i: i32) [*c]f32;
 };
+
+// ── memory probe (debug) ────────────────────────────────────────────────
+//
+// `[embed-mem]` lines log process VmRSS + AMD GPU VRAM at every decode
+// boundary. With `embed_log_mem` set true the output looks like:
+//
+//   [embed-mem] decode#23 ctx=0x... tokens=4123 rss=1234MiB vram=8765MiB
+//
+// VmRSS comes from /proc/self/status. VRAM is read from the first AMD
+// drm card that exposes mem_info_vram_used (returns -1 on systems
+// without the sysfs node). Both reads are best-effort; a missing file
+// just shows up as -1.
+
+pub var embed_log_mem: bool = true;
+
+fn readProcVmRssKb() i64 {
+    const file = std.fs.openFileAbsolute("/proc/self/status", .{}) catch return -1;
+    defer file.close();
+    var buf: [4096]u8 = undefined;
+    const n = file.read(&buf) catch return -1;
+    const text = buf[0..n];
+    const tag = "VmRSS:";
+    const at = std.mem.indexOf(u8, text, tag) orelse return -1;
+    var i = at + tag.len;
+    while (i < text.len and (text[i] == ' ' or text[i] == '\t')) : (i += 1) {}
+    var j = i;
+    while (j < text.len and text[j] >= '0' and text[j] <= '9') : (j += 1) {}
+    return std.fmt.parseInt(i64, text[i..j], 10) catch -1;
+}
+
+fn readAmdGpuVramUsedKb() i64 {
+    // Iterate /sys/class/drm/cardN/device/mem_info_vram_used for the first
+    // file that opens. Card numbering isn't stable across boots so we
+    // probe a small range.
+    var card: u32 = 0;
+    while (card < 8) : (card += 1) {
+        var pbuf: [128]u8 = undefined;
+        const path = std.fmt.bufPrint(&pbuf, "/sys/class/drm/card{d}/device/mem_info_vram_used", .{card}) catch return -1;
+        const file = std.fs.openFileAbsolute(path, .{}) catch continue;
+        defer file.close();
+        var buf: [64]u8 = undefined;
+        const n = file.read(&buf) catch return -1;
+        var len = n;
+        while (len > 0 and (buf[len - 1] == '\n' or buf[len - 1] == ' ')) len -= 1;
+        const bytes = std.fmt.parseInt(i64, buf[0..len], 10) catch return -1;
+        return @divFloor(bytes, 1024);
+    }
+    return -1;
+}
+
+/// Log a `[embed-mem]` line tagged with `phase`. Cheap; both reads are
+/// ~2 syscalls. Caller passes the chunk index and token count for context.
+pub fn logMem(phase: []const u8, chunk_idx: usize, n_tokens: usize) void {
+    if (!embed_log_mem) return;
+    const rss_kb = readProcVmRssKb();
+    const vram_kb = readAmdGpuVramUsedKb();
+    const rss_mib = if (rss_kb < 0) -1 else @divFloor(rss_kb, 1024);
+    const vram_mib = if (vram_kb < 0) -1 else @divFloor(vram_kb, 1024);
+    log.print("[embed-mem] {s} chunk={d} tokens={d} rss={d}MiB vram={d}MiB\n", .{ phase, chunk_idx, n_tokens, rss_mib, vram_mib });
+}
 
 // ── helpers ─────────────────────────────────────────────────────────────
 
@@ -234,9 +296,9 @@ pub const Embedder = struct {
         var cparams = c.llama_context_default_params();
         cparams.n_ctx = 8192;
         cparams.n_batch = 8192;
-        cparams.n_ubatch = 2048;
+        cparams.n_ubatch = 256;
         cparams.embeddings = true;
-        cparams.pooling_type = -1;
+        cparams.pooling_type = 0;
         cparams.no_perf = true;
         cparams.n_seq_max = 16;
         cparams.kv_unified = true;
@@ -295,6 +357,12 @@ pub const Embedder = struct {
 
         const dr = c.llama_decode(self.ctx, batch);
         if (dr != 0) return error.DecodeFailed;
+        // Block until the GPU is done. Without this, multiple in-flight
+        // decodes pile up pinned host-visible scratch (the AMD Vulkan
+        // driver doesn't reclaim those until the command stream
+        // flushes), and after ~20 decodes the host-visible heap hits
+        // its budget and the next pinned alloc fails.
+        c.llama_synchronize(self.ctx);
 
         var raw = c.llama_get_embeddings_seq(self.ctx, 0);
         if (raw == null) raw = c.llama_get_embeddings(self.ctx);
@@ -382,6 +450,12 @@ pub const Embedder = struct {
 
         const dr = c.llama_decode(self.ctx, batch);
         if (dr != 0) return error.DecodeFailed;
+        // Block until the GPU is done. Without this, multiple in-flight
+        // decodes pile up pinned host-visible scratch (the AMD Vulkan
+        // driver doesn't reclaim those until the command stream
+        // flushes), and after ~20 decodes the host-visible heap hits
+        // its budget and the next pinned alloc fails.
+        c.llama_synchronize(self.ctx);
 
         var out = try allocator.alloc([]f32, texts.len);
         errdefer {
@@ -448,7 +522,7 @@ pub const Reranker = struct {
         var cparams = c.llama_context_default_params();
         cparams.n_ctx = 8192;
         cparams.n_batch = 8192;
-        cparams.n_ubatch = 2048;
+        cparams.n_ubatch = 256;
         cparams.embeddings = false;
         cparams.no_perf = true;
 
@@ -523,6 +597,12 @@ pub const Reranker = struct {
 
         const dr = c.llama_decode(self.ctx, batch);
         if (dr != 0) return error.DecodeFailed;
+        // Block until the GPU is done. Without this, multiple in-flight
+        // decodes pile up pinned host-visible scratch (the AMD Vulkan
+        // driver doesn't reclaim those until the command stream
+        // flushes), and after ~20 decodes the host-visible heap hits
+        // its budget and the next pinned alloc fails.
+        c.llama_synchronize(self.ctx);
 
         const logits = c.llama_get_logits_ith(self.ctx, -1);
         if (logits == null) return error.NoLogits;
@@ -628,7 +708,7 @@ pub const Store = struct {
         );
         defer self.allocator.free(sql);
         _ = self.pool.exec(sql, .{}) catch |e| {
-            std.debug.print("hnsw build: {s} (continuing)\n", .{@errorName(e)});
+            log.print("hnsw build: {s} (continuing)\n", .{@errorName(e)});
             return;
         };
     }
@@ -643,7 +723,7 @@ pub const Store = struct {
         );
         defer self.allocator.free(sql);
         _ = self.pool.exec(sql, .{}) catch |e| {
-            std.debug.print("partial hnsw build: {s} (continuing)\n", .{@errorName(e)});
+            log.print("partial hnsw build: {s} (continuing)\n", .{@errorName(e)});
             return;
         };
     }
@@ -827,12 +907,16 @@ pub const SharedModel = struct {
         var cparams = c.llama_context_default_params();
         cparams.n_ctx = n_ctx;
         cparams.n_batch = n_ctx;
-        cparams.n_ubatch = 2048;
+        // Mirror framework/local_ai_runtime.zig (the proven in-process llama
+        // shape that runs 27B alongside wgpu). The compute buffer is sized
+        // for `n_ubatch × n_seq_max` in the worst case — `n_seq_max=16` blew
+        // it up to 1.3 GB per ctx, which the bench could afford as a CLI
+        // binary but the cart cannot. Single-sequence is what the chat path
+        // uses and it coexists fine with wgpu.
+        cparams.n_ubatch = 256;
         cparams.embeddings = true;
-        cparams.pooling_type = -1;
+        cparams.pooling_type = 0;
         cparams.no_perf = true;
-        cparams.n_seq_max = 16;
-        cparams.kv_unified = true;
 
         const ctx = c.llama_init_from_model(self.model, cparams);
         if (ctx == null) return error.FailedToInitContext;
@@ -859,7 +943,14 @@ pub const WorkerCtx = struct {
         const probe_len = -c.llama_tokenize(self.vocab, text.ptr, @intCast(text.len), null, 0, true, true);
         if (probe_len <= 0) return error.TokenizeProbeFailed;
 
-        const max_tokens: usize = @min(@as(usize, @abs(probe_len)), @as(usize, @intCast(self.n_ctx)));
+        // Cap chunks at 4096 tokens. Even with pooling=NONE, llama.cpp's
+        // override marks every input token's logits flag, so the output
+        // buffer scales as `n_tokens × n_embd × 4 bytes`. At ~7500 tokens
+        // that buffer (~30 MB) crosses AMD's per-buffer host-visible
+        // ceiling and decode fails. 4096 keeps it ~16 MB — well under
+        // the threshold we observed succeed at 6144.
+        const safe_token_cap: usize = 4096;
+        const max_tokens: usize = @min(@as(usize, @abs(probe_len)), @min(@as(usize, @intCast(self.n_ctx)), safe_token_cap));
         const tokens = try allocator.alloc(c.llama_token, max_tokens);
         defer allocator.free(tokens);
 
@@ -867,8 +958,10 @@ pub const WorkerCtx = struct {
         if (tk < 0) return error.TokenizeFailed;
         const n_tokens: usize = @intCast(tk);
 
+        logMem("inner-pre-clear", 0, n_tokens);
         const mem = c.llama_get_memory(self.ctx);
         if (mem != null) c.llama_memory_clear(mem, true);
+        logMem("inner-post-clear", 0, n_tokens);
 
         var batch = c.llama_batch_init(@intCast(n_tokens), 0, 1);
         defer c.llama_batch_free(batch);
@@ -881,9 +974,21 @@ pub const WorkerCtx = struct {
             batch.logits[i] = if (i == n_tokens - 1) 1 else 0;
         }
         batch.n_tokens = @intCast(n_tokens);
+        logMem("inner-pre-decode", 0, n_tokens);
 
         const dr = c.llama_decode(self.ctx, batch);
-        if (dr != 0) return error.DecodeFailed;
+        if (dr != 0) {
+            logMem("inner-decode-err", 0, n_tokens);
+            return error.DecodeFailed;
+        }
+        logMem("inner-post-decode", 0, n_tokens);
+        // Block until the GPU is done. Without this, multiple in-flight
+        // decodes pile up pinned host-visible scratch (the AMD Vulkan
+        // driver doesn't reclaim those until the command stream
+        // flushes), and after ~20 decodes the host-visible heap hits
+        // its budget and the next pinned alloc fails.
+        c.llama_synchronize(self.ctx);
+        logMem("inner-post-sync", 0, n_tokens);
 
         var raw = c.llama_get_embeddings_seq(self.ctx, 0);
         if (raw == null) raw = c.llama_get_embeddings(self.ctx);
@@ -969,6 +1074,12 @@ pub const WorkerCtx = struct {
 
         const dr = c.llama_decode(self.ctx, batch);
         if (dr != 0) return error.DecodeFailed;
+        // Block until the GPU is done. Without this, multiple in-flight
+        // decodes pile up pinned host-visible scratch (the AMD Vulkan
+        // driver doesn't reclaim those until the command stream
+        // flushes), and after ~20 decodes the host-visible heap hits
+        // its budget and the next pinned alloc fails.
+        c.llama_synchronize(self.ctx);
 
         var out = try allocator.alloc([]f32, texts.len);
         errdefer {
@@ -1003,16 +1114,16 @@ pub const WorkerCtx = struct {
 // ── walker ──────────────────────────────────────────────────────────────
 
 const code_extensions = [_][]const u8{
-    ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-    ".zig", ".lua", ".py", ".rs", ".go",
-    ".c", ".cpp", ".cc", ".h", ".hpp",
-    ".json", ".jsonl", ".md", ".yml", ".yaml", ".sh", ".bash",
-    ".css", ".html", ".toml",
+    ".ts",   ".tsx",  ".js",   ".jsx", ".mjs",  ".cjs",
+    ".zig",  ".lua",  ".py",   ".rs",  ".go",   ".c",
+    ".cpp",  ".cc",   ".h",    ".hpp", ".json", ".jsonl",
+    ".md",   ".yml",  ".yaml", ".sh",  ".bash", ".css",
+    ".html", ".toml",
 };
 
 const code_skip_dirs = [_][]const u8{
-    "node_modules", "zig-out", "zig-cache", "dist", "target", "build",
-    "archive", "deps", "editor", "vendor", "reactjit",
+    "node_modules", "zig-out", "zig-cache", "dist",   "target",   "build",
+    "archive",      "deps",    "editor",    "vendor", "reactjit",
 };
 
 fn shouldSkipPath(rel_path: []const u8) bool {
@@ -1074,7 +1185,619 @@ pub fn findFiles(allocator: std.mem.Allocator, root: []const u8) ![][]u8 {
     return out.toOwnedSlice();
 }
 
+// ── chat-log + memory parsing (lifted from embed-bench) ────────────────
+
+const tool_truncate_chars: usize = 400;
+const window_size: usize = 4;
+const window_overlap: usize = 2;
+
+/// One semantic event extracted from a chat-log JSONL line.
+/// timestamp/role/body are owned by the parsing arena.
+const FlatEvent = struct {
+    timestamp: []u8,
+    role: []u8, // "user" | "assistant" | "thinking" | "tool_call" | "tool_result"
+    body: []u8,
+    is_tool_result_truncated: bool,
+};
+
+fn freeEvent(allocator: std.mem.Allocator, e: *FlatEvent) void {
+    allocator.free(e.timestamp);
+    allocator.free(e.role);
+    allocator.free(e.body);
+}
+
+fn pushEvent(
+    allocator: std.mem.Allocator,
+    out: *std.array_list.Managed(FlatEvent),
+    ts: []const u8,
+    role: []const u8,
+    body: []const u8,
+    truncated_marker: bool,
+) !void {
+    const ts_owned = try allocator.dupe(u8, ts);
+    errdefer allocator.free(ts_owned);
+    const role_owned = try allocator.dupe(u8, role);
+    errdefer allocator.free(role_owned);
+    const body_owned = if (truncated_marker)
+        try std.fmt.allocPrint(allocator, "[tool result: {d} chars truncated]", .{body.len})
+    else if (body.len > 8000)
+        try std.fmt.allocPrint(allocator, "{s} … [+{d} chars]", .{ body[0..7900], body.len - 7900 })
+    else
+        try allocator.dupe(u8, body);
+    try out.append(.{
+        .timestamp = ts_owned,
+        .role = role_owned,
+        .body = body_owned,
+        .is_tool_result_truncated = truncated_marker,
+    });
+}
+
+/// Parses one .jsonl into a flat ordered list of FlatEvent.
+/// Used for ~/.claude/projects/<slug>/*.jsonl + ~/.claude-overflow same shape.
+fn parseClaudeJsonl(allocator: std.mem.Allocator, path: []const u8) !std.array_list.Managed(FlatEvent) {
+    var out = std.array_list.Managed(FlatEvent).init(allocator);
+    errdefer {
+        for (out.items) |*e| freeEvent(allocator, e);
+        out.deinit();
+    }
+
+    const file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+    const stat = try file.stat();
+    if (stat.size > 200 * 1024 * 1024) return error.FileTooLarge;
+    const data = try file.readToEndAlloc(allocator, @intCast(stat.size));
+    defer allocator.free(data);
+
+    var line_iter = std.mem.tokenizeScalar(u8, data, '\n');
+    while (line_iter.next()) |line| {
+        if (line.len == 0 or line[0] != '{') continue;
+        appendClaudeLine(allocator, &out, line) catch continue;
+    }
+    return out;
+}
+
+fn appendClaudeLine(
+    allocator: std.mem.Allocator,
+    out: *std.array_list.Managed(FlatEvent),
+    line: []const u8,
+) !void {
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, line, .{}) catch return;
+    defer parsed.deinit();
+
+    const root = parsed.value;
+    if (root != .object) return;
+    const obj = root.object;
+
+    const ts_v = obj.get("timestamp") orelse std.json.Value{ .null = {} };
+    const ts: []const u8 = switch (ts_v) {
+        .string => |s| s,
+        else => "",
+    };
+
+    const ttype_v = obj.get("type") orelse return;
+    if (ttype_v != .string) return;
+    const ttype = ttype_v.string;
+
+    if (std.mem.eql(u8, ttype, "user")) {
+        const msg_v = obj.get("message") orelse return;
+        if (msg_v != .object) return;
+        const content_v = msg_v.object.get("content") orelse return;
+        switch (content_v) {
+            .string => |s| try pushEvent(allocator, out, ts, "user", s, false),
+            .array => |arr| {
+                for (arr.items) |blk_v| {
+                    if (blk_v != .object) continue;
+                    const blk = blk_v.object;
+                    const blk_type_v = blk.get("type") orelse continue;
+                    if (blk_type_v != .string) continue;
+                    const blk_type = blk_type_v.string;
+                    if (std.mem.eql(u8, blk_type, "tool_result")) {
+                        const cv = blk.get("content") orelse continue;
+                        const txt = switch (cv) {
+                            .string => |s| s,
+                            .array => |inner| blk: {
+                                if (inner.items.len == 0) break :blk "";
+                                const first = inner.items[0];
+                                if (first == .object) {
+                                    const t = first.object.get("text") orelse break :blk "";
+                                    break :blk if (t == .string) t.string else "";
+                                }
+                                break :blk "";
+                            },
+                            else => "",
+                        };
+                        const trunc = txt.len > tool_truncate_chars;
+                        try pushEvent(allocator, out, ts, "tool_result", txt, trunc);
+                    } else if (std.mem.eql(u8, blk_type, "text")) {
+                        const txtv = blk.get("text") orelse continue;
+                        if (txtv != .string) continue;
+                        try pushEvent(allocator, out, ts, "user", txtv.string, false);
+                    }
+                }
+            },
+            else => {},
+        }
+    } else if (std.mem.eql(u8, ttype, "assistant")) {
+        const msg_v = obj.get("message") orelse return;
+        if (msg_v != .object) return;
+        const content_v = msg_v.object.get("content") orelse return;
+        if (content_v != .array) return;
+        for (content_v.array.items) |blk_v| {
+            if (blk_v != .object) continue;
+            const blk = blk_v.object;
+            const blk_type_v = blk.get("type") orelse continue;
+            if (blk_type_v != .string) continue;
+            const blk_type = blk_type_v.string;
+            if (std.mem.eql(u8, blk_type, "text")) {
+                const tv = blk.get("text") orelse continue;
+                if (tv != .string) continue;
+                try pushEvent(allocator, out, ts, "assistant", tv.string, false);
+            } else if (std.mem.eql(u8, blk_type, "thinking")) {
+                const tv = blk.get("thinking") orelse continue;
+                if (tv != .string) continue;
+                try pushEvent(allocator, out, ts, "thinking", tv.string, false);
+            } else if (std.mem.eql(u8, blk_type, "tool_use")) {
+                const name_v = blk.get("name") orelse continue;
+                if (name_v != .string) continue;
+                var input_summary: []const u8 = "";
+                if (blk.get("input")) |iv| {
+                    if (iv == .object) {
+                        var it = iv.object.iterator();
+                        while (it.next()) |entry| {
+                            if (entry.value_ptr.* == .string) {
+                                input_summary = entry.value_ptr.*.string;
+                                break;
+                            }
+                        }
+                    }
+                }
+                const body = try std.fmt.allocPrint(
+                    allocator,
+                    "{s} {s}",
+                    .{ name_v.string, if (input_summary.len > 80) input_summary[0..80] else input_summary },
+                );
+                defer allocator.free(body);
+                try pushEvent(allocator, out, ts, "tool_call", body, false);
+            }
+        }
+    }
+    // type=system is metadata (SystemInit); skipped on purpose.
+}
+
+/// Codex CLI sessions: ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+fn parseCodexJsonl(allocator: std.mem.Allocator, path: []const u8) !std.array_list.Managed(FlatEvent) {
+    var out = std.array_list.Managed(FlatEvent).init(allocator);
+    errdefer {
+        for (out.items) |*e| freeEvent(allocator, e);
+        out.deinit();
+    }
+    const file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+    const stat = try file.stat();
+    if (stat.size > 200 * 1024 * 1024) return error.FileTooLarge;
+    const data = try file.readToEndAlloc(allocator, @intCast(stat.size));
+    defer allocator.free(data);
+    var line_iter = std.mem.tokenizeScalar(u8, data, '\n');
+    while (line_iter.next()) |line| {
+        if (line.len == 0 or line[0] != '{') continue;
+        appendCodexLine(allocator, &out, line) catch continue;
+    }
+    return out;
+}
+
+fn appendCodexLine(
+    allocator: std.mem.Allocator,
+    out: *std.array_list.Managed(FlatEvent),
+    line: []const u8,
+) !void {
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, line, .{}) catch return;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return;
+    const obj = root.object;
+    const ttype_v = obj.get("type") orelse return;
+    if (ttype_v != .string) return;
+    const ttype = ttype_v.string;
+
+    if (std.mem.eql(u8, ttype, "message")) {
+        const role_v = obj.get("role") orelse return;
+        if (role_v != .string) return;
+        const role_in = role_v.string;
+        const role_norm: []const u8 =
+            if (std.mem.eql(u8, role_in, "user")) "user" else if (std.mem.eql(u8, role_in, "assistant")) "assistant" else "user";
+        const content_v = obj.get("content") orelse return;
+        if (content_v != .array) return;
+        for (content_v.array.items) |c_v| {
+            if (c_v != .object) continue;
+            const co = c_v.object;
+            const ct_v = co.get("type") orelse continue;
+            if (ct_v != .string) continue;
+            const ct = ct_v.string;
+            if (std.mem.eql(u8, ct, "input_text") or
+                std.mem.eql(u8, ct, "output_text") or
+                std.mem.eql(u8, ct, "text"))
+            {
+                const text_v = co.get("text") orelse continue;
+                if (text_v != .string) continue;
+                try pushEvent(allocator, out, "", role_norm, text_v.string, false);
+            }
+        }
+    } else if (std.mem.eql(u8, ttype, "reasoning")) {
+        if (obj.get("content")) |content_v| {
+            if (content_v == .array) {
+                for (content_v.array.items) |c_v| {
+                    if (c_v != .object) continue;
+                    const co = c_v.object;
+                    if (co.get("text")) |t_v| {
+                        if (t_v == .string) try pushEvent(allocator, out, "", "thinking", t_v.string, false);
+                    }
+                    if (co.get("summary")) |s_v| {
+                        if (s_v == .string) try pushEvent(allocator, out, "", "thinking", s_v.string, false);
+                    }
+                }
+            }
+        }
+        if (obj.get("summary")) |s_v| {
+            if (s_v == .string) try pushEvent(allocator, out, "", "thinking", s_v.string, false);
+        }
+    } else if (std.mem.eql(u8, ttype, "function_call")) {
+        const name = if (obj.get("name")) |n| (if (n == .string) n.string else "") else "";
+        const args = if (obj.get("arguments")) |a| (if (a == .string) a.string else "") else "";
+        const args_clip = if (args.len > 80) args[0..80] else args;
+        const body = try std.fmt.allocPrint(allocator, "{s} {s}", .{ name, args_clip });
+        defer allocator.free(body);
+        try pushEvent(allocator, out, "", "tool_call", body, false);
+    } else if (std.mem.eql(u8, ttype, "function_call_output")) {
+        const text: []const u8 = blk: {
+            if (obj.get("output")) |o_v| {
+                switch (o_v) {
+                    .string => |s| break :blk s,
+                    .object => |o| {
+                        if (o.get("text")) |t_v| if (t_v == .string) break :blk t_v.string;
+                        if (o.get("content")) |c_v| if (c_v == .string) break :blk c_v.string;
+                    },
+                    else => {},
+                }
+            }
+            break :blk "";
+        };
+        const trunc = text.len > tool_truncate_chars;
+        try pushEvent(allocator, out, "", "tool_result", text, trunc);
+    }
+}
+
+/// Kimi CLI sessions: ~/.kimi/sessions/<account>/<session>/context.jsonl
+fn parseKimiContextJsonl(allocator: std.mem.Allocator, path: []const u8) !std.array_list.Managed(FlatEvent) {
+    var out = std.array_list.Managed(FlatEvent).init(allocator);
+    errdefer {
+        for (out.items) |*e| freeEvent(allocator, e);
+        out.deinit();
+    }
+    const file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+    const stat = try file.stat();
+    if (stat.size > 200 * 1024 * 1024) return error.FileTooLarge;
+    const data = try file.readToEndAlloc(allocator, @intCast(stat.size));
+    defer allocator.free(data);
+    var line_iter = std.mem.tokenizeScalar(u8, data, '\n');
+    while (line_iter.next()) |line| {
+        if (line.len == 0 or line[0] != '{') continue;
+        appendKimiLine(allocator, &out, line) catch continue;
+    }
+    return out;
+}
+
+fn appendKimiLine(
+    allocator: std.mem.Allocator,
+    out: *std.array_list.Managed(FlatEvent),
+    line: []const u8,
+) !void {
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, line, .{}) catch return;
+    defer parsed.deinit();
+    const root = parsed.value;
+    if (root != .object) return;
+    const obj = root.object;
+    const role_v = obj.get("role") orelse return;
+    if (role_v != .string) return;
+    const role_in = role_v.string;
+    if (role_in.len > 0 and role_in[0] == '_') return;
+    const role_norm: []const u8 =
+        if (std.mem.eql(u8, role_in, "user")) "user" else if (std.mem.eql(u8, role_in, "assistant")) "assistant" else if (std.mem.eql(u8, role_in, "tool")) "tool_result" else "user";
+
+    if (obj.get("content")) |content_v| {
+        switch (content_v) {
+            .array => |arr| for (arr.items) |c_v| {
+                if (c_v != .object) continue;
+                const co = c_v.object;
+                const ct_v = co.get("type") orelse continue;
+                if (ct_v != .string) continue;
+                const ct = ct_v.string;
+                if (std.mem.eql(u8, ct, "text")) {
+                    const t_v = co.get("text") orelse continue;
+                    if (t_v != .string) continue;
+                    const trunc = std.mem.eql(u8, role_norm, "tool_result") and t_v.string.len > tool_truncate_chars;
+                    try pushEvent(allocator, out, "", role_norm, t_v.string, trunc);
+                } else if (std.mem.eql(u8, ct, "think")) {
+                    const t_v = co.get("think") orelse continue;
+                    if (t_v != .string) continue;
+                    try pushEvent(allocator, out, "", "thinking", t_v.string, false);
+                }
+            },
+            .string => |s| try pushEvent(allocator, out, "", role_norm, s, false),
+            else => {},
+        }
+    }
+
+    if (std.mem.eql(u8, role_norm, "assistant")) {
+        if (obj.get("tool_calls")) |tcs_v| {
+            if (tcs_v == .array) {
+                for (tcs_v.array.items) |tc_v| {
+                    if (tc_v != .object) continue;
+                    const tc = tc_v.object;
+                    if (tc.get("function")) |fn_v| {
+                        if (fn_v != .object) continue;
+                        const fn_obj = fn_v.object;
+                        const name = if (fn_obj.get("name")) |n| (if (n == .string) n.string else "") else "";
+                        const args = if (fn_obj.get("arguments")) |a| (if (a == .string) a.string else "") else "";
+                        const args_clip = if (args.len > 80) args[0..80] else args;
+                        const body = try std.fmt.allocPrint(allocator, "{s} {s}", .{ name, args_clip });
+                        defer allocator.free(body);
+                        try pushEvent(allocator, out, "", "tool_call", body, false);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One pre-windowed chunk ready to embed.
+const Chunk = struct {
+    session_id: []const u8,
+    chunk_index: usize,
+    first_ts: []const u8,
+    last_ts: []const u8,
+    role_sequence: []const u8,
+    tool_calls: []const u8,
+    display_text: []u8,
+    text_preview: []u8,
+};
+
+fn buildChunk(
+    allocator: std.mem.Allocator,
+    session_id: []const u8,
+    chunk_index: usize,
+    events: []const FlatEvent,
+) !Chunk {
+    var display = std.array_list.Managed(u8).init(allocator);
+    errdefer display.deinit();
+    var roles = std.array_list.Managed(u8).init(allocator);
+    errdefer roles.deinit();
+    var tools = std.array_list.Managed(u8).init(allocator);
+    errdefer tools.deinit();
+
+    for (events, 0..) |e, i| {
+        if (i > 0) try roles.append(',');
+        try roles.appendSlice(e.role);
+        try display.writer().print("[{s} {s}] {s}\n", .{ e.timestamp, e.role, e.body });
+        if (std.mem.eql(u8, e.role, "tool_call")) {
+            const sp = std.mem.indexOfScalar(u8, e.body, ' ') orelse e.body.len;
+            if (tools.items.len > 0) try tools.append(',');
+            try tools.appendSlice(e.body[0..sp]);
+        }
+    }
+
+    const display_owned = try display.toOwnedSlice();
+    const preview_len: usize = @min(160, display_owned.len);
+    const preview = try allocator.dupe(u8, display_owned[0..preview_len]);
+
+    return .{
+        .session_id = session_id,
+        .chunk_index = chunk_index,
+        .first_ts = if (events.len > 0) events[0].timestamp else "",
+        .last_ts = if (events.len > 0) events[events.len - 1].timestamp else "",
+        .role_sequence = try roles.toOwnedSlice(),
+        .tool_calls = try tools.toOwnedSlice(),
+        .display_text = display_owned,
+        .text_preview = preview,
+    };
+}
+
+fn freeChunk(allocator: std.mem.Allocator, ch: *Chunk) void {
+    allocator.free(ch.role_sequence);
+    allocator.free(ch.tool_calls);
+    allocator.free(ch.display_text);
+    allocator.free(ch.text_preview);
+}
+
+fn windowEvents(
+    allocator: std.mem.Allocator,
+    session_id: []const u8,
+    events: []const FlatEvent,
+) !std.array_list.Managed(Chunk) {
+    var out = std.array_list.Managed(Chunk).init(allocator);
+    errdefer {
+        for (out.items) |*ch| freeChunk(allocator, ch);
+        out.deinit();
+    }
+    if (events.len == 0) return out;
+
+    var idx: usize = 0;
+    var chunk_index: usize = 0;
+    while (idx < events.len) {
+        const end = @min(idx + window_size, events.len);
+        const ch = try buildChunk(allocator, session_id, chunk_index, events[idx..end]);
+        try out.append(ch);
+        chunk_index += 1;
+        if (end == events.len) break;
+        idx += window_size - window_overlap;
+    }
+    return out;
+}
+
+// ── per-source walkers ──────────────────────────────────────────────────
+
+/// Walks <base>/projects/<slug>/*.jsonl.
+pub fn findClaudeJsonls(allocator: std.mem.Allocator, base_dir: []const u8) ![][]u8 {
+    var out = std.array_list.Managed([]u8).init(allocator);
+    errdefer {
+        for (out.items) |p| allocator.free(p);
+        out.deinit();
+    }
+    const projects_dir = try std.fmt.allocPrint(allocator, "{s}/projects", .{base_dir});
+    defer allocator.free(projects_dir);
+
+    var pdir = std.fs.openDirAbsolute(projects_dir, .{ .iterate = true }) catch return out.toOwnedSlice();
+    defer pdir.close();
+    var pit = pdir.iterate();
+    while (try pit.next()) |proj_entry| {
+        if (proj_entry.kind != .directory) continue;
+        const proj_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ projects_dir, proj_entry.name });
+        defer allocator.free(proj_path);
+
+        var jdir = std.fs.openDirAbsolute(proj_path, .{ .iterate = true }) catch continue;
+        defer jdir.close();
+        var jit = jdir.iterate();
+        while (try jit.next()) |je| {
+            if (je.kind != .file) continue;
+            if (!std.mem.endsWith(u8, je.name, ".jsonl")) continue;
+            const full = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ proj_path, je.name });
+            try out.append(full);
+        }
+    }
+    sortStrings(out.items);
+    return out.toOwnedSlice();
+}
+
+pub fn findCodexJsonls(allocator: std.mem.Allocator, base: []const u8) ![][]u8 {
+    const root = try std.fmt.allocPrint(allocator, "{s}/sessions", .{base});
+    defer allocator.free(root);
+    var out = std.array_list.Managed([]u8).init(allocator);
+    errdefer {
+        for (out.items) |p| allocator.free(p);
+        out.deinit();
+    }
+    var dir = std.fs.openDirAbsolute(root, .{ .iterate = true }) catch return out.toOwnedSlice();
+    defer dir.close();
+    var walker = try dir.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next()) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.endsWith(u8, entry.basename, ".jsonl")) continue;
+        const full = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ root, entry.path });
+        try out.append(full);
+    }
+    sortStrings(out.items);
+    return out.toOwnedSlice();
+}
+
+pub fn findKimiContexts(allocator: std.mem.Allocator, base: []const u8) ![][]u8 {
+    const root = try std.fmt.allocPrint(allocator, "{s}/sessions", .{base});
+    defer allocator.free(root);
+    var out = std.array_list.Managed([]u8).init(allocator);
+    errdefer {
+        for (out.items) |p| allocator.free(p);
+        out.deinit();
+    }
+    var dir = std.fs.openDirAbsolute(root, .{ .iterate = true }) catch return out.toOwnedSlice();
+    defer dir.close();
+    var walker = try dir.walk(allocator);
+    defer walker.deinit();
+    while (try walker.next()) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.eql(u8, entry.basename, "context.jsonl")) continue;
+        const full = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ root, entry.path });
+        try out.append(full);
+    }
+    sortStrings(out.items);
+    return out.toOwnedSlice();
+}
+
+/// Walks ~/.claude*/projects/<slug>/memory/*.md across the two accounts.
+pub fn findMemoryMarkdowns(allocator: std.mem.Allocator, home: []const u8) ![][]u8 {
+    var out = std.array_list.Managed([]u8).init(allocator);
+    errdefer {
+        for (out.items) |p| allocator.free(p);
+        out.deinit();
+    }
+    const accounts = [_][]const u8{ ".claude", ".claude-overflow" };
+    for (accounts) |account| {
+        const projects_dir = try std.fmt.allocPrint(allocator, "{s}/{s}/projects", .{ home, account });
+        defer allocator.free(projects_dir);
+
+        var pdir = std.fs.openDirAbsolute(projects_dir, .{ .iterate = true }) catch continue;
+        defer pdir.close();
+        var pit = pdir.iterate();
+        while (try pit.next()) |proj_e| {
+            if (proj_e.kind != .directory) continue;
+            const memdir_path = try std.fmt.allocPrint(allocator, "{s}/{s}/memory", .{ projects_dir, proj_e.name });
+            defer allocator.free(memdir_path);
+
+            var mdir = std.fs.openDirAbsolute(memdir_path, .{ .iterate = true }) catch continue;
+            defer mdir.close();
+            var mit = mdir.iterate();
+            while (try mit.next()) |me| {
+                if (me.kind != .file) continue;
+                if (!std.mem.endsWith(u8, me.name, ".md")) continue;
+                const full = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ memdir_path, me.name });
+                try out.append(full);
+            }
+        }
+    }
+    sortStrings(out.items);
+    return out.toOwnedSlice();
+}
+
+fn sortStrings(items: [][]u8) void {
+    std.mem.sort([]u8, items, {}, struct {
+        fn lt(_: void, a: []u8, b: []u8) bool {
+            return std.mem.lessThan(u8, a, b);
+        }
+    }.lt);
+}
+
 // ── thread-pool ingest ──────────────────────────────────────────────────
+
+/// What kind of corpus a job's path belongs to. Picks the parser + the
+/// chunk shape + the canonical source_type label that lands in pgvector.
+pub const SourceKind = enum {
+    code,
+    claude,
+    claude_overflow,
+    codex,
+    kimi,
+    memory,
+
+    pub fn fromStr(s: []const u8) ?SourceKind {
+        if (std.mem.eql(u8, s, "code")) return .code;
+        if (std.mem.eql(u8, s, "claude")) return .claude;
+        if (std.mem.eql(u8, s, "claude-overflow")) return .claude_overflow;
+        if (std.mem.eql(u8, s, "codex")) return .codex;
+        if (std.mem.eql(u8, s, "kimi")) return .kimi;
+        if (std.mem.eql(u8, s, "memory")) return .memory;
+        return null;
+    }
+
+    pub fn label(self: SourceKind) []const u8 {
+        return switch (self) {
+            .code => "code",
+            .claude => "claude",
+            .claude_overflow => "claude-overflow",
+            .codex => "codex",
+            .kimi => "kimi",
+            .memory => "memory",
+        };
+    }
+
+    /// What lands in chunks.<table>.source_type. The dense+rerank pipeline
+    /// already builds a partial HNSW index per source_type.
+    pub fn canonicalSourceType(self: SourceKind) []const u8 {
+        return switch (self) {
+            .code => "code-chunk",
+            .claude, .claude_overflow, .codex, .kimi => "chat-log-chunk",
+            .memory => "document-chunk",
+        };
+    }
+};
 
 const code_window_lines: usize = 200;
 const code_overlap_lines: usize = 50;
@@ -1089,10 +1812,12 @@ pub const Counters = struct {
 };
 
 const Job = struct {
+    kind: SourceKind = .code,
     /// Absolute path. Owned by the queue's allocator.
     path: []u8,
-    /// Repo root used to compute the relative path that becomes source_id.
-    /// Owned by the queue's allocator.
+    /// Root the path is relative to. For .code this is the repo root. For
+    /// .claude/.claude_overflow this is `~/.claude` etc. For .memory this
+    /// is `$HOME` (the walker emits absolute paths anyway). Owned.
     repo_root: []u8,
 
     fn deinit(self: *Job, allocator: std.mem.Allocator) void {
@@ -1182,13 +1907,16 @@ pub const IngestSession = struct {
     n_workers: usize,
 
     /// `shared` and `store` outlive the session; they're borrowed.
-    /// `root_path` and `source_type` are duped internally.
+    /// `root_path` is the directory the walker is rooted at; for chat-log
+    /// kinds (claude/claude-overflow/codex/kimi) the walker reads
+    /// `<root_path>/{projects,sessions}/...`. For .memory the walker uses
+    /// `<root_path>` as $HOME and walks both .claude + .claude-overflow.
     pub fn start(
         allocator: std.mem.Allocator,
         shared: *SharedModel,
         store: *Store,
         root_path: []const u8,
-        source_type: []const u8,
+        kind: SourceKind,
         model_id: []const u8,
         n_workers: usize,
     ) !*IngestSession {
@@ -1206,7 +1934,7 @@ pub const IngestSession = struct {
             .cur_len = 0,
             .err_buf = undefined,
             .err_len = 0,
-            .source_type = try allocator.dupe(u8, source_type),
+            .source_type = try allocator.dupe(u8, kind.canonicalSourceType()),
             .model_id = try allocator.dupe(u8, model_id),
             .n_workers = n_workers,
         };
@@ -1216,9 +1944,15 @@ pub const IngestSession = struct {
             session.queue.deinit();
         }
 
-        // Walk + enqueue. Doing this synchronously up front gives us an
-        // accurate files_total before any worker starts processing.
-        const files = try findFiles(allocator, root_path);
+        // Per-kind walker. Synchronous so we have an accurate files_total
+        // before any worker starts.
+        const files = switch (kind) {
+            .code => try findFiles(allocator, root_path),
+            .claude, .claude_overflow => try findClaudeJsonls(allocator, root_path),
+            .codex => try findCodexJsonls(allocator, root_path),
+            .kimi => try findKimiContexts(allocator, root_path),
+            .memory => try findMemoryMarkdowns(allocator, root_path),
+        };
         defer {
             for (files) |p| allocator.free(p);
             allocator.free(files);
@@ -1227,6 +1961,7 @@ pub const IngestSession = struct {
         defer allocator.free(root_dup);
         for (files) |p| {
             try session.queue.push(.{
+                .kind = kind,
                 .path = try allocator.dupe(u8, p),
                 .repo_root = try allocator.dupe(u8, root_dup),
             });
@@ -1365,7 +2100,7 @@ fn workerEntry(arg: *WorkerArg) void {
         const rel = relTo(job.path, job.repo_root);
         arg.session.setCurrent(rel);
 
-        processFile(a, &ctx, arg.store, &job, arg.session) catch |e| {
+        processJob(a, &ctx, arg.store, &job, arg.session) catch |e| {
             var buf: [256]u8 = undefined;
             const msg = std.fmt.bufPrint(&buf, "{s}: {s}", .{ rel, @errorName(e) }) catch "file failed";
             arg.session.setError(msg);
@@ -1387,7 +2122,21 @@ fn relTo(path: []const u8, root: []const u8) []const u8 {
     return path;
 }
 
-fn processFile(
+fn processJob(
+    allocator: std.mem.Allocator,
+    ctx: *WorkerCtx,
+    store: *Store,
+    job: *const Job,
+    session: *IngestSession,
+) !void {
+    return switch (job.kind) {
+        .code => processCode(allocator, ctx, store, job, session),
+        .claude, .claude_overflow, .codex, .kimi => processChatLog(allocator, ctx, store, job, session),
+        .memory => processMemory(allocator, ctx, store, job, session),
+    };
+}
+
+fn processCode(
     allocator: std.mem.Allocator,
     ctx: *WorkerCtx,
     store: *Store,
@@ -1412,73 +2161,212 @@ fn processFile(
 
     const source_id = try std.fmt.allocPrint(allocator, "code/{s}", .{rel});
 
-    // Build all chunk bodies first, then feed in batches of 16 to amortise
-    // GPU dispatch.
+    // Each chunk is byte-capped + UTF-8-sanitised so the tokenizer sees
+    // clean, bounded input.
+    const chunk_byte_cap: usize = 32 * 1024;
     var chunk_bodies = std.array_list.Managed([]u8).init(allocator);
     defer chunk_bodies.deinit();
-    var chunk_idx: usize = 0;
     {
         var i: usize = 0;
         while (i < lines.items.len) {
             const end = @min(i + code_window_lines, lines.items.len);
             var body = std.array_list.Managed(u8).init(allocator);
+            defer body.deinit();
             try body.writer().print("// File: {s}\n// Lang: {s}\n// Lines: {d}-{d}\n\n", .{ rel, lang, i + 1, end });
             for (lines.items[i..end], 0..) |line, j| {
                 if (j > 0) try body.append('\n');
                 try body.appendSlice(line);
+                if (body.items.len > chunk_byte_cap) break;
             }
-            try chunk_bodies.append(try body.toOwnedSlice());
-            chunk_idx += 1;
+            const truncated = body.items[0..@min(body.items.len, chunk_byte_cap)];
+            const cleaned = try sanitizeUtf8(allocator, truncated);
+            try chunk_bodies.append(cleaned);
             if (end == lines.items.len) break;
             i += code_window_lines - code_overlap_lines;
         }
     }
 
-    const batch_size: usize = 16;
-    var bstart: usize = 0;
-    while (bstart < chunk_bodies.items.len) {
+    for (chunk_bodies.items, 0..) |body, ci| {
         if (session.cancel_flag.load(.monotonic)) return;
-        const bend = @min(bstart + batch_size, chunk_bodies.items.len);
-        const slice_view = chunk_bodies.items[bstart..bend];
-        var texts = try allocator.alloc([]const u8, slice_view.len);
-        for (slice_view, 0..) |s, j| texts[j] = s;
-
         const t0 = std.time.nanoTimestamp();
-        const vectors = ctx.embedBatch(allocator, texts) catch {
-            bstart = bend;
-            continue;
-        };
+        const vec = ctx.embedText(allocator, body) catch continue;
         const t1 = std.time.nanoTimestamp();
         _ = session.counters.embed_ns.fetchAdd(@intCast(t1 - t0), .monotonic);
 
-        for (slice_view, 0..) |body, j| {
-            const ci = bstart + j;
-            const id_input = try std.fmt.allocPrint(allocator, "{s}#{d}#{s}", .{ source_id, ci, session.model_id });
-            const id_hex = shaHex(id_input);
-            const id = id_hex[0..40];
-            const sha_full = shaHex(body);
-            const text_sha = sha_full[0..40];
-            const preview_len: usize = @min(160, body.len);
-            const meta = try std.fmt.allocPrint(
-                allocator,
-                "{{\"path\":\"{s}\",\"lang\":\"{s}\"}}",
-                .{ rel, lang },
-            );
-            store.upsert(
-                id,
-                session.source_type,
-                source_id,
-                @intCast(ci),
-                body,
-                body[0..preview_len],
-                meta,
-                session.model_id,
-                text_sha,
-                vectors[j],
-            ) catch {};
-            _ = session.counters.chunks_done.fetchAdd(1, .monotonic);
-        }
-
-        bstart = bend;
+        const id_input = try std.fmt.allocPrint(allocator, "{s}#{d}#{s}", .{ source_id, ci, session.model_id });
+        const id_hex = shaHex(id_input);
+        const id = id_hex[0..40];
+        const sha_full = shaHex(body);
+        const text_sha = sha_full[0..40];
+        const preview_len: usize = @min(160, body.len);
+        const meta = try std.fmt.allocPrint(
+            allocator,
+            "{{\"path\":\"{s}\",\"lang\":\"{s}\"}}",
+            .{ rel, lang },
+        );
+        store.upsert(
+            id,
+            session.source_type,
+            source_id,
+            @intCast(ci),
+            body,
+            body[0..preview_len],
+            meta,
+            session.model_id,
+            text_sha,
+            vec,
+        ) catch {};
+        _ = session.counters.chunks_done.fetchAdd(1, .monotonic);
     }
+}
+
+/// Chat-log ingest. Parses the JSONL per the source kind, sliding-windows
+/// 4 events at a time (with 2-event overlap) into chunks, embeds each
+/// chunk's display_text, and upserts with role_sequence/tool_calls/first_ts/
+/// last_ts metadata so query-time filtering by role or tool can use it.
+fn processChatLog(
+    allocator: std.mem.Allocator,
+    ctx: *WorkerCtx,
+    store: *Store,
+    job: *const Job,
+    session: *IngestSession,
+) !void {
+    const basename = std.fs.path.basename(job.path);
+    // Kimi's session files all share the basename `context.jsonl`; the
+    // sibling directory name is the actual session identifier.
+    const session_basename: []const u8 = if (job.kind == .kimi) blk: {
+        const dir_path = std.fs.path.dirname(job.path) orelse job.path;
+        break :blk std.fs.path.basename(dir_path);
+    } else basename;
+    const agent_label = job.kind.label();
+    const session_id = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ agent_label, session_basename });
+
+    var events = switch (job.kind) {
+        .claude, .claude_overflow => parseClaudeJsonl(allocator, job.path) catch return,
+        .codex => parseCodexJsonl(allocator, job.path) catch return,
+        .kimi => parseKimiContextJsonl(allocator, job.path) catch return,
+        else => return,
+    };
+    defer {
+        for (events.items) |*e| freeEvent(allocator, e);
+        events.deinit();
+    }
+    if (events.items.len == 0) return;
+
+    var chunks = try windowEvents(allocator, session_id, events.items);
+    defer {
+        for (chunks.items) |*ch| freeChunk(allocator, ch);
+        chunks.deinit();
+    }
+
+    for (chunks.items) |ch| {
+        if (session.cancel_flag.load(.monotonic)) return;
+
+        // UTF-8 sanitise + byte-cap before tokenizing — chat tool_result
+        // blobs frequently contain mojibake or huge binary payloads.
+        const cleaned = try sanitizeUtf8(allocator, ch.display_text);
+        defer allocator.free(cleaned);
+        const cap: usize = 32 * 1024;
+        const body = if (cleaned.len > cap) cleaned[0..cap] else cleaned;
+
+        const t0 = std.time.nanoTimestamp();
+        const vec = ctx.embedText(allocator, body) catch continue;
+        const t1 = std.time.nanoTimestamp();
+        _ = session.counters.embed_ns.fetchAdd(@intCast(t1 - t0), .monotonic);
+
+        const id_input = try std.fmt.allocPrint(allocator, "{s}#{d}#{s}", .{ session_id, ch.chunk_index, session.model_id });
+        const id_hex = shaHex(id_input);
+        const id = id_hex[0..40];
+        const sha_full = shaHex(body);
+        const text_sha = sha_full[0..40];
+        const preview_len: usize = @min(160, body.len);
+        const meta = try std.fmt.allocPrint(
+            allocator,
+            "{{\"agent\":\"{s}\",\"role_sequence\":\"{s}\",\"tool_calls\":\"{s}\",\"first_ts\":\"{s}\",\"last_ts\":\"{s}\"}}",
+            .{ agent_label, ch.role_sequence, ch.tool_calls, ch.first_ts, ch.last_ts },
+        );
+        store.upsert(
+            id,
+            session.source_type, // "chat-log-chunk"
+            session_id,
+            @intCast(ch.chunk_index),
+            body,
+            body[0..preview_len],
+            meta,
+            session.model_id,
+            text_sha,
+            vec,
+        ) catch {};
+        _ = session.counters.chunks_done.fetchAdd(1, .monotonic);
+    }
+}
+
+/// Memory `.md` ingest. Whole-file embed (memory files are by design
+/// short — Claude's memory entries are kept terse). Metadata captures
+/// account + project_slug + filename for downstream filtering.
+fn processMemory(
+    allocator: std.mem.Allocator,
+    ctx: *WorkerCtx,
+    store: *Store,
+    job: *const Job,
+    session: *IngestSession,
+) !void {
+    const filename = std.fs.path.basename(job.path);
+    const memdir = std.fs.path.dirname(job.path) orelse "";
+    const projdir = std.fs.path.dirname(memdir) orelse "";
+    const project_slug = std.fs.path.basename(projdir);
+    const projsdir = std.fs.path.dirname(projdir) orelse "";
+    const accountdir = std.fs.path.dirname(projsdir) orelse "";
+    const account = std.fs.path.basename(accountdir);
+
+    const source_id = try std.fmt.allocPrint(allocator, "memory/{s}/{s}/{s}", .{ account, project_slug, filename });
+
+    const file = std.fs.openFileAbsolute(job.path, .{}) catch return;
+    defer file.close();
+    const stat = file.stat() catch return;
+    if (stat.size > 200 * 1024) return;
+    const raw = file.readToEndAlloc(allocator, @intCast(stat.size)) catch return;
+    defer allocator.free(raw);
+
+    const cleaned = try sanitizeUtf8(allocator, raw);
+    defer allocator.free(cleaned);
+    const display_text = try std.fmt.allocPrint(
+        allocator,
+        "# Memory: {s}\n# Project: {s}/{s}\n\n{s}",
+        .{ filename, account, project_slug, cleaned },
+    );
+    defer allocator.free(display_text);
+
+    const cap: usize = 32 * 1024;
+    const body = if (display_text.len > cap) display_text[0..cap] else display_text;
+    const preview_len: usize = @min(160, body.len);
+
+    const id_input = try std.fmt.allocPrint(allocator, "{s}#0#{s}", .{ source_id, session.model_id });
+    const id_hex = shaHex(id_input);
+    const id = id_hex[0..40];
+    const sha_full = shaHex(body);
+    const text_sha = sha_full[0..40];
+    const meta = try std.fmt.allocPrint(
+        allocator,
+        "{{\"format\":\"memory\",\"account\":\"{s}\",\"project_slug\":\"{s}\",\"filename\":\"{s}\"}}",
+        .{ account, project_slug, filename },
+    );
+
+    const t0 = std.time.nanoTimestamp();
+    const vec = ctx.embedText(allocator, body) catch return;
+    _ = session.counters.embed_ns.fetchAdd(@intCast(std.time.nanoTimestamp() - t0), .monotonic);
+
+    try store.upsert(
+        id,
+        session.source_type, // "document-chunk"
+        source_id,
+        0,
+        body,
+        body[0..preview_len],
+        meta,
+        session.model_id,
+        text_sha,
+        vec,
+    );
+    _ = session.counters.chunks_done.fetchAdd(1, .monotonic);
 }

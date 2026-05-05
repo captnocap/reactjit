@@ -5,6 +5,7 @@
 //! CPU side via de Casteljau subdivision.
 
 const std = @import("std");
+const log = @import("../log.zig");
 const wgpu = @import("wgpu");
 const shaders = @import("shaders.zig");
 const core = @import("gpu.zig");
@@ -70,7 +71,7 @@ pub fn drawCurve(
 ) void {
     if (g_curve_count >= MAX_CURVES) {
         if (!g_capacity_warning_emitted) {
-            std.debug.print("[gpu.curves] capacity reached: {d} curves; dropping later curve draws this frame\n", .{MAX_CURVES});
+            log.print("[gpu.curves] capacity reached: {d} curves; dropping later curve draws this frame\n", .{MAX_CURVES});
             g_capacity_warning_emitted = true;
         }
         return;
@@ -158,7 +159,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .code = shaders.curve_wgsl,
     });
     const shader_module = device.createShaderModule(&shader_desc) orelse {
-        std.debug.print("Failed to create curve shader module\n", .{});
+        log.print("Failed to create curve shader module\n", .{});
         return;
     };
     defer shader_module.release();
@@ -178,7 +179,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex | wgpu.ShaderStages.fragment,
             .buffer = .{
-                .@"type" = .uniform,
+                .type = .uniform,
                 .has_dynamic_offset = 0,
                 .min_binding_size = 8,
             },
@@ -256,7 +257,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
     });
 
     if (g_curve_pipeline == null) {
-        std.debug.print("Failed to create curve render pipeline\n", .{});
+        log.print("Failed to create curve render pipeline\n", .{});
     }
 }
 

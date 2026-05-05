@@ -6,6 +6,7 @@
 //! Also detects frozen processes via heartbeat file staleness.
 
 const std = @import("std");
+const log = @import("log.zig");
 const builtin = @import("builtin");
 
 extern "c" fn system(cmd: [*:0]const u8) c_int;
@@ -40,7 +41,7 @@ pub fn init() void {
 
     // Find watchdog.sh
     const script = findScript() orelse {
-        std.debug.print("[WATCHDOG] watchdog.sh not found, disabled\n", .{});
+        log.print("[WATCHDOG] watchdog.sh not found, disabled\n", .{});
         return;
     };
 
@@ -55,7 +56,7 @@ pub fn init() void {
 
     _ = system(@ptrCast(&cmd_z));
 
-    std.debug.print("[WATCHDOG] PID {s} | spike=50MB sample=100ms warmup=3000ms\n", .{pid_str});
+    log.print("[WATCHDOG] PID {s} | spike=50MB sample=100ms warmup=3000ms\n", .{pid_str});
 }
 
 /// Write current timestamp to the heartbeat file.

@@ -19,9 +19,10 @@
 //!   var result = try thread.run(.{ .text = "Say hello in one sentence." }, .{});
 //!   defer result.deinit();
 //!
-//!   if (result.final_response) |text| std.debug.print("{s}\n", .{text});
+//!   if (result.final_response) |text| log.print("{s}\n", .{text});
 
 const std = @import("std");
+const log = @import("log.zig");
 
 pub const VERSION = "0.1.0";
 pub const default_codex_bin = "codex";
@@ -196,7 +197,7 @@ pub const Notification = struct {
 
     pub fn turnId(self: *const Notification) ?[]const u8 {
         if (getStringPath(self.params, &.{"turnId"})) |value| return value;
-        return getStringPath(self.params, &.{"turn", "id"});
+        return getStringPath(self.params, &.{ "turn", "id" });
     }
 
     pub fn itemValue(self: *const Notification) ?std.json.Value {
@@ -211,12 +212,12 @@ pub const Notification = struct {
 
     pub fn completedStatus(self: *const Notification) ?[]const u8 {
         if (!std.mem.eql(u8, self.method, "turn/completed")) return null;
-        return getStringPath(self.params, &.{"turn", "status"});
+        return getStringPath(self.params, &.{ "turn", "status" });
     }
 
     pub fn completedErrorMessage(self: *const Notification) ?[]const u8 {
         if (!std.mem.eql(u8, self.method, "turn/completed")) return null;
-        return getStringPath(self.params, &.{"turn", "error", "message"});
+        return getStringPath(self.params, &.{ "turn", "error", "message" });
     }
 };
 
@@ -512,7 +513,7 @@ pub const Codex = struct {
         var response = try self.client.requestJson("thread/start", params_json);
         defer response.deinit();
 
-        const thread_id = getStringPath(response.value, &.{"thread", "id"}) orelse return error.InvalidResponse;
+        const thread_id = getStringPath(response.value, &.{ "thread", "id" }) orelse return error.InvalidResponse;
         return Thread.init(self.allocator, &self.client, thread_id);
     }
 
@@ -523,7 +524,7 @@ pub const Codex = struct {
         var response = try self.client.requestJson("thread/resume", params_json);
         defer response.deinit();
 
-        const resumed_id = getStringPath(response.value, &.{"thread", "id"}) orelse return error.InvalidResponse;
+        const resumed_id = getStringPath(response.value, &.{ "thread", "id" }) orelse return error.InvalidResponse;
         return Thread.init(self.allocator, &self.client, resumed_id);
     }
 
@@ -534,7 +535,7 @@ pub const Codex = struct {
         var response = try self.client.requestJson("thread/fork", params_json);
         defer response.deinit();
 
-        const forked_id = getStringPath(response.value, &.{"thread", "id"}) orelse return error.InvalidResponse;
+        const forked_id = getStringPath(response.value, &.{ "thread", "id" }) orelse return error.InvalidResponse;
         return Thread.init(self.allocator, &self.client, forked_id);
     }
 
@@ -545,7 +546,7 @@ pub const Codex = struct {
         var response = try self.client.requestJson("thread/unarchive", params_json);
         defer response.deinit();
 
-        const reopened_id = getStringPath(response.value, &.{"thread", "id"}) orelse return error.InvalidResponse;
+        const reopened_id = getStringPath(response.value, &.{ "thread", "id" }) orelse return error.InvalidResponse;
         return Thread.init(self.allocator, &self.client, reopened_id);
     }
 
@@ -598,7 +599,7 @@ pub const Thread = struct {
         var response = try self.client.requestJson("turn/start", params_json);
         defer response.deinit();
 
-        const turn_id = getStringPath(response.value, &.{"turn", "id"}) orelse return error.InvalidResponse;
+        const turn_id = getStringPath(response.value, &.{ "turn", "id" }) orelse return error.InvalidResponse;
         return TurnHandle.init(self.allocator, self.client, self.id, turn_id);
     }
 
@@ -767,8 +768,8 @@ fn notificationFromOwnedJson(message: OwnedJson, method: []const u8) !Notificati
 
 fn parseInitializeResponse(allocator: std.mem.Allocator, value: std.json.Value) !InitializeResponse {
     const trimmed_user_agent = std.mem.trim(u8, getStringPath(value, &.{"userAgent"}) orelse "", &std.ascii.whitespace);
-    var server_name = std.mem.trim(u8, getStringPath(value, &.{"serverInfo", "name"}) orelse "", &std.ascii.whitespace);
-    var server_version = std.mem.trim(u8, getStringPath(value, &.{"serverInfo", "version"}) orelse "", &std.ascii.whitespace);
+    var server_name = std.mem.trim(u8, getStringPath(value, &.{ "serverInfo", "name" }) orelse "", &std.ascii.whitespace);
+    var server_version = std.mem.trim(u8, getStringPath(value, &.{ "serverInfo", "version" }) orelse "", &std.ascii.whitespace);
 
     if (server_name.len == 0 or server_version.len == 0) {
         const split = splitUserAgent(trimmed_user_agent);

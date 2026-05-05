@@ -11,6 +11,7 @@
 //!   tsz-dev                         — empty shell, waiting for curl
 
 const std = @import("std");
+const log = @import("log.zig");
 const layout = @import("layout.zig");
 const engine = @import("engine.zig");
 const cartridge = @import("cartridge.zig");
@@ -131,17 +132,17 @@ fn startListener() void {
     std.posix.setsockopt(sock, std.posix.SOL.SOCKET, std.posix.SO.REUSEADDR, &one) catch {};
 
     std.posix.bind(sock, &addr.any, addr.getOsSockLen()) catch |err| {
-        std.debug.print("[dev_shell] Failed to bind port {d}: {}\n", .{ LISTEN_PORT, err });
+        log.print("[dev_shell] Failed to bind port {d}: {}\n", .{ LISTEN_PORT, err });
         std.posix.close(sock);
         return;
     };
     std.posix.listen(sock, 4) catch |err| {
-        std.debug.print("[dev_shell] Failed to listen: {}\n", .{err});
+        log.print("[dev_shell] Failed to listen: {}\n", .{err});
         std.posix.close(sock);
         return;
     };
     g_listener = sock;
-    std.debug.print("[dev_shell] Listening on http://127.0.0.1:{d}\n", .{LISTEN_PORT});
+    log.print("[dev_shell] Listening on http://127.0.0.1:{d}\n", .{LISTEN_PORT});
 }
 
 /// Non-blocking: accept one connection, handle it, close it. Called each tick.
@@ -214,7 +215,7 @@ fn pollListener() void {
         _ = std.posix.write(client, hdr) catch {};
         _ = std.posix.write(client, resp_body) catch {};
 
-        std.debug.print("[dev_shell] Loaded new cart via HTTP: {s} (tab {d})\n", .{ c.titleSlice(), idx });
+        log.print("[dev_shell] Loaded new cart via HTTP: {s} (tab {d})\n", .{ c.titleSlice(), idx });
     }
 }
 
@@ -267,7 +268,7 @@ fn handleLoadPack(client: std.posix.socket_t, req: []const u8) void {
     _ = std.posix.write(client, hdr) catch {};
     _ = std.posix.write(client, resp_body) catch {};
 
-    std.debug.print("[dev_shell] Loaded pack: {d} cartridge(s) from {s}\n", .{ tabs_loaded, pack_path });
+    log.print("[dev_shell] Loaded pack: {d} cartridge(s) from {s}\n", .{ tabs_loaded, pack_path });
 }
 
 // ── Engine callbacks ──
@@ -317,15 +318,15 @@ pub fn main() !void {
     for (args[1..]) |arg| {
         if (arg.len > 0 and arg[0] == '-') continue;
         _ = cartridge.load(arg) catch |err| {
-            std.debug.print("[cartridge] Failed to load {s}: {}\n", .{ arg, err });
+            log.print("[cartridge] Failed to load {s}: {}\n", .{ arg, err });
         };
     }
 
     loaded_count = cartridge.count();
-    std.debug.print("[cartridge] Loaded {d} cartridge(s)\n", .{loaded_count});
+    log.print("[cartridge] Loaded {d} cartridge(s)\n", .{loaded_count});
     for (0..loaded_count) |i| {
         if (cartridge.get(i)) |c| {
-            std.debug.print("[cartridge]   [{d}] {s}\n", .{ i + 1, c.titleSlice() });
+            log.print("[cartridge]   [{d}] {s}\n", .{ i + 1, c.titleSlice() });
         }
     }
 
@@ -350,7 +351,7 @@ pub fn main() !void {
 
     const win_w: u32 = 1280;
     const win_h: u32 = 800;
-    std.debug.print("[dev_shell] window {d}x{d}\n", .{ win_w, win_h });
+    log.print("[dev_shell] window {d}x{d}\n", .{ win_w, win_h });
 
     try engine.run(.{
         .title = "CartridgeOS",

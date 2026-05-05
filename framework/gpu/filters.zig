@@ -36,6 +36,7 @@ pub const Filter = enum(u8) {
     grayscale,
     pixelate,
     dither,
+    bytecode,
 
     pub fn wgsl(self: Filter) []const u8 {
         return switch (self) {
@@ -49,6 +50,7 @@ pub const Filter = enum(u8) {
             .grayscale => filter_shaders.grayscale_wgsl,
             .pixelate => filter_shaders.pixelate_wgsl,
             .dither => filter_shaders.dither_wgsl,
+            .bytecode => filter_shaders.bytecode_wgsl,
         };
     }
 
@@ -116,7 +118,7 @@ pub fn ensureInit(device: *wgpu.Device, format: wgpu.TextureFormat) void {
         .{
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex,
-            .buffer = .{ .@"type" = .uniform, .has_dynamic_offset = 0, .min_binding_size = 8 },
+            .buffer = .{ .type = .uniform, .has_dynamic_offset = 0, .min_binding_size = 8 },
         },
         .{
             .binding = 1,
@@ -130,12 +132,12 @@ pub fn ensureInit(device: *wgpu.Device, format: wgpu.TextureFormat) void {
         .{
             .binding = 2,
             .visibility = wgpu.ShaderStages.fragment,
-            .sampler = .{ .@"type" = .filtering },
+            .sampler = .{ .type = .filtering },
         },
         .{
             .binding = 3,
             .visibility = wgpu.ShaderStages.vertex | wgpu.ShaderStages.fragment,
-            .buffer = .{ .@"type" = .uniform, .has_dynamic_offset = 0, .min_binding_size = @sizeOf(FilterUniforms) },
+            .buffer = .{ .type = .uniform, .has_dynamic_offset = 0, .min_binding_size = @sizeOf(FilterUniforms) },
         },
     };
 
@@ -143,7 +145,7 @@ pub fn ensureInit(device: *wgpu.Device, format: wgpu.TextureFormat) void {
         .entry_count = layout_entries.len,
         .entries = &layout_entries,
     }) orelse {
-        std.debug.print("[filters] failed to create bind group layout\n", .{});
+        log.print("[filters] failed to create bind group layout\n", .{});
         return;
     };
     g_bind_group_layout = bgl;
@@ -153,7 +155,7 @@ pub fn ensureInit(device: *wgpu.Device, format: wgpu.TextureFormat) void {
         .bind_group_layouts = @ptrCast(&bgl),
     });
     if (g_pipeline_layout == null) {
-        std.debug.print("[filters] failed to create pipeline layout\n", .{});
+        log.print("[filters] failed to create pipeline layout\n", .{});
         return;
     }
 
@@ -161,7 +163,7 @@ pub fn ensureInit(device: *wgpu.Device, format: wgpu.TextureFormat) void {
     inline for (@typeInfo(Filter).@"enum".fields) |f| {
         const filter: Filter = @as(Filter, @enumFromInt(f.value));
         compileFilterPipeline(device, format, filter) catch |err| {
-            std.debug.print("[filters] {s} pipeline failed: {}\n", .{ filter.label(), err });
+            log.print("[filters] {s} pipeline failed: {}\n", .{ filter.label(), err });
         };
     }
 }

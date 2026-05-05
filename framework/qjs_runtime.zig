@@ -5,6 +5,7 @@
 //! In lean builds (has_quickjs=false), all public functions are no-ops.
 
 const std = @import("std");
+const log = @import("log.zig");
 const build_options = @import("build_options");
 const HAS_QUICKJS = if (@hasDecl(build_options, "has_quickjs")) build_options.has_quickjs else true;
 
@@ -21,6 +22,7 @@ const qjs_ipc = if (HAS_DEBUG_SERVER) @import("qjs_ipc.zig") else struct {
     pub fn registerAll(_: *anyopaque) void {}
 };
 const qjs_bindings = @import("qjs_bindings.zig");
+const mouse_state = @import("mouse_state.zig");
 
 const Node = layout.Node;
 const Color = layout.Color;
@@ -84,26 +86,9 @@ pub var g_prepared_scroll_x: f32 = 0;
 pub var g_prepared_scroll_y: f32 = 0;
 pub var g_prepared_scroll_dx: f32 = 0;
 pub var g_prepared_scroll_dy: f32 = 0;
-pub var g_mouse_x: f32 = 0;
-pub var g_mouse_y: f32 = 0;
-pub var g_mouse_down: bool = false;
-pub var g_mouse_right_down: bool = false;
 var g_terminal_dock_resize_active: bool = false;
 var g_terminal_dock_resize_start_y: f32 = 0;
 var g_terminal_dock_resize_start_height: f32 = 0;
-
-pub fn updateMouse(x: f32, y: f32) void {
-    g_mouse_x = x;
-    g_mouse_y = y;
-}
-
-pub fn updateMouseButton(down: bool, right: bool) void {
-    if (right) {
-        g_mouse_right_down = down;
-    } else {
-        g_mouse_down = down;
-    }
-}
 
 pub fn beginTerminalDockResize(start_y: f32, start_height: f32) void {
     g_terminal_dock_resize_active = true;
@@ -558,10 +543,10 @@ fn hostGetTickUs(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValu
     return qjs.JS_NewFloat64(null, @floatFromInt(telemetry_tick_us));
 }
 fn hostGetMouseX(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, @floatCast(g_mouse_x));
+    return qjs.JS_NewFloat64(null, @floatCast(mouse_state.g_mouse_x));
 }
 fn hostGetMouseY(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, @floatCast(g_mouse_y));
+    return qjs.JS_NewFloat64(null, @floatCast(mouse_state.g_mouse_y));
 }
 
 fn hostClipboardSet(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -580,10 +565,10 @@ fn hostClipboardGet(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.J
     return qjs.JS_NewString(ctx, clip);
 }
 fn hostGetMouseDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, if (g_mouse_down) 1.0 else 0.0);
+    return qjs.JS_NewFloat64(null, if (mouse_state.g_mouse_down) 1.0 else 0.0);
 }
 fn hostGetMouseRightDown(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
-    return qjs.JS_NewFloat64(null, if (g_mouse_right_down) 1.0 else 0.0);
+    return qjs.JS_NewFloat64(null, if (mouse_state.g_mouse_right_down) 1.0 else 0.0);
 }
 
 fn hostBeginTerminalDockResize(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
@@ -788,16 +773,16 @@ fn hostClaudeInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
         .permission_mode = .bypass_permissions,
         .inherit_stderr = true,
     };
-    std.debug.print("[claude_sdk] init cwd={s} model={s} resume={s}\n", .{
+    log.print("[claude_sdk] init cwd={s} model={s} resume={s}\n", .{
         cwd,
         if (model) |m| m else "(default)",
         if (resume_session) |sid| sid else "(new)",
     });
     const sess = claude_sdk.Session.init(std.heap.c_allocator, opts) catch |err| {
-        std.debug.print("[claude_sdk] init FAILED: {s}\n", .{@errorName(err)});
+        log.print("[claude_sdk] init FAILED: {s}\n", .{@errorName(err)});
         return jsBoolValue(false);
     };
-    std.debug.print("[claude_sdk] init OK\n", .{});
+    log.print("[claude_sdk] init OK\n", .{});
     g_claude_session = sess;
     return jsBoolValue(true);
 }
@@ -812,9 +797,9 @@ fn hostClaudeSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]q
     defer qjs.JS_FreeCString(c2, text_z);
     const text = std.mem.span(text_z);
 
-    std.debug.print("[claude_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
+    log.print("[claude_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
     g_claude_session.?.send(text) catch |err| {
-        std.debug.print("[claude_sdk] send FAILED: {s}\n", .{@errorName(err)});
+        log.print("[claude_sdk] send FAILED: {s}\n", .{@errorName(err)});
         if (g_claude_session) |*sess| {
             sess.deinit();
             g_claude_session = null;
@@ -831,17 +816,16 @@ fn hostClaudePoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSV
     g_claude_poll_count += 1;
     // Heartbeat every ~1s (60 polls @ 16ms) so we can see if the loop is alive
     if (g_claude_poll_count % 60 == 0) {
-        std.debug.print("[claude_sdk] poll heartbeat count={d} session_alive={}\n",
-            .{ g_claude_poll_count, g_claude_session != null });
+        log.print("[claude_sdk] poll heartbeat count={d} session_alive={}\n", .{ g_claude_poll_count, g_claude_session != null });
     }
     if (g_claude_session == null) return QJS_UNDEFINED;
 
     var owned = (g_claude_session.?.poll() catch |err| {
-        std.debug.print("[claude_sdk] poll FAILED: {s}\n", .{@errorName(err)});
+        log.print("[claude_sdk] poll FAILED: {s}\n", .{@errorName(err)});
         return QJS_UNDEFINED;
     }) orelse {
         if (g_claude_session.?.closed) {
-            std.debug.print("[claude_sdk] session exited\n", .{});
+            log.print("[claude_sdk] session exited\n", .{});
             g_claude_session.?.deinit();
             g_claude_session = null;
         }
@@ -850,7 +834,7 @@ fn hostClaudePoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSV
     defer owned.deinit();
 
     const tag = @tagName(owned.msg);
-    std.debug.print("[claude_sdk] recv {s}\n", .{tag});
+    log.print("[claude_sdk] recv {s}\n", .{tag});
     return claudeMessageToJs(c2, owned.msg);
 }
 
@@ -922,7 +906,7 @@ fn claudeMessageToJs(ctx: *qjs.JSContext, msg: claude_sdk.Message) qjs.JSValue {
             setStr(ctx, obj, "content_json", u.content_json);
         },
         .result => |r| {
-            std.debug.print("[claude_sdk] result num_turns={d} cost={d} is_error={}\n", .{ r.num_turns, r.total_cost_usd, r.is_error });
+            log.print("[claude_sdk] result num_turns={d} cost={d} is_error={}\n", .{ r.num_turns, r.total_cost_usd, r.is_error });
             setStr(ctx, obj, "type", "result");
             setStr(ctx, obj, "subtype", @tagName(r.subtype));
             setStr(ctx, obj, "session_id", r.session_id);
@@ -978,23 +962,23 @@ fn hostKimiInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
         .yolo = true,
         .inherit_stderr = true,
     };
-    std.debug.print("[kimi_wire_sdk] init cwd={s} model={s} session={s}\n", .{
+    log.print("[kimi_wire_sdk] init cwd={s} model={s} session={s}\n", .{
         cwd,
         if (model) |m| m else "(default)",
         if (session_id) |sid| sid else "(new)",
     });
     var sess = kimi_wire_sdk.Session.init(std.heap.c_allocator, opts) catch |err| {
-        std.debug.print("[kimi_wire_sdk] init FAILED: {s}\n", .{@errorName(err)});
+        log.print("[kimi_wire_sdk] init FAILED: {s}\n", .{@errorName(err)});
         return jsBoolValue(false);
     };
     var init_result = sess.initialize(.{}) catch |err| {
-        std.debug.print("[kimi_wire_sdk] initialize FAILED: {s}\n", .{@errorName(err)});
+        log.print("[kimi_wire_sdk] initialize FAILED: {s}\n", .{@errorName(err)});
         sess.deinit();
         return jsBoolValue(false);
     };
     defer init_result.deinit();
 
-    std.debug.print("[kimi_wire_sdk] init OK protocol={s} server={s}/{s}\n", .{
+    log.print("[kimi_wire_sdk] init OK protocol={s} server={s}/{s}\n", .{
         init_result.protocol_version,
         init_result.server_name,
         init_result.server_version,
@@ -1014,10 +998,10 @@ fn hostKimiSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs
     defer qjs.JS_FreeCString(c2, text_z);
     const text = std.mem.span(text_z);
 
-    std.debug.print("[kimi_wire_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
+    log.print("[kimi_wire_sdk] send len={d}: {s}\n", .{ text.len, text[0..@min(text.len, 80)] });
     kimiResetTurnBuffers();
     var token = g_kimi_session.?.prompt(.{ .text = text }) catch |err| {
-        std.debug.print("[kimi_wire_sdk] send FAILED: {s}\n", .{@errorName(err)});
+        log.print("[kimi_wire_sdk] send FAILED: {s}\n", .{@errorName(err)});
         if (g_kimi_session) |*sess| {
             sess.deinit();
             g_kimi_session = null;
@@ -1035,17 +1019,16 @@ fn hostKimiPoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSVal
     const c2 = ctx orelse return QJS_UNDEFINED;
     g_kimi_poll_count += 1;
     if (g_kimi_poll_count % 60 == 0) {
-        std.debug.print("[kimi_wire_sdk] poll heartbeat count={d} session_alive={}\n",
-            .{ g_kimi_poll_count, g_kimi_session != null });
+        log.print("[kimi_wire_sdk] poll heartbeat count={d} session_alive={}\n", .{ g_kimi_poll_count, g_kimi_session != null });
     }
     if (g_kimi_session == null) return QJS_UNDEFINED;
 
     var owned = (g_kimi_session.?.poll() catch |err| {
-        std.debug.print("[kimi_wire_sdk] poll FAILED: {s}\n", .{@errorName(err)});
+        log.print("[kimi_wire_sdk] poll FAILED: {s}\n", .{@errorName(err)});
         return QJS_UNDEFINED;
     }) orelse {
         if (g_kimi_session.?.closed) {
-            std.debug.print("[kimi_wire_sdk] session exited\n", .{});
+            log.print("[kimi_wire_sdk] session exited\n", .{});
             g_kimi_session.?.deinit();
             g_kimi_session = null;
             kimiDeinitTurnBuffers();
@@ -1055,9 +1038,9 @@ fn hostKimiPoll(ctx: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSVal
     defer owned.deinit();
 
     switch (owned.msg) {
-        .event => |event| std.debug.print("[kimi_wire_sdk] recv event {s}\n", .{event.event_type}),
-        .request => |request| std.debug.print("[kimi_wire_sdk] recv request {s}\n", .{request.request_type}),
-        .response => |response| std.debug.print("[kimi_wire_sdk] recv response {s}\n", .{response.status() orelse response.id}),
+        .event => |event| log.print("[kimi_wire_sdk] recv event {s}\n", .{event.event_type}),
+        .request => |request| log.print("[kimi_wire_sdk] recv request {s}\n", .{request.request_type}),
+        .response => |response| log.print("[kimi_wire_sdk] recv response {s}\n", .{response.status() orelse response.id}),
     }
     return kimiMessageToJs(c2, owned.msg);
 }
@@ -1090,10 +1073,10 @@ fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.J
             }
             if (std.mem.eql(u8, event_name, "StatusUpdate")) {
                 setStr(ctx, obj, "type", "usage");
-                setF(ctx, obj, "input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "input_other"}) orelse 0));
-                setF(ctx, obj, "output_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "output"}) orelse 0));
-                setF(ctx, obj, "cache_creation_input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "input_cache_creation"}) orelse 0));
-                setF(ctx, obj, "cache_read_input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{"token_usage", "input_cache_read"}) orelse 0));
+                setF(ctx, obj, "input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{ "token_usage", "input_other" }) orelse 0));
+                setF(ctx, obj, "output_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{ "token_usage", "output" }) orelse 0));
+                setF(ctx, obj, "cache_creation_input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{ "token_usage", "input_cache_creation" }) orelse 0));
+                setF(ctx, obj, "cache_read_input_tokens", @floatFromInt(jsonGetUIntPath(event.payload, &.{ "token_usage", "input_cache_read" }) orelse 0));
                 return obj;
             }
             if (std.mem.eql(u8, event_name, "ContentPart")) {
@@ -1128,8 +1111,8 @@ fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.J
             }
             if (std.mem.eql(u8, event_name, "ToolCall")) {
                 setStr(ctx, obj, "type", "tool_call");
-                if (jsonGetStringPath(event.payload, &.{"function", "name"})) |value| setStr(ctx, obj, "name", value);
-                const maybe_input_json = jsonValueTextAlloc(std.heap.c_allocator, jsonGetPath(event.payload, &.{"function", "arguments"})) catch null;
+                if (jsonGetStringPath(event.payload, &.{ "function", "name" })) |value| setStr(ctx, obj, "name", value);
+                const maybe_input_json = jsonValueTextAlloc(std.heap.c_allocator, jsonGetPath(event.payload, &.{ "function", "arguments" })) catch null;
                 defer if (maybe_input_json) |value| std.heap.c_allocator.free(value);
                 if (maybe_input_json) |value| setStr(ctx, obj, "input_json", value);
                 return obj;
@@ -1142,7 +1125,7 @@ fn kimiMessageToJs(ctx: *qjs.JSContext, msg: kimi_wire_sdk.InboundMessage) qjs.J
             }
             if (std.mem.eql(u8, event_name, "ToolResult")) {
                 setStr(ctx, obj, "type", "tool_result");
-                setB(ctx, obj, "is_error", jsonGetBoolPath(event.payload, &.{"return_value", "is_error"}) orelse false);
+                setB(ctx, obj, "is_error", jsonGetBoolPath(event.payload, &.{ "return_value", "is_error" }) orelse false);
                 const maybe_text = extractKimiToolResultTextAlloc(std.heap.c_allocator, event.payload) catch null;
                 defer if (maybe_text) |value| std.heap.c_allocator.free(value);
                 if (maybe_text) |value| setStr(ctx, obj, "text", value);
@@ -1242,10 +1225,10 @@ fn jsonValueTextAlloc(allocator: std.mem.Allocator, maybe_value: ?std.json.Value
 }
 
 fn extractKimiToolResultTextAlloc(allocator: std.mem.Allocator, payload: std.json.Value) !?[]u8 {
-    if (jsonGetStringPath(payload, &.{"return_value", "message"})) |message| {
+    if (jsonGetStringPath(payload, &.{ "return_value", "message" })) |message| {
         return try allocator.dupe(u8, message);
     }
-    return extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{"return_value", "output"}));
+    return extractKimiContentTextAlloc(allocator, jsonGetPath(payload, &.{ "return_value", "output" }));
 }
 
 fn extractKimiDisplayTextAlloc(allocator: std.mem.Allocator, payload: std.json.Value) !?[]u8 {
@@ -1386,7 +1369,7 @@ fn hostLocalAiInit(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]
         .verbose = false,
     };
     const sess = local_ai_runtime.Session.create(std.heap.c_allocator, opts) catch |err| {
-        std.debug.print("[local_ai_runtime] init FAILED: {s}\n", .{@errorName(err)});
+        log.print("[local_ai_runtime] init FAILED: {s}\n", .{@errorName(err)});
         return jsBoolValue(false);
     };
     g_local_ai_session = sess;
@@ -1404,7 +1387,7 @@ fn hostLocalAiSend(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]
     const text = std.mem.span(text_z);
 
     sess.submit(.{ .text = text }) catch |err| {
-        std.debug.print("[local_ai_runtime] send FAILED: {s}\n", .{@errorName(err)});
+        log.print("[local_ai_runtime] send FAILED: {s}\n", .{@errorName(err)});
         return jsBoolValue(false);
     };
     return jsBoolValue(true);
@@ -1633,13 +1616,13 @@ fn hostRecStart(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue
     const rows = vterm_mod.getRows();
     const cols = vterm_mod.getCols();
     vterm_mod.startRecording(rows, cols);
-    std.debug.print("[rec] started ({d}x{d})\n", .{ rows, cols });
+    log.print("[rec] started ({d}x{d})\n", .{ rows, cols });
     return QJS_UNDEFINED;
 }
 
 fn hostRecStop(_: ?*qjs.JSContext, _: qjs.JSValue, _: c_int, _: [*c]qjs.JSValue) callconv(.c) qjs.JSValue {
     vterm_mod.stopRecording();
-    std.debug.print("[rec] stopped\n", .{});
+    log.print("[rec] stopped\n", .{});
     return QJS_UNDEFINED;
 }
 
@@ -1650,7 +1633,7 @@ fn hostRecSave(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.
     defer qjs.JS_FreeCString(ctx, path_c);
     const path = std.mem.span(path_c);
     const ok = vterm_mod.saveRecording(path);
-    std.debug.print("[rec] save {s} → {s}\n", .{ path, if (ok) "OK" else "FAIL" });
+    log.print("[rec] save {s} → {s}\n", .{ path, if (ok) "OK" else "FAIL" });
     return qjs.JS_NewFloat64(null, if (ok) 1.0 else 0.0);
 }
 
@@ -2432,29 +2415,28 @@ fn hostFetch(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JS
     if (url_ptr == null) return QJS_UNDEFINED;
     defer qjs.JS_FreeCString(ctx, url_ptr);
     const url = std.mem.span(url_ptr);
-    std.debug.print("[fetch] GET {s}\n", .{url});
+    log.print("[fetch] GET {s}\n", .{url});
 
     // Use curl to fetch the URL synchronously
     const result = std.process.Child.run(.{
         .allocator = std.heap.page_allocator,
         .max_output_bytes = 2 * 1024 * 1024, // 2MB
         .argv = &[_][]const u8{
-            "curl", "-sL", "--max-time", "10", "--compressed",
-            "-H", "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-            url,
+            "curl", "-sL",                                                            "--max-time", "10", "--compressed",
+            "-H",   "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36", url,
         },
     }) catch |err| {
-        std.debug.print("[fetch] curl failed: {}\n", .{err});
+        log.print("[fetch] curl failed: {}\n", .{err});
         return QJS_UNDEFINED;
     };
     defer std.heap.page_allocator.free(result.stdout);
     defer std.heap.page_allocator.free(result.stderr);
 
     if (result.stdout.len == 0) {
-        std.debug.print("[fetch] empty response\n", .{});
+        log.print("[fetch] empty response\n", .{});
         return QJS_UNDEFINED;
     }
-    std.debug.print("[fetch] got {d} bytes\n", .{result.stdout.len});
+    log.print("[fetch] got {d} bytes\n", .{result.stdout.len});
     return qjs.JS_NewStringLen(ctx, result.stdout.ptr, @intCast(result.stdout.len));
 }
 
@@ -2550,7 +2532,7 @@ fn hostPtyCwd(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.J
     _ = qjs.JS_ToInt32(ctx, &value, argv[0]);
     if (ptyFromHandle(value)) |p| {
         var path_buf: [64]u8 = undefined;
-        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{ p.pid }) catch {
+        const path = std.fmt.bufPrint(&path_buf, "/proc/{d}/cwd", .{p.pid}) catch {
             return qjs.JS_NewString(ctx, "");
         };
         var cwd_buf: [4096]u8 = undefined;
@@ -2633,18 +2615,18 @@ pub fn ptyHandleTextInput(text: [*:0]const u8) void {
 /// accept the raw i32 sym and u16 mod values directly.
 pub fn ptyHandleKeyDown(sym: i32, mod: u16) void {
     if (comptime !HAS_QUICKJS) return;
-    const SDLK_RETURN    = 13;
+    const SDLK_RETURN = 13;
     const SDLK_BACKSPACE = 8;
-    const SDLK_DELETE    = 127;
-    const SDLK_TAB       = 9;
-    const SDLK_UP        = 0x40000052;
-    const SDLK_DOWN      = 0x40000051;
-    const SDLK_RIGHT     = 0x4000004f;
-    const SDLK_LEFT      = 0x40000050;
-    const SDLK_HOME      = 0x4000004a;
-    const SDLK_END       = 0x4000004d;
-    const SDLK_PAGEUP    = 0x4000004b;
-    const SDLK_PAGEDOWN  = 0x4000004e;
+    const SDLK_DELETE = 127;
+    const SDLK_TAB = 9;
+    const SDLK_UP = 0x40000052;
+    const SDLK_DOWN = 0x40000051;
+    const SDLK_RIGHT = 0x4000004f;
+    const SDLK_LEFT = 0x40000050;
+    const SDLK_HOME = 0x4000004a;
+    const SDLK_END = 0x4000004d;
+    const SDLK_PAGEUP = 0x4000004b;
+    const SDLK_PAGEDOWN = 0x4000004e;
     const KMOD_CTRL: u16 = 0x00c0;
 
     const ctrl = (mod & KMOD_CTRL) != 0;
@@ -2653,24 +2635,24 @@ pub fn ptyHandleKeyDown(sym: i32, mod: u16) void {
         if (ptyFromHandle(g_active_pty_handle)) |*p| {
             if (ctrl and sym >= 'a' and sym <= 'z') {
                 // Ctrl+letter → \x01..\x1a
-                const seq = [1]u8{ @intCast(sym - 'a' + 1) };
+                const seq = [1]u8{@intCast(sym - 'a' + 1)};
                 _ = p.*.writeData(&seq);
                 return;
             }
             const seq: []const u8 = switch (sym) {
-                SDLK_RETURN    => "\r",
+                SDLK_RETURN => "\r",
                 SDLK_BACKSPACE => "\x7f",
-                SDLK_DELETE    => "\x1b[3~",
-                SDLK_TAB       => "\t",
-                SDLK_UP        => "\x1b[A",
-                SDLK_DOWN      => "\x1b[B",
-                SDLK_RIGHT     => "\x1b[C",
-                SDLK_LEFT      => "\x1b[D",
-                SDLK_HOME      => "\x1b[H",
-                SDLK_END       => "\x1b[F",
-                SDLK_PAGEUP    => "\x1b[5~",
-                SDLK_PAGEDOWN  => "\x1b[6~",
-                else           => return,
+                SDLK_DELETE => "\x1b[3~",
+                SDLK_TAB => "\t",
+                SDLK_UP => "\x1b[A",
+                SDLK_DOWN => "\x1b[B",
+                SDLK_RIGHT => "\x1b[C",
+                SDLK_LEFT => "\x1b[D",
+                SDLK_HOME => "\x1b[H",
+                SDLK_END => "\x1b[F",
+                SDLK_PAGEUP => "\x1b[5~",
+                SDLK_PAGEDOWN => "\x1b[6~",
+                else => return,
             };
             _ = p.*.writeData(seq);
         }
@@ -3499,7 +3481,7 @@ pub fn dispatchEffectRender(
         const ex_str = qjs.JS_ToCString(ctx, ex);
         if (ex_str) |s| {
             defer qjs.JS_FreeCString(ctx, s);
-            std.debug.print("[effect dispatch error] {s}\n", .{std.mem.span(s)});
+            log.print("[effect dispatch error] {s}\n", .{std.mem.span(s)});
         }
     }
     qjs.JS_FreeValue(ctx, r);
@@ -3515,7 +3497,7 @@ pub fn evalExpr(code: []const u8) void {
             const ex = qjs.JS_GetException(ctx);
             const str = qjs.JS_ToCString(ctx, ex);
             if (str) |s| {
-                std.debug.print("[evalExpr error] {s}: {s}\n", .{ code, s });
+                log.print("[evalExpr error] {s}: {s}\n", .{ code, s });
                 qjs.JS_FreeCString(ctx, s);
             }
             qjs.JS_FreeValue(ctx, ex);
@@ -3537,7 +3519,7 @@ pub fn evalToString(code: []const u8, buf: *[256]u8) []const u8 {
             defer qjs.JS_FreeValue(ctx, ex);
             const es = qjs.JS_ToCString(ctx, ex);
             if (es) |s| {
-                std.debug.print("[evalToString error] {s}: {s}\n", .{ code, s });
+                log.print("[evalToString error] {s}: {s}\n", .{ code, s });
                 qjs.JS_FreeCString(ctx, s);
             }
             return "";
@@ -3618,7 +3600,7 @@ pub fn evalToLua(code: []const u8) bool {
         defer qjs.JS_FreeValue(ctx, ex);
         const es = qjs.JS_ToCString(ctx, ex);
         if (es) |s| {
-            std.debug.print("[evalToLua error] {s}: {s}\n", .{ code, s });
+            log.print("[evalToLua error] {s}: {s}\n", .{ code, s });
             qjs.JS_FreeCString(ctx, s);
         }
         return false;
@@ -3651,7 +3633,7 @@ pub fn callGlobalReturnToLua(name: [*:0]const u8) bool {
         defer qjs.JS_FreeValue(ctx, ex);
         const es = qjs.JS_ToCString(ctx, ex);
         if (es) |s| {
-            std.debug.print("[callGlobalReturnToLua error] {s}: {s}\n", .{ std.mem.span(name), s });
+            log.print("[callGlobalReturnToLua error] {s}: {s}\n", .{ std.mem.span(name), s });
             qjs.JS_FreeCString(ctx, s);
         }
         return false;
@@ -3682,7 +3664,7 @@ pub fn evalLuaMapData(index: usize, js_expr: []const u8) void {
         defer qjs.JS_FreeValue(ctx, ex);
         const es = qjs.JS_ToCString(ctx, ex);
         if (es) |s| {
-            std.debug.print("[evalLuaMapData error] {s}: {s}\n", .{ js_expr, s });
+            log.print("[evalLuaMapData error] {s}: {s}\n", .{ js_expr, s });
             qjs.JS_FreeCString(ctx, s);
         }
         return;
@@ -4012,7 +3994,7 @@ pub fn paintNode(renderer: *c.SDL_Renderer, te: *TextEngine, node: *Node) void {
 
 // ── Main loop ───────────────────────────────────────────────────
 
-fn measureCallback(t: []const u8, fs: u16, mw: f32, ls: f32, lh: f32, ml: u16, nw: bool, bold: bool) layout.TextMetrics {
+fn measureCallback(t: []const u8, fs: u16, _: u8, mw: f32, ls: f32, lh: f32, ml: u16, nw: bool, bold: bool) layout.TextMetrics {
     if (g_text_engine) |te| return te.measureTextWrappedEx(t, fs, mw, ls, lh, ml, nw, bold);
     return .{};
 }

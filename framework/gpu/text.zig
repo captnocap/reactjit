@@ -4,6 +4,7 @@
 //! handles, CPU-side glyph batch, GPU buffer, pipeline, and bind group.
 
 const std = @import("std");
+const log = @import("../log.zig");
 const wgpu = @import("wgpu");
 const c = @import("../c.zig").imports;
 const shaders = @import("shaders.zig");
@@ -43,7 +44,13 @@ pub const GlyphInstance = extern struct {
 // Constants
 // ════════════════════════════════════════════════════════════════════════
 
-pub const MAX_GLYPHS = 32768;
+// Per-frame glyph instance buffer. Bumped from 32768 — the gallery atoms
+// page (186 tiles, several with paragraph-length variants like
+// AnimatedTextScenes) exhausts 32k around tile #148, after which new
+// glyphs get silently dropped (g_glyph_count >= MAX_GLYPHS short-circuits
+// the appender) and the rest of the page renders frame chrome but no text.
+// 131072 leaves enough headroom for a heavily-text-bearing 200+ tile grid.
+pub const MAX_GLYPHS = 131072;
 const ATLAS_SIZE = 2048;
 const MAX_ATLAS_GLYPHS = 2048;
 
@@ -82,7 +89,7 @@ fn inlineGlyphSentinelLen(text: []const u8, i: usize) usize {
 const AtlasGlyphKey = struct {
     codepoint: u32,
     size_px: u16,
-    font_id: u8, // 0 = regular, 1 = bold
+    font_id: u8, // family*2 + weight slot
 };
 
 const AtlasGlyphInfo = struct {
@@ -181,13 +188,24 @@ var g_atlas_count: usize = 0;
 var g_atlas_index: std.AutoHashMap(u64, u32) = undefined;
 
 // FreeType handles
+const MAX_FONT_FAMILIES = 8;
+
+const FontFamilySlot = struct {
+    regular: c.FT_Face = null,
+    bold: c.FT_Face = null,
+    current_size_regular: u16 = 0,
+    current_size_bold: u16 = 0,
+};
+
 var g_ft_library: c.FT_Library = null;
 var g_ft_face: c.FT_Face = null;
 var g_ft_face_bold: c.FT_Face = null;
+var g_font_families: [MAX_FONT_FAMILIES]FontFamilySlot = [_]FontFamilySlot{.{}} ** MAX_FONT_FAMILIES;
 var g_ft_fallbacks: [8]c.FT_Face = undefined;
 var g_ft_fallback_count: usize = 0;
 var g_ft_current_size: u16 = 0;
 var g_ft_current_size_bold: u16 = 0;
+var g_font_family_id: u8 = 0;
 
 // Active weight for the next draw / measure call. Mirrors the existing
 // g_letter_spacing / g_line_height_override pattern — engine.zig sets this
@@ -198,27 +216,39 @@ pub fn setBold(b: bool) void {
     g_use_bold = b;
 }
 
+pub fn setFontFamily(id: u8) void {
+    const idx: usize = @intCast(id);
+    g_font_family_id = if (idx < MAX_FONT_FAMILIES and g_font_families[idx].regular != null) id else 0;
+}
+
 /// Pick the right face for the active weight and ensure its FreeType pixel
 /// size matches `size_px`. Returns the face that subsequent FT calls should
 /// target. Tracks size per face so flipping bold on/off doesn't thrash the
 /// regular face's `FT_Set_Pixel_Sizes` cache.
 fn activeFace(size_px: u16) c.FT_Face {
-    if (g_use_bold and g_ft_face_bold != null) {
-        if (g_ft_current_size_bold != size_px) {
-            _ = c.FT_Set_Pixel_Sizes(g_ft_face_bold, 0, size_px);
-            g_ft_current_size_bold = size_px;
+    const family_idx: usize = @intCast(g_font_family_id);
+    var slot = &g_font_families[family_idx];
+    if (slot.regular == null) slot = &g_font_families[0];
+
+    if (g_use_bold and slot.bold != null) {
+        if (slot.current_size_bold != size_px) {
+            _ = c.FT_Set_Pixel_Sizes(slot.bold, 0, size_px);
+            slot.current_size_bold = size_px;
         }
-        return g_ft_face_bold;
+        return slot.bold;
     }
-    if (g_ft_current_size != size_px) {
-        _ = c.FT_Set_Pixel_Sizes(g_ft_face, 0, size_px);
-        g_ft_current_size = size_px;
+    if (slot.current_size_regular != size_px) {
+        _ = c.FT_Set_Pixel_Sizes(slot.regular, 0, size_px);
+        slot.current_size_regular = size_px;
     }
-    return g_ft_face;
+    return slot.regular;
 }
 
 fn activeFontId() u8 {
-    return if (g_use_bold and g_ft_face_bold != null) 1 else 0;
+    const family_idx: usize = @intCast(g_font_family_id);
+    const slot = if (family_idx < MAX_FONT_FAMILIES) g_font_families[family_idx] else g_font_families[0];
+    const weight: u8 = if (g_use_bold and slot.bold != null) 1 else 0;
+    return g_font_family_id * 2 + weight;
 }
 
 /// Register a bold face. Optional — if absent, every weight renders regular.
@@ -226,7 +256,30 @@ fn activeFontId() u8 {
 /// how `initText` registers the regular face + fallbacks.
 pub fn setBoldFace(face_bold: c.FT_Face) void {
     g_ft_face_bold = face_bold;
+    g_font_families[0].bold = face_bold;
     g_ft_current_size_bold = 0;
+}
+
+fn firstLoadableFace(paths: []const [*:0]const u8) c.FT_Face {
+    for (paths) |path| {
+        var face: c.FT_Face = undefined;
+        if (c.FT_New_Face(g_ft_library, path, 0, &face) == 0) {
+            _ = c.FT_Set_Pixel_Sizes(face, 0, 16);
+            return face;
+        }
+    }
+    return null;
+}
+
+fn loadFontFamily(id: u8, regular_paths: []const [*:0]const u8, bold_paths: []const [*:0]const u8) void {
+    const idx: usize = @intCast(id);
+    if (idx >= MAX_FONT_FAMILIES) return;
+    const regular = firstLoadableFace(regular_paths);
+    if (regular == null) return;
+    g_font_families[idx] = .{
+        .regular = regular,
+        .bold = firstLoadableFace(bold_paths),
+    };
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -237,6 +290,7 @@ pub fn setBoldFace(face_bold: c.FT_Face) void {
 pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fallback_count: usize) void {
     g_ft_library = library;
     g_ft_face = face;
+    g_font_families[0] = .{ .regular = face, .bold = g_ft_face_bold };
     g_ft_fallback_count = @min(fallback_count, 8);
     for (0..g_ft_fallback_count) |i| {
         g_ft_fallbacks[i] = fallbacks[i];
@@ -275,6 +329,64 @@ pub fn initText(library: c.FT_Library, face: c.FT_Face, fallbacks: anytype, fall
         .size = MAX_GLYPHS * @sizeOf(GlyphInstance),
         .usage = wgpu.BufferUsages.vertex | wgpu.BufferUsages.copy_dst,
         .mapped_at_creation = 0,
+    });
+
+    loadFontFamily(1, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf",
+    }, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusSans-Bold.otf",
+    });
+    loadFontFamily(2, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusRoman-Regular.otf",
+    }, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusRoman-Bold.otf",
+    });
+    loadFontFamily(3, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusMonoPS-Regular.otf",
+    }, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusMonoPS-Bold.otf",
+    });
+    loadFontFamily(4, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDisplay-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    }, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansDisplay-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    });
+    loadFontFamily(5, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusSans-Regular.otf",
+    }, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/opentype/urw-base35/NimbusSans-Bold.otf",
+    });
+    loadFontFamily(6, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+        "/usr/share/fonts/truetype/ubuntu/UbuntuSans[wdth,wght].ttf",
+    }, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+        "/usr/share/fonts/truetype/ubuntu/UbuntuSans[wdth,wght].ttf",
+    });
+    loadFontFamily(7, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Regular.ttf",
+        "/usr/share/fonts/truetype/quicksand/Quicksand-Regular.ttf",
+    }, &[_][*:0]const u8{
+        "/usr/share/fonts/truetype/roboto/unhinted/RobotoCondensed-Bold.ttf",
+        "/usr/share/fonts/truetype/quicksand/Quicksand-Bold.ttf",
     });
 
     initPipeline(device);
@@ -338,7 +450,9 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
             if (g_inline_slot_count < MAX_RECORDED_SLOTS) {
                 const slot_size: f32 = @floatFromInt(size_px);
                 g_inline_slots[g_inline_slot_count] = .{
-                    .x = pen_x, .y = start_y, .size = slot_size,
+                    .x = pen_x,
+                    .y = start_y,
+                    .size = slot_size,
                     .glyph_index = g_inline_slot_count,
                 };
                 g_inline_slot_count += 1;
@@ -393,7 +507,7 @@ pub fn drawTextLine(text: []const u8, x: f32, y: f32, size_px: u16, cr: f32, cg:
     }
 }
 
-fn measureTextLineWidth(text: []const u8, size_px: u16) f32 {
+pub fn measureTextLineWidth(text: []const u8, size_px: u16) f32 {
     if (g_ft_face == null) return 0;
     _ = activeFace(size_px);
 
@@ -444,26 +558,6 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
     if (g_ft_face == null or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return 0;
     core.g_gpu_ops += 1;
 
-    // Diagnostic: targeted dump for the variant-button labels we're chasing.
-    // Logs incoming max_width plus full single-line width plus per-word width.
-    const dbg_match = std.mem.startsWith(u8, text, "Frames \xc2\xb7 ") or std.mem.eql(u8, text, "Live archetype gallery");
-    if (dbg_match) {
-        const full_w = measureTextLineWidth(text, size_px);
-        std.debug.print("[wrap-dbg] text=\"{s}\" max_width={d:.1} full_w={d:.1} bold={} size={d}\n", .{ text, max_width, full_w, g_use_bold, size_px });
-        var di: usize = 0;
-        var dword: usize = 0;
-        while (di < text.len) {
-            while (di < text.len and (text[di] == ' ' or text[di] == '\n')) : (di += 1) {}
-            if (di >= text.len) break;
-            const ws = di;
-            while (di < text.len and text[di] != ' ' and text[di] != '\n') : (di += 1) {}
-            const word = text[ws..di];
-            const ww = measureTextLineWidth(word, size_px);
-            std.debug.print("[wrap-dbg]   word[{d}]=\"{s}\" w={d:.1}\n", .{ dword, word, ww });
-            dword += 1;
-        }
-    }
-
     if (max_width <= 0) {
         drawTextLine(text, x, y, size_px, cr, cg, cb, ca);
         return @as(f32, @floatFromInt(size_px));
@@ -472,129 +566,82 @@ pub fn drawTextWrapped(text: []const u8, x: f32, y: f32, size_px: u16, max_width
     const face = activeFace(size_px);
     const natural_line_h: f32 = @as(f32, @floatFromInt(face.*.size.*.metrics.height)) / 64.0;
     const line_h: f32 = if (g_line_height_override > 0) g_line_height_override else natural_line_h;
+    const space_w = getCharAdvance(' ', size_px);
+    const ls = g_letter_spacing;
 
-    var pen_x: f32 = 0;
+    // Word-by-word wrap mirroring `TextEngine.wordWrap` in framework/text.zig.
+    // Both paths must agree on line breaks; sharing the algorithm here means
+    // anything measurement decides will paint the same way. Words wider than
+    // max_width get their own line (no mid-word break) — matches the browser's
+    // `overflow-wrap: normal` default.
     var pen_y: f32 = y;
-    var line_start: usize = 0;
-    var last_break: usize = 0;
-    var last_break_pen_x: f32 = 0;
-    var i: usize = 0;
     var lines_drawn: u16 = 0;
+    var line_start: usize = 0;
+    var line_width: f32 = 0;
+    var last_word_end: usize = 0;
+    var i: usize = 0;
 
     while (i < text.len) {
         if (max_lines > 0 and lines_drawn >= max_lines) break;
-        // Letter-spacing is *between* glyphs (N-1 gaps for N glyphs), not trailing.
-        // Adding ls to pen_x after every glyph (including the last) would inflate
-        // pen_x by ~ls at the right margin and wrap the final glyph of a word
-        // that measurement says should fit. Add ls as *leading* for non-first
-        // glyphs instead — matches measureLineWidth semantics exactly.
-        const leading_ls: f32 = if (pen_x > 0) g_letter_spacing else 0;
-        // Inline glyph sentinel — treat as non-wrappable char with fontSize advance
-        const sentinel_len = inlineGlyphSentinelLen(text, i);
-        if (sentinel_len > 0) {
-            const advance: f32 = @floatFromInt(size_px);
-            if (pen_x + leading_ls + advance > max_width and pen_x > 0) {
-                if (last_break > line_start) {
-                    drawTextLine(text[line_start..last_break], x, pen_y, size_px, cr, cg, cb, ca);
-                    lines_drawn += 1;
-                    pen_y += line_h;
-                    line_start = last_break + 1;
-                    pen_x = 0;
-                    var j: usize = line_start;
-                    while (j < i) {
-                        const j_leading_ls: f32 = if (pen_x > 0) g_letter_spacing else 0;
-                        const j_sentinel_len = inlineGlyphSentinelLen(text, j);
-                        if (j_sentinel_len > 0) {
-                            pen_x += j_leading_ls + @as(f32, @floatFromInt(size_px));
-                            j += j_sentinel_len;
-                            continue;
-                        }
-                        const jch = decodeUtf8(text[j..]);
-                        if (cacheGlyph(jch.codepoint, size_px)) |g| {
-                            pen_x += j_leading_ls + g.advance;
-                        }
-                        j += jch.len;
-                    }
-                    last_break = line_start;
-                    last_break_pen_x = 0;
-                }
-            }
-            pen_x += leading_ls + advance;
-            i += sentinel_len;
-            continue;
-        }
-        const ch = decodeUtf8(text[i..]);
-
-        // Explicit newline
-        if (ch.codepoint == '\n') {
-            drawTextLine(text[line_start..i], x, pen_y, size_px, cr, cg, cb, ca);
+        if (text[i] == '\n') {
+            const end = if (last_word_end > line_start) last_word_end else i;
+            drawTextLine(text[line_start..end], x, pen_y, size_px, cr, cg, cb, ca);
             lines_drawn += 1;
             pen_y += line_h;
-            i += ch.len;
+            i += 1;
             line_start = i;
-            last_break = i;
-            pen_x = 0;
-            last_break_pen_x = 0;
+            last_word_end = i;
+            line_width = 0;
+            continue;
+        }
+        if (text[i] == ' ') {
+            i += 1;
             continue;
         }
 
-        // Track word boundaries
-        if (ch.codepoint == ' ') {
-            last_break = i;
-            last_break_pen_x = pen_x;
-        }
-
-        // Measure this glyph
-        var advance: f32 = 0;
-        if (cacheGlyph(ch.codepoint, size_px)) |glyph| {
-            advance = glyph.advance;
-        }
-
-        if (pen_x + leading_ls + advance > max_width and pen_x > 0) {
-            // Wrap at last word boundary if possible.
-            // If no break point exists on this line, do NOT force-break mid-word —
-            // let the word overflow horizontally past max_width. That matches
-            // browser default (`overflow-wrap: normal`) and the measurement-side
-            // `wordWrap` in framework/text.zig, which also keeps single words on
-            // one line. Force-breaking here produced the per-character cascade
-            // ("s\na\nm\np\nl\ne") when a Text was placed inside a container
-            // narrower than the word.
-            if (last_break > line_start) {
-                drawTextLine(text[line_start..last_break], x, pen_y, size_px, cr, cg, cb, ca);
-                lines_drawn += 1;
-                pen_y += line_h;
-                // Skip the space
-                line_start = last_break + 1;
-                pen_x = pen_x - last_break_pen_x - advance;
-                // Re-measure from line_start to current position
-                pen_x = 0;
-                var j: usize = line_start;
-                while (j < i) {
-                    const j_leading_ls: f32 = if (pen_x > 0) g_letter_spacing else 0;
-                    const j_sentinel_len = inlineGlyphSentinelLen(text, j);
-                    if (j_sentinel_len > 0) {
-                        pen_x += j_leading_ls + @as(f32, @floatFromInt(size_px));
-                        j += j_sentinel_len;
-                        continue;
-                    }
-                    const jch = decodeUtf8(text[j..]);
-                    if (cacheGlyph(jch.codepoint, size_px)) |g| {
-                        pen_x += j_leading_ls + g.advance;
-                    }
-                    j += jch.len;
-                }
-                last_break = line_start;
-                last_break_pen_x = 0;
+        // Word start — measure whole word (UTF-8 + inline-glyph aware).
+        const word_start = i;
+        var word_width: f32 = 0;
+        var word_chars: usize = 0;
+        while (i < text.len and text[i] != ' ' and text[i] != '\n') {
+            const sentinel_len = inlineGlyphSentinelLen(text, i);
+            if (sentinel_len > 0) {
+                if (word_chars > 0) word_width += ls;
+                word_width += @as(f32, @floatFromInt(size_px));
+                word_chars += 1;
+                i += sentinel_len;
+                continue;
             }
+            const ch = decodeUtf8(text[i..]);
+            if (word_chars > 0) word_width += ls;
+            word_width += getCharAdvance(ch.codepoint, size_px);
+            word_chars += 1;
+            i += ch.len;
         }
+        const word_end = i;
 
-        pen_x += leading_ls + advance;
-        i += ch.len;
+        const need_space = (line_width > 0);
+        const separator_w: f32 = if (need_space) space_w + ls * 2 else 0;
+        const with_word = line_width + separator_w + word_width;
+
+        if (need_space and with_word > max_width) {
+            // Wrap: emit current line, start new line at this word.
+            drawTextLine(text[line_start..last_word_end], x, pen_y, size_px, cr, cg, cb, ca);
+            lines_drawn += 1;
+            pen_y += line_h;
+            line_start = word_start;
+            line_width = word_width;
+            last_word_end = word_end;
+        } else {
+            line_width = with_word;
+            last_word_end = word_end;
+        }
     }
 
-    // Draw remaining text (if not truncated)
+    // Emit the final line.
     if (line_start < text.len and (max_lines == 0 or lines_drawn < max_lines)) {
-        drawTextLine(text[line_start..], x, pen_y, size_px, cr, cg, cb, ca);
+        const end = if (last_word_end > line_start) last_word_end else text.len;
+        drawTextLine(text[line_start..end], x, pen_y, size_px, cr, cg, cb, ca);
         pen_y += line_h;
     }
 
@@ -718,6 +765,22 @@ pub fn getCharAdvance(codepoint: u32, size_px: u16) f32 {
         return glyph.advance;
     }
     return @floatFromInt(size_px / 2); // fallback
+}
+
+/// How far this glyph's ink extends past its advance, on the right.
+/// For most chars this is 0 (glyph stays within its pen box). For chars
+/// like 'r', italic letters, or certain accented forms, the rasterized
+/// ink can stick out past `advance` — and any caller that sizes a box to
+/// the sum-of-advances will paint the glyph kissing or crossing the
+/// right edge. Layout adds this for the LAST glyph in a line so the
+/// reported width matches the visible right edge of the painted text.
+pub fn getCharRightOverhang(codepoint: u32, size_px: u16) f32 {
+    if (cacheGlyph(codepoint, size_px)) |glyph| {
+        const visible_right = @as(f32, @floatFromInt(glyph.bearing_x)) + @as(f32, @floatFromInt(glyph.width));
+        const overhang = visible_right - glyph.advance;
+        return if (overhang > 0) overhang else 0;
+    }
+    return 0;
 }
 
 /// Get the line height (ascent + descent) for a given font size.
@@ -913,7 +976,7 @@ fn initPipeline(device: *wgpu.Device) void {
         .code = shaders.text_wgsl,
     });
     const shader_module = device.createShaderModule(&shader_desc) orelse {
-        std.debug.print("Failed to create text shader module\n", .{});
+        log.print("Failed to create text shader module\n", .{});
         return;
     };
     defer shader_module.release();
@@ -926,7 +989,7 @@ fn initPipeline(device: *wgpu.Device) void {
         .{ // binding 0: globals uniform
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex,
-            .buffer = .{ .@"type" = .uniform, .has_dynamic_offset = 0, .min_binding_size = 8 },
+            .buffer = .{ .type = .uniform, .has_dynamic_offset = 0, .min_binding_size = 8 },
         },
         .{ // binding 1: atlas texture
             .binding = 1,
@@ -940,7 +1003,7 @@ fn initPipeline(device: *wgpu.Device) void {
         .{ // binding 2: sampler
             .binding = 2,
             .visibility = wgpu.ShaderStages.fragment,
-            .sampler = .{ .@"type" = .filtering },
+            .sampler = .{ .type = .filtering },
         },
     };
 
@@ -1016,7 +1079,7 @@ fn initPipeline(device: *wgpu.Device) void {
     });
 
     if (g_text_pipeline == null) {
-        std.debug.print("Failed to create text render pipeline\n", .{});
+        log.print("Failed to create text render pipeline\n", .{});
     }
 }
 

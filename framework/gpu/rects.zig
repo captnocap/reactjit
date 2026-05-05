@@ -5,6 +5,7 @@
 //! upload/drawBatch/reset each frame.
 
 const std = @import("std");
+const log = @import("../log.zig");
 const wgpu = @import("wgpu");
 const shaders = @import("shaders.zig");
 const core = @import("gpu.zig");
@@ -40,7 +41,7 @@ pub const RectInstance = extern struct {
     // Border width
     border_width: f32,
     // Per-node transform (visual only, no layout effect)
-    rotation: f32 = 0,   // degrees
+    rotation: f32 = 0, // degrees
     scale_x: f32 = 1.0,
     scale_y: f32 = 1.0,
     // SDF shadow blur — widens the smoothstep falloff in the fragment shader.
@@ -58,7 +59,11 @@ pub const RectInstance = extern struct {
 // Constants & State
 // ════════════════════════════════════════════════════════════════════════
 
-pub const MAX_RECTS = 4096;
+// Per-frame rect-instance pool. Each Box with bg/border consumes one
+// slot. The chart_stress bench at 4000 bars rides above the prior 4096
+// once chrome (toggles, header, summary) is included. Bumped to 16384;
+// ~1.5MB BSS for the rect-instance array + GPU buffer.
+pub const MAX_RECTS = 16384;
 
 var g_rects: [MAX_RECTS]RectInstance = undefined;
 var g_rect_count: usize = 0;
@@ -121,21 +126,44 @@ pub fn drawRect(
 
 /// Queue a rectangle with per-corner border radii.
 pub fn drawRectCorners(
-    x: f32, y: f32, w: f32, h: f32,
-    r: f32, g: f32, b: f32, a: f32,
-    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+    rtl: f32,
+    rtr: f32,
+    rbr: f32,
+    rbl: f32,
     border_width: f32,
-    br: f32, bg: f32, bb: f32, ba: f32,
+    br: f32,
+    bg: f32,
+    bb: f32,
+    ba: f32,
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
     const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
-        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
-        .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
-        .radius_tl = rtl, .radius_tr = rtr,
-        .radius_br = rbr, .radius_bl = rbl,
+        .pos_x = tr.x,
+        .pos_y = tr.y,
+        .size_w = tr.w,
+        .size_h = tr.h,
+        .color_r = r,
+        .color_g = g,
+        .color_b = b,
+        .color_a = a,
+        .border_color_r = br,
+        .border_color_g = bg,
+        .border_color_b = bb,
+        .border_color_a = ba,
+        .radius_tl = rtl,
+        .radius_tr = rtr,
+        .radius_br = rbr,
+        .radius_bl = rbl,
         .border_width = border_width,
         .rotation = tr.rotation_deg,
     };
@@ -145,22 +173,47 @@ pub fn drawRectCorners(
 /// Queue a rectangle with per-corner radii and explicit per-rect rotation/scale.
 /// Composes with any active node-matrix transform.
 pub fn drawRectCornersTransformed(
-    x: f32, y: f32, w: f32, h: f32,
-    r: f32, g: f32, b: f32, a: f32,
-    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+    rtl: f32,
+    rtr: f32,
+    rbr: f32,
+    rbl: f32,
     border_width: f32,
-    br: f32, bg: f32, bb: f32, ba: f32,
-    rotation_deg: f32, sx: f32, sy: f32,
+    br: f32,
+    bg: f32,
+    bb: f32,
+    ba: f32,
+    rotation_deg: f32,
+    sx: f32,
+    sy: f32,
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
     const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
-        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
-        .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
-        .radius_tl = rtl, .radius_tr = rtr,
-        .radius_br = rbr, .radius_bl = rbl,
+        .pos_x = tr.x,
+        .pos_y = tr.y,
+        .size_w = tr.w,
+        .size_h = tr.h,
+        .color_r = r,
+        .color_g = g,
+        .color_b = b,
+        .color_a = a,
+        .border_color_r = br,
+        .border_color_g = bg,
+        .border_color_b = bb,
+        .border_color_a = ba,
+        .radius_tl = rtl,
+        .radius_tr = rtr,
+        .radius_br = rbr,
+        .radius_bl = rbl,
         .border_width = border_width,
         .rotation = rotation_deg + tr.rotation_deg,
         .scale_x = sx,
@@ -172,21 +225,44 @@ pub fn drawRectCornersTransformed(
 /// Queue a rectangle with explicit per-rect rotation/scale. Composes with any
 /// active node-matrix transform.
 pub fn drawRectTransformed(
-    x: f32, y: f32, w: f32, h: f32,
-    r: f32, g: f32, b: f32, a: f32,
-    border_radius: f32, border_width: f32,
-    br: f32, bg: f32, bb: f32, ba: f32,
-    rotation_deg: f32, sx: f32, sy: f32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+    border_radius: f32,
+    border_width: f32,
+    br: f32,
+    bg: f32,
+    bb: f32,
+    ba: f32,
+    rotation_deg: f32,
+    sx: f32,
+    sy: f32,
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
     const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
-        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
-        .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
-        .radius_tl = border_radius, .radius_tr = border_radius,
-        .radius_br = border_radius, .radius_bl = border_radius,
+        .pos_x = tr.x,
+        .pos_y = tr.y,
+        .size_w = tr.w,
+        .size_h = tr.h,
+        .color_r = r,
+        .color_g = g,
+        .color_b = b,
+        .color_a = a,
+        .border_color_r = br,
+        .border_color_g = bg,
+        .border_color_b = bb,
+        .border_color_a = ba,
+        .radius_tl = border_radius,
+        .radius_tr = border_radius,
+        .radius_br = border_radius,
+        .radius_bl = border_radius,
         .border_width = border_width,
         .rotation = rotation_deg + tr.rotation_deg,
         .scale_x = sx,
@@ -199,20 +275,40 @@ pub fn drawRectTransformed(
 /// The rect is expanded by blur pixels and positioned at the shadow offset.
 /// The fragment shader uses blur_radius to widen the SDF falloff for a soft edge.
 pub fn drawRectShadow(
-    x: f32, y: f32, w: f32, h: f32,
-    r: f32, g: f32, b: f32, a: f32,
-    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+    rtl: f32,
+    rtr: f32,
+    rbr: f32,
+    rbl: f32,
     blur: f32,
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
     const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
-        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
-        .border_color_r = 0, .border_color_g = 0, .border_color_b = 0, .border_color_a = 0,
-        .radius_tl = rtl, .radius_tr = rtr,
-        .radius_br = rbr, .radius_bl = rbl,
+        .pos_x = tr.x,
+        .pos_y = tr.y,
+        .size_w = tr.w,
+        .size_h = tr.h,
+        .color_r = r,
+        .color_g = g,
+        .color_b = b,
+        .color_a = a,
+        .border_color_r = 0,
+        .border_color_g = 0,
+        .border_color_b = 0,
+        .border_color_a = 0,
+        .radius_tl = rtl,
+        .radius_tr = rtr,
+        .radius_br = rbr,
+        .radius_bl = rbl,
         .border_width = 0,
         .blur_radius = blur,
         .rotation = tr.rotation_deg,
@@ -223,25 +319,54 @@ pub fn drawRectShadow(
 /// Queue a rectangle with a gradient background.
 /// dir: 1=vertical, 2=horizontal, 3=diagonal
 pub fn drawRectGradient(
-    x: f32, y: f32, w: f32, h: f32,
-    r: f32, g: f32, b: f32, a: f32,
-    rtl: f32, rtr: f32, rbr: f32, rbl: f32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
+    rtl: f32,
+    rtr: f32,
+    rbr: f32,
+    rbl: f32,
     border_width: f32,
-    br: f32, bg: f32, bb: f32, ba: f32,
-    gr: f32, gg: f32, gb: f32, ga: f32,
+    br: f32,
+    bg: f32,
+    bb: f32,
+    ba: f32,
+    gr: f32,
+    gg: f32,
+    gb: f32,
+    ga: f32,
     dir: f32,
 ) void {
     if (g_rect_count >= MAX_RECTS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
     const tr = core.resolveRect(x, y, w, h);
     g_rects[g_rect_count] = .{
-        .pos_x = tr.x, .pos_y = tr.y, .size_w = tr.w, .size_h = tr.h,
-        .color_r = r, .color_g = g, .color_b = b, .color_a = a,
-        .border_color_r = br, .border_color_g = bg, .border_color_b = bb, .border_color_a = ba,
-        .radius_tl = rtl, .radius_tr = rtr,
-        .radius_br = rbr, .radius_bl = rbl,
+        .pos_x = tr.x,
+        .pos_y = tr.y,
+        .size_w = tr.w,
+        .size_h = tr.h,
+        .color_r = r,
+        .color_g = g,
+        .color_b = b,
+        .color_a = a,
+        .border_color_r = br,
+        .border_color_g = bg,
+        .border_color_b = bb,
+        .border_color_a = ba,
+        .radius_tl = rtl,
+        .radius_tr = rtr,
+        .radius_br = rbr,
+        .radius_bl = rbl,
         .border_width = border_width,
-        .grad_r = gr, .grad_g = gg, .grad_b = gb, .grad_a = ga,
+        .grad_r = gr,
+        .grad_g = gg,
+        .grad_b = gb,
+        .grad_a = ga,
         .grad_dir = dir,
         .rotation = tr.rotation_deg,
     };
@@ -255,7 +380,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .code = shaders.rect_wgsl,
     });
     const shader_module = device.createShaderModule(&shader_desc) orelse {
-        std.debug.print("Failed to create rect shader module\n", .{});
+        log.print("Failed to create rect shader module\n", .{});
         return;
     };
     defer shader_module.release();
@@ -275,7 +400,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex | wgpu.ShaderStages.fragment,
             .buffer = .{
-                .@"type" = .uniform,
+                .type = .uniform,
                 .has_dynamic_offset = 0,
                 .min_binding_size = 8,
             },
@@ -357,7 +482,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
     });
 
     if (g_rect_pipeline == null) {
-        std.debug.print("Failed to create rect render pipeline\n", .{});
+        log.print("Failed to create rect render pipeline\n", .{});
     }
 }
 

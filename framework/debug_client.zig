@@ -10,6 +10,7 @@
 //! Used by the Tools inspector to attach to running .tsz apps.
 
 const std = @import("std");
+const log = @import("log.zig");
 const ipc = @import("net/ipc.zig");
 const app_crypto = @import("crypto.zig");
 
@@ -132,7 +133,7 @@ pub fn disconnect() void {
 /// Returns true if a new response was received and cached.
 pub fn poll() bool {
     if (client == null) {
-        std.debug.print("[dc] poll: client=null\n", .{});
+        log.print("[dc] poll: client=null\n", .{});
         return false;
     }
     var c = &(client.?);
@@ -144,7 +145,7 @@ pub fn poll() bool {
     const msgs = c.poll();
     var got_response = false;
 
-    std.debug.print("[dc] poll: dead={} auth={} msgs={d} tree_cached={d}\n", .{ c.dead, authenticated, msgs.len, tree_node_count });
+    log.print("[dc] poll: dead={} auth={} msgs={d} tree_cached={d}\n", .{ c.dead, authenticated, msgs.len, tree_node_count });
 
     for (msgs) |msg| {
         if (!authenticated) {
@@ -152,10 +153,10 @@ pub fn poll() bool {
         } else {
             if (decryptResponse(msg.data)) {
                 got_response = true;
-                std.debug.print("[dc] decrypted {d} bytes\n", .{resp_cache_len});
+                log.print("[dc] decrypted {d} bytes\n", .{resp_cache_len});
                 parseResponse();
             } else {
-                std.debug.print("[dc] DECRYPT FAILED: {d} byte wire msg\n", .{msg.data.len});
+                log.print("[dc] DECRYPT FAILED: {d} byte wire msg\n", .{msg.data.len});
             }
         }
     }
@@ -286,7 +287,10 @@ fn sendEncrypted(plaintext: []const u8) void {
     hexEncode(&wire_buf, &pos, &nonce);
     hexEncode(&wire_buf, &pos, ct_buf[0..plaintext.len]);
     hexEncode(&wire_buf, &pos, &tag);
-    if (pos < RESP_SIZE) { wire_buf[pos] = '\n'; pos += 1; }
+    if (pos < RESP_SIZE) {
+        wire_buf[pos] = '\n';
+        pos += 1;
+    }
     _ = c.send(wire_buf[0..pos]);
 }
 
@@ -325,9 +329,9 @@ fn parseResponse() void {
     const method = jsonStr(data, "method") orelse return;
 
     if (eql(method, "debug.tree")) {
-        std.debug.print("[ipc_client] parseTree: {d} bytes, parsing...\n", .{data.len});
+        log.print("[ipc_client] parseTree: {d} bytes, parsing...\n", .{data.len});
         parseTree(data);
-        std.debug.print("[ipc_client] parseTree: got {d} nodes\n", .{tree_node_count});
+        log.print("[ipc_client] parseTree: got {d} nodes\n", .{tree_node_count});
     } else if (eql(method, "debug.perf") or eql(method, "debug.telemetry.frame")) {
         parsePerf(data);
     }
@@ -344,7 +348,10 @@ fn parseTree(data: []const u8) void {
 
     while (i < data.len and tree_node_count < MAX_TREE_NODES) {
         if (data[i] == ']') break;
-        if (data[i] != '{') { i += 1; continue; }
+        if (data[i] != '{') {
+            i += 1;
+            continue;
+        }
 
         const obj_start = i;
         while (i < data.len and data[i] != '}') i += 1;

@@ -8,6 +8,7 @@
 //! (premultiplied ARGB), which maps directly to BGRA8 on little-endian.
 
 const std = @import("std");
+const log = @import("log.zig");
 const gpu = @import("gpu/gpu.zig");
 const wgpu = @import("wgpu");
 
@@ -314,21 +315,35 @@ fn createCachedFill(d: []const u8, fill_r: f32, fill_g: f32, fill_b: f32, fill_a
         .format = gpu.getFormat(),
         .usage = wgpu.TextureUsages.texture_binding | wgpu.TextureUsages.copy_dst,
     }) orelse return null;
-    const tv = tex.createView(null) orelse { tex.release(); return null; };
-    const queue = gpu.getQueue() orelse { tv.release(); tex.release(); return null; };
+    const tv = tex.createView(null) orelse {
+        tex.release();
+        return null;
+    };
+    const queue = gpu.getQueue() orelse {
+        tv.release();
+        tex.release();
+        return null;
+    };
     queue.writeTexture(
         &.{ .texture = tex, .mip_level = 0, .origin = .{ .x = 0, .y = 0, .z = 0 }, .aspect = .all },
-        pixels, pw * ph * 4,
+        pixels,
+        pw * ph * 4,
         &.{ .offset = 0, .bytes_per_row = pw * 4, .rows_per_image = ph },
         &.{ .width = pw, .height = ph, .depth_or_array_layers = 1 },
     );
     if (g_sampler == null) {
         g_sampler = device.createSampler(&.{
-            .address_mode_u = .clamp_to_edge, .address_mode_v = .clamp_to_edge,
-            .mag_filter = .linear, .min_filter = .linear,
+            .address_mode_u = .clamp_to_edge,
+            .address_mode_v = .clamp_to_edge,
+            .mag_filter = .linear,
+            .min_filter = .linear,
         });
     }
-    const bg = gpu.images.createBindGroup(tv, g_sampler.?) orelse { tv.release(); tex.release(); return null; };
+    const bg = gpu.images.createBindGroup(tv, g_sampler.?) orelse {
+        tv.release();
+        tex.release();
+        return null;
+    };
     const entry = &g_fill_cache[g_fill_cache_count];
     entry.* = .{
         .path_ptr = @intFromPtr(d.ptr),
@@ -336,8 +351,10 @@ fn createCachedFill(d: []const u8, fill_r: f32, fill_g: f32, fill_b: f32, fill_a
         .bind_group = bg,
         .texture = tex,
         .texture_view = tv,
-        .bb_min_x = bb_min_x, .bb_min_y = bb_min_y,
-        .bb_w = bb_w, .bb_h = bb_h,
+        .bb_min_x = bb_min_x,
+        .bb_min_y = bb_min_y,
+        .bb_w = bb_w,
+        .bb_h = bb_h,
         .active = true,
     };
     g_fill_cache_count += 1;
@@ -477,7 +494,7 @@ pub fn fillSVGPathFromEffect(
             if (a > 0) covered += 1;
             if (a > max_a) max_a = a;
         }
-        std.debug.print(
+        log.print(
             "[paisley] fillSVGPathFromEffect bbox=({d:.1},{d:.1},{d:.1},{d:.1}) src={d}x{d} raster={d}x{d} covered={d}/{d} max_a={d} stroke_w={d:.2}\n",
             .{ bb_min_x, bb_min_y, bb_w, bb_h, effect_w, effect_h, pw, ph, covered, @as(usize, pw) * @as(usize, ph), max_a, stroke_w },
         );

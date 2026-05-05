@@ -13,6 +13,7 @@
 //! love.graphics.captureScreenshot(callback).
 
 const std = @import("std");
+const log = @import("log.zig");
 const wgpu = @import("wgpu");
 const gpu = @import("gpu/gpu.zig");
 const layout = @import("layout.zig");
@@ -103,7 +104,7 @@ pub fn init() void {
         ss_padding = std.fmt.parseInt(u32, p, 10) catch 8;
     }
 
-    std.debug.print("[capture] screenshot mode enabled → {s}\n", .{std.mem.span(ss_path)});
+    log.print("[capture] screenshot mode enabled → {s}\n", .{std.mem.span(ss_path)});
 }
 
 pub fn isScreenshotMode() bool {
@@ -121,7 +122,7 @@ pub fn tick(root: *Node) bool {
         ss_frame += 1;
         if (ss_frame >= SS_WAIT_FRAMES) {
             ss_root = root;
-            std.debug.print("[capture] requesting screenshot frame {d}...\n", .{ss_frame});
+            log.print("[capture] requesting screenshot frame {d}...\n", .{ss_frame});
             gpu.captureScreenshot(&onScreenshotPixels);
             // The callback fires during NEXT gpu.frame() — we return true on that frame
         }
@@ -137,7 +138,7 @@ pub fn tick(root: *Node) bool {
 
 fn onScreenshotPixels(pixels: [*]const u8, w: u32, h: u32, stride: u32) void {
     ss_captured = true;
-    std.debug.print("[capture] received {d}x{d} pixels (stride={d})\n", .{ w, h, stride });
+    log.print("[capture] received {d}x{d} pixels (stride={d})\n", .{ w, h, stride });
 
     // Resolve crop region
     var cx: u32 = 0;
@@ -158,9 +159,9 @@ fn onScreenshotPixels(pixels: [*]const u8, w: u32, h: u32, stride: u32) void {
                 cy = if (rect.y > pad) rect.y - pad else 0;
                 cw = @min(rect.w + pad * 2, w - cx);
                 ch = @min(rect.h + pad * 2, h - cy);
-                std.debug.print("[capture] crop to '{s}' ({d},{d},{d},{d})\n", .{ target, cx, cy, cw, ch });
+                log.print("[capture] crop to '{s}' ({d},{d},{d},{d})\n", .{ target, cx, cy, cw, ch });
             } else {
-                std.debug.print("[capture] node '{s}' not found, full page\n", .{target});
+                log.print("[capture] node '{s}' not found, full page\n", .{target});
             }
         }
     }
@@ -190,9 +191,9 @@ fn onScreenshotPixels(pixels: [*]const u8, w: u32, h: u32, stride: u32) void {
 
     const ret = stbi_write_png(ss_path, @intCast(cw), @intCast(ch), 4, @ptrCast(rgba.ptr), @intCast(cw * 4));
     if (ret != 0) {
-        std.debug.print("SCREENSHOT_SAVED:{s} ({d}x{d})\n", .{ std.mem.span(ss_path), cw, ch });
+        log.print("SCREENSHOT_SAVED:{s} ({d}x{d})\n", .{ std.mem.span(ss_path), cw, ch });
     } else {
-        std.debug.print("[capture] stbi_write_png failed\n", .{});
+        log.print("[capture] stbi_write_png failed\n", .{});
     }
 
     ss_should_exit = true;
@@ -222,23 +223,24 @@ fn startRecording() void {
 
     // Open ffmpeg pipe — raw BGRA input, H.264 output
     var cmd_buf: [512]u8 = undefined;
-    const cmd = std.fmt.bufPrint(&cmd_buf,
+    const cmd = std.fmt.bufPrint(
+        &cmd_buf,
         "ffmpeg -y -f rawvideo -pix_fmt bgra -s {d}x{d} -r 30 -i - " ++
-        "-c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p recording.mp4 2>/dev/null",
+            "-c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p recording.mp4 2>/dev/null",
         .{ w, h },
     ) catch return;
     cmd_buf[cmd.len] = 0;
 
     rec_pipe = popen(cmd_buf[0..cmd.len :0], "w");
     if (rec_pipe == null) {
-        std.debug.print("[capture] failed to open ffmpeg pipe — is ffmpeg installed?\n", .{});
+        log.print("[capture] failed to open ffmpeg pipe — is ffmpeg installed?\n", .{});
         return;
     }
 
     rec_active = true;
     rec_frame_count = 0;
     gpu.startCapture(&onRecordPixels);
-    std.debug.print("[capture] recording started {d}x{d} → recording.mp4\n", .{ w, h });
+    log.print("[capture] recording started {d}x{d} → recording.mp4\n", .{ w, h });
 }
 
 fn stopRecording() void {
@@ -250,7 +252,7 @@ fn stopRecording() void {
         rec_pipe = null;
     }
 
-    std.debug.print("[capture] recording stopped. {d} frames → recording.mp4\n", .{rec_frame_count});
+    log.print("[capture] recording stopped. {d} frames → recording.mp4\n", .{rec_frame_count});
 }
 
 fn onRecordPixels(pixels: [*]const u8, w: u32, h: u32, stride: u32) void {

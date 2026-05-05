@@ -314,7 +314,7 @@ fn openIndependent(idx: usize, opts: OpenOptions) ?usize {
         .bg_color = opts.bg_color,
     };
     slot_count += 1;
-    std.debug.print("[window-ipc/parent] spawn slot={d} title={s} launcher={s} port={d} size={d}x{d} window_id={d}\n", .{
+    log.print("[window-ipc/parent] spawn slot={d} title={s} launcher={s} port={d} size={d}x{d} window_id={d}\n", .{
         idx,
         opts.title,
         launcher_path,
@@ -413,13 +413,13 @@ pub fn sendLineToChild(idx: usize, line: []const u8) void {
     const trace = ipcTracePerMessage();
     if (slots[idx].server) |*server| {
         if (server.connected() and server.sendLine(line)) {
-            if (trace) std.debug.print("[window-ipc/parent] send slot={d} bytes={d}\n", .{ idx, line.len });
+            if (trace) log.print("[window-ipc/parent] send slot={d} bytes={d}\n", .{ idx, line.len });
             return;
         }
     }
     slots[idx].pending.appendSlice(std.heap.c_allocator, line) catch return;
     slots[idx].pending.append(std.heap.c_allocator, '\n') catch {};
-    if (trace) std.debug.print("[window-ipc/parent] queue slot={d} bytes={d} pending={d}\n", .{
+    if (trace) log.print("[window-ipc/parent] queue slot={d} bytes={d} pending={d}\n", .{
         idx,
         line.len,
         slots[idx].pending.items.len,
@@ -433,17 +433,17 @@ pub fn tickIndependent() void {
         const was_connected = server.connected();
         _ = server.acceptClient();
         if (!was_connected and server.connected()) {
-            std.debug.print("[window-ipc/parent] accepted slot={d} pending={d}\n", .{ i, slots[i].pending.items.len });
+            log.print("[window-ipc/parent] accepted slot={d} pending={d}\n", .{ i, slots[i].pending.items.len });
         }
         if (server.connected() and slots[i].pending.items.len > 0) {
             if (server.send(slots[i].pending.items)) {
-                std.debug.print("[window-ipc/parent] flush slot={d} bytes={d}\n", .{ i, slots[i].pending.items.len });
+                log.print("[window-ipc/parent] flush slot={d} bytes={d}\n", .{ i, slots[i].pending.items.len });
                 slots[i].pending.clearRetainingCapacity();
             }
         }
         const messages = server.poll();
         for (messages) |msg| {
-            std.debug.print("[window-ipc/parent] recv slot={d} bytes={d} {s}\n", .{ i, msg.data.len, msg.data });
+            log.print("[window-ipc/parent] recv slot={d} bytes={d} {s}\n", .{ i, msg.data.len, msg.data });
             handleChildMessage(msg.data);
         }
     }

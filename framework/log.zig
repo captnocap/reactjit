@@ -11,6 +11,7 @@
 //!     (no env var)                     — silent
 
 const std = @import("std");
+const event_bus = @import("event_bus.zig");
 
 pub const Category = enum {
     engine,
@@ -63,6 +64,20 @@ fn ensureInit() void {
     }
 }
 
+/// Drop-in replacement for std.debug.print. Formats into a stack buf and
+/// emits to the event bus at imp 0.30 (info-level), scope="debug".
+/// Trailing newlines are stripped — the bus payload is one event per
+/// call, no need for terminal-friendly framing. Output is bus-only;
+/// stderr stays quiet for normal operation. The `framework/log.zig`
+/// import is the single seam between the framework's diagnostic prints
+/// and the bus.
+pub fn print(comptime fmt: []const u8, args: anytype) void {
+    var buf: [4096]u8 = undefined;
+    const formatted: []const u8 = std.fmt.bufPrint(&buf, fmt, args) catch buf[0..];
+    const trimmed = std.mem.trimRight(u8, formatted, " \t\r\n");
+    _ = event_bus.emitFromLog(.info, "debug", trimmed);
+}
+
 /// Write a line to the log file (always, regardless of category filters).
 /// Used by engine.zig for unconditional telemetry.
 pub fn writeLine(comptime fmt: []const u8, args: anytype) void {
@@ -84,32 +99,45 @@ fn fileWrite(s: []const u8) void {
 
 pub fn info(cat: Category, comptime fmt: []const u8, args: anytype) void {
     ensureInit();
-    if (!enabled[@intFromEnum(cat)]) return;
     const name = @tagName(cat);
-    var buf: [1024]u8 = undefined;
-    const s = std.fmt.bufPrint(&buf, "[{s}] " ++ fmt ++ "\n", .{name} ++ args) catch return;
-    std.debug.print("{s}", .{s});
-    fileWrite(s);
+    var msg_buf: [1024]u8 = undefined;
+    const msg = std.fmt.bufPrint(&msg_buf, fmt, args) catch return;
+    // Bus emit happens regardless of category enable — the bus has its own
+    // importance filter; the env var only gates the legacy file write.
+    _ = event_bus.emitFromLog(.info, name, msg);
+    if (enabled[@intFromEnum(cat)]) {
+        var line_buf: [1100]u8 = undefined;
+        const line = std.fmt.bufPrint(&line_buf, "[{s}] {s}\n", .{ name, msg }) catch return;
+        fileWrite(line);
+    }
 }
 
 pub fn warn(cat: Category, comptime fmt: []const u8, args: anytype) void {
     ensureInit();
-    if (!enabled[@intFromEnum(cat)]) return;
     const name = @tagName(cat);
-    var buf: [1024]u8 = undefined;
-    const s = std.fmt.bufPrint(&buf, "[{s}] WARN: " ++ fmt ++ "\n", .{name} ++ args) catch return;
-    std.debug.print("{s}", .{s});
-    fileWrite(s);
+    var msg_buf: [1024]u8 = undefined;
+    const msg = std.fmt.bufPrint(&msg_buf, fmt, args) catch return;
+    // .warn → bus emit + stderr fallthrough handled inside emitFromLog.
+    _ = event_bus.emitFromLog(.warn, name, msg);
+    if (enabled[@intFromEnum(cat)]) {
+        var line_buf: [1100]u8 = undefined;
+        const line = std.fmt.bufPrint(&line_buf, "[{s}] WARN: {s}\n", .{ name, msg }) catch return;
+        fileWrite(line);
+    }
 }
 
 pub fn err(cat: Category, comptime fmt: []const u8, args: anytype) void {
     ensureInit();
-    if (!enabled[@intFromEnum(cat)]) return;
     const name = @tagName(cat);
-    var buf: [1024]u8 = undefined;
-    const s = std.fmt.bufPrint(&buf, "[{s}] ERROR: " ++ fmt ++ "\n", .{name} ++ args) catch return;
-    std.debug.print("{s}", .{s});
-    fileWrite(s);
+    var msg_buf: [1024]u8 = undefined;
+    const msg = std.fmt.bufPrint(&msg_buf, fmt, args) catch return;
+    // .err → bus emit + stderr fallthrough handled inside emitFromLog.
+    _ = event_bus.emitFromLog(.err, name, msg);
+    if (enabled[@intFromEnum(cat)]) {
+        var line_buf: [1100]u8 = undefined;
+        const line = std.fmt.bufPrint(&line_buf, "[{s}] ERROR: {s}\n", .{ name, msg }) catch return;
+        fileWrite(line);
+    }
 }
 
 // ── Telemetry ────────────────────────────────────────────────────────────

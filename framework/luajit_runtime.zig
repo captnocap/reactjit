@@ -13,9 +13,11 @@
 //! luajit_runtime.tick() each frame and luajit_runtime.evalExpr() on events.
 
 const std = @import("std");
+const log = @import("log.zig");
 const state = @import("state.zig");
 const input_mod = @import("input.zig");
 const qjs_runtime = @import("qjs_runtime.zig");
+const mouse_state = @import("mouse_state.zig");
 const layout = @import("layout.zig");
 const effect_ctx = @import("effect_ctx.zig");
 const effect_shader_mod = @import("effect_shader.zig");
@@ -667,45 +669,25 @@ pub fn jsrtRoot() *Node {
     return &jsrt_root;
 }
 
-// ── Mouse/keyboard polling ──────────────────────────────────────────────
-
-var g_mouse_x: f32 = 0;
-var g_mouse_y: f32 = 0;
-var g_mouse_down: bool = false;
-var g_mouse_right_down: bool = false;
-
-/// Called by engine.zig on mouse motion
-pub fn updateMouse(x: f32, y: f32) void {
-    g_mouse_x = x;
-    g_mouse_y = y;
-}
-
-/// Called by engine.zig on mouse button events
-pub fn updateMouseButton(down: bool, right: bool) void {
-    if (right) {
-        g_mouse_right_down = down;
-    } else {
-        g_mouse_down = down;
-    }
-}
+// ── Mouse host functions (state lives in mouse_state.zig) ──────────────
 
 fn hostGetMouseX(L: ?*lua.lua_State) callconv(.c) c_int {
-    lua.lua_pushnumber(L, g_mouse_x);
+    lua.lua_pushnumber(L, mouse_state.g_mouse_x);
     return 1;
 }
 
 fn hostGetMouseY(L: ?*lua.lua_State) callconv(.c) c_int {
-    lua.lua_pushnumber(L, g_mouse_y);
+    lua.lua_pushnumber(L, mouse_state.g_mouse_y);
     return 1;
 }
 
 fn hostGetMouseDown(L: ?*lua.lua_State) callconv(.c) c_int {
-    lua.lua_pushboolean(L, if (g_mouse_down) 1 else 0);
+    lua.lua_pushboolean(L, if (mouse_state.g_mouse_down) 1 else 0);
     return 1;
 }
 
 fn hostGetMouseRightDown(L: ?*lua.lua_State) callconv(.c) c_int {
-    lua.lua_pushboolean(L, if (g_mouse_right_down) 1 else 0);
+    lua.lua_pushboolean(L, if (mouse_state.g_mouse_right_down) 1 else 0);
     return 1;
 }
 
@@ -1653,7 +1635,7 @@ fn stampLuaNode(L: ?*lua.lua_State, idx: c_int, alloc: std.mem.Allocator) Node {
             if (g_effect_shaders[eid]) |shader_ptr| {
                 node.effect_shader = shader_ptr.*;
             }
-            std.debug.print("[effect-decode] id={d} render_set={} shader_set={} bg_flag={}\n", .{
+            log.print("[effect-decode] id={d} render_set={} shader_set={} bg_flag={}\n", .{
                 eid,
                 node.effect_render != null,
                 node.effect_shader != null,
@@ -1954,7 +1936,6 @@ pub fn evalScript(lua_logic: []const u8) void {
         lua.lua_pop(L, 1);
         return;
     }
-
 }
 
 /// Eval a Lua expression (equivalent to qjs_runtime.evalExpr — called on events)
@@ -2108,7 +2089,7 @@ fn logLuaError(L: *lua.lua_State, context: []const u8) void {
     const err = lua.lua_tolstring(L, -1, &len);
     if (err != null) {
         const msg: []const u8 = @as([*]const u8, @ptrCast(err))[0..len];
-        std.debug.print("[raw-lua-err] {s}: {s}\n", .{ context, msg });
+        log.print("[raw-lua-err] {s}: {s}\n", .{ context, msg });
         std.log.err("[luajit-runtime] {s}: {s}", .{ context, msg });
     }
 }

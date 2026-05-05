@@ -16,6 +16,7 @@
 //! the same way as every other primitive.
 
 const std = @import("std");
+const log = @import("../log.zig");
 const wgpu = @import("wgpu");
 const shaders = @import("shaders.zig");
 const core = @import("gpu.zig");
@@ -74,7 +75,7 @@ pub fn drawCapsule(
 ) void {
     if (g_capsule_count >= MAX_CAPSULES) {
         if (!g_capacity_warning_emitted) {
-            std.debug.print("[gpu.capsules] capacity reached: {d} capsules; dropping later draws this frame\n", .{MAX_CAPSULES});
+            log.print("[gpu.capsules] capacity reached: {d} capsules; dropping later draws this frame\n", .{MAX_CAPSULES});
             g_capacity_warning_emitted = true;
         }
         return;
@@ -110,7 +111,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .code = shaders.capsule_wgsl,
     });
     const shader_module = device.createShaderModule(&shader_desc) orelse {
-        std.debug.print("Failed to create capsule shader module\n", .{});
+        log.print("Failed to create capsule shader module\n", .{});
         return;
     };
     defer shader_module.release();
@@ -128,7 +129,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex | wgpu.ShaderStages.fragment,
             .buffer = .{
-                .@"type" = .uniform,
+                .type = .uniform,
                 .has_dynamic_offset = 0,
                 .min_binding_size = 8,
             },
@@ -155,11 +156,11 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
 
     // 5 attribute slots carrying 12 floats total (32 bytes).
     const instance_attrs = [_]wgpu.VertexAttribute{
-        .{ .format = .float32x2, .offset = 0, .shader_location = 0 },   // p0
-        .{ .format = .float32x2, .offset = 8, .shader_location = 1 },   // p1
-        .{ .format = .float32x4, .offset = 16, .shader_location = 2 },  // color
-        .{ .format = .float32, .offset = 32, .shader_location = 3 },    // stroke_width
-        .{ .format = .float32, .offset = 36, .shader_location = 4 },    // _pad0 (unused)
+        .{ .format = .float32x2, .offset = 0, .shader_location = 0 }, // p0
+        .{ .format = .float32x2, .offset = 8, .shader_location = 1 }, // p1
+        .{ .format = .float32x4, .offset = 16, .shader_location = 2 }, // color
+        .{ .format = .float32, .offset = 32, .shader_location = 3 }, // stroke_width
+        .{ .format = .float32, .offset = 36, .shader_location = 4 }, // _pad0 (unused)
     };
 
     const instance_buffer_layout = wgpu.VertexBufferLayout{
@@ -198,7 +199,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
     });
 
     if (g_capsule_pipeline == null) {
-        std.debug.print("Failed to create capsule render pipeline\n", .{});
+        log.print("Failed to create capsule render pipeline\n", .{});
     }
 }
 

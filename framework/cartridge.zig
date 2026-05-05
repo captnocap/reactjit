@@ -5,6 +5,7 @@
 //! state preservation exports (app_state_count, app_state_get_int, etc.).
 
 const std = @import("std");
+const log = @import("log.zig");
 const layout = @import("layout.zig");
 const Node = layout.Node;
 
@@ -205,7 +206,7 @@ pub fn tickAll(now: u32) void {
             if (!safeCall(tick, .{now})) {
                 carts[i].faulted = true;
                 carts[i].fault_count += 1;
-                std.debug.print("[cartridge] CRASH in tick of '{s}' — cartridge disabled (fault #{d})\n", .{
+                log.print("[cartridge] CRASH in tick of '{s}' — cartridge disabled (fault #{d})\n", .{
                     carts[i].titleSlice(), carts[i].fault_count,
                 });
             }
@@ -244,7 +245,7 @@ pub fn checkReloads() ?usize {
         // Reload — clear fault state (the fix might be in this reload)
         carts[i].faulted = false;
         loadCartridgeLib(i) catch |err| {
-            std.debug.print("[cartridge] Reload failed for {s}: {}\n", .{ carts[i].titleSlice(), err });
+            log.print("[cartridge] Reload failed for {s}: {}\n", .{ carts[i].titleSlice(), err });
             continue;
         };
 
@@ -252,9 +253,9 @@ pub fn checkReloads() ?usize {
         restoreState(i);
 
         if (carts[i].faulted) {
-            std.debug.print("[cartridge] Reloaded {s} but init crashed again\n", .{carts[i].titleSlice()});
+            log.print("[cartridge] Reloaded {s} but init crashed again\n", .{carts[i].titleSlice()});
         } else {
-            std.debug.print("[cartridge] Reloaded: {s} (fault cleared)\n", .{carts[i].titleSlice()});
+            log.print("[cartridge] Reloaded: {s} (fault cleared)\n", .{carts[i].titleSlice()});
         }
         return i;
     }
@@ -340,7 +341,7 @@ fn loadCartridgeLib(idx: usize) !void {
         if (!safeCall(init_fn, .{})) {
             carts[idx].faulted = true;
             carts[idx].fault_count += 1;
-            std.debug.print("[cartridge] CRASH in init of '{s}' — cartridge disabled\n", .{carts[idx].titleSlice()});
+            log.print("[cartridge] CRASH in init of '{s}' — cartridge disabled\n", .{carts[idx].titleSlice()});
         }
     }
 }
@@ -364,9 +365,15 @@ fn snapshotState(idx: usize) void {
         const t = type_fn(i);
         carts[idx].snapshot[i] = .{ .slot_type = t };
         switch (t) {
-            0 => { if (gi) |f| carts[idx].snapshot[i].int_val = f(i); },
-            1 => { if (gf) |f| carts[idx].snapshot[i].float_val = f(i); },
-            2 => { if (gb) |f| carts[idx].snapshot[i].bool_val = f(i); },
+            0 => {
+                if (gi) |f| carts[idx].snapshot[i].int_val = f(i);
+            },
+            1 => {
+                if (gf) |f| carts[idx].snapshot[i].float_val = f(i);
+            },
+            2 => {
+                if (gb) |f| carts[idx].snapshot[i].bool_val = f(i);
+            },
             3 => {
                 if (gsp) |fp| {
                     if (gsl) |fl| {
@@ -430,10 +437,18 @@ fn restoreState(idx: usize) void {
     for (0..rc) |i| {
         const snap = carts[idx].snapshot[i];
         switch (snap.slot_type) {
-            0 => { if (si) |f| f(i, snap.int_val); },
-            1 => { if (sf) |f| f(i, snap.float_val); },
-            2 => { if (sb) |f| f(i, snap.bool_val); },
-            3 => { if (ss) |f| f(i, &snap.str_buf, snap.str_len); },
+            0 => {
+                if (si) |f| f(i, snap.int_val);
+            },
+            1 => {
+                if (sf) |f| f(i, snap.float_val);
+            },
+            2 => {
+                if (sb) |f| f(i, snap.bool_val);
+            },
+            3 => {
+                if (ss) |f| f(i, &snap.str_buf, snap.str_len);
+            },
             else => {},
         }
     }

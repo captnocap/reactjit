@@ -16,6 +16,7 @@
 //! order.
 
 const std = @import("std");
+const log = @import("log.zig");
 const layout = @import("layout.zig");
 const state = @import("state.zig");
 const Node = layout.Node;
@@ -33,7 +34,7 @@ var subscriber_count: usize = 0;
 /// Register a handler to be called on every file drop.
 pub fn subscribe(handler: FileDropHandler) void {
     if (subscriber_count >= MAX_SUBSCRIBERS) {
-        std.debug.print("[filedrop] max subscribers reached ({d})\n", .{MAX_SUBSCRIBERS});
+        log.print("[filedrop] max subscribers reached ({d})\n", .{MAX_SUBSCRIBERS});
         return;
     }
     subscribers[subscriber_count] = handler;
@@ -75,7 +76,7 @@ pub fn dispatch(path: []const u8, root: *Node) void {
     last_path = path_buf[0..path.len];
     drop_seq +%= 1;
 
-    std.debug.print("[filedrop] {s} → {d} subscriber(s)\n", .{ last_path.?, subscriber_count });
+    log.print("[filedrop] {s} → {d} subscriber(s)\n", .{ last_path.?, subscriber_count });
 
     for (subscribers[0..subscriber_count]) |handler| {
         handler(last_path.?, root);

@@ -13,6 +13,7 @@
 //! to `queueForPaint(node, rect)` which queues a quad via gpu.images.
 
 const std = @import("std");
+const log = @import("log.zig");
 const wgpu = @import("wgpu");
 const gpu = @import("gpu/gpu.zig");
 const images = @import("gpu/images.zig");
@@ -175,7 +176,7 @@ fn load(src: []const u8) ?*Entry {
     const post_top_hash = std.hash.Wyhash.hash(0, pixels_slice[0..row_bytes]);
     if (std.posix.getenv("REACTJIT_VERBOSE_IMAGE_CACHE") != null) {
         const tag_len: usize = @min(src.len, 48);
-        std.debug.print(
+        log.print(
             "[image_cache] load src=\"{s}\" {d}x{d} fmt={s} pre_top={x} pre_bot={x} post_top={x} flipped={}\n",
             .{
                 src[0..tag_len],

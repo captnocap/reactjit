@@ -10,6 +10,7 @@
 //!   pty_client_send(json)    → response JSON string (blocking, local socket)
 
 const std = @import("std");
+const log = @import("log.zig");
 const posix = std.posix;
 
 const build_options = @import("build_options");
@@ -44,7 +45,7 @@ pub fn connect() bool {
 
     // Create socket (blocking — local unix sockets are sub-millisecond)
     const fd = posix.socket(posix.AF.UNIX, posix.SOCK.STREAM | posix.SOCK.CLOEXEC, 0) catch |err| {
-        std.debug.print("[pty_client] socket failed: {}\n", .{err});
+        log.print("[pty_client] socket failed: {}\n", .{err});
         return false;
     };
 
@@ -55,9 +56,9 @@ pub fn connect() bool {
 
     // Use exact address length (family + path + null terminator)
     const addr_len: u32 = @intCast(@offsetOf(posix.sockaddr.un, "path") + path.len + 1);
-    std.debug.print("[pty_client] connecting to {s} (addr_len={d})\n", .{ path, addr_len });
+    log.print("[pty_client] connecting to {s} (addr_len={d})\n", .{ path, addr_len });
     posix.connect(fd, @ptrCast(&addr), addr_len) catch |err| {
-        std.debug.print("[pty_client] connect failed: {}\n", .{err});
+        log.print("[pty_client] connect failed: {}\n", .{err});
         posix.close(fd);
         return false;
     };
@@ -67,7 +68,7 @@ pub fn connect() bool {
     posix.setsockopt(fd, posix.SOL.SOCKET, posix.SO.RCVTIMEO, std.mem.asBytes(&timeout)) catch {};
 
     g_fd = fd;
-    std.debug.print("[pty_client] connected to {s}\n", .{path});
+    log.print("[pty_client] connected to {s}\n", .{path});
     return true;
 }
 
@@ -75,7 +76,7 @@ pub fn disconnect() void {
     if (g_fd) |fd| {
         posix.close(fd);
         g_fd = null;
-        std.debug.print("[pty_client] disconnected\n", .{});
+        log.print("[pty_client] disconnected\n", .{});
     }
 }
 
@@ -90,7 +91,7 @@ pub fn send(cmd: []const u8) []const u8 {
 
     // Send command + newline
     _ = posix.write(fd, cmd) catch |err| {
-        std.debug.print("[pty_client] write failed: {}\n", .{err});
+        log.print("[pty_client] write failed: {}\n", .{err});
         disconnect();
         return "";
     };
@@ -104,11 +105,14 @@ pub fn send(cmd: []const u8) []const u8 {
     while (total < g_recv_buf.len - 1) {
         const n = posix.read(fd, g_recv_buf[total..]) catch |err| {
             if (err == error.WouldBlock) break; // timeout
-            std.debug.print("[pty_client] read failed: {}\n", .{err});
+            log.print("[pty_client] read failed: {}\n", .{err});
             disconnect();
             return "";
         };
-        if (n == 0) { disconnect(); return ""; } // EOF
+        if (n == 0) {
+            disconnect();
+            return "";
+        } // EOF
         total += n;
         // Check for complete line
         if (std.mem.indexOf(u8, g_recv_buf[0..total], "\n") != null) break;

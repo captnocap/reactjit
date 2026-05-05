@@ -3,23 +3,24 @@
 //!      -I /usr/include/x86_64-linux-gnu && ./http_test
 
 const std = @import("std");
+const log = @import("../log.zig");
 const http = @import("http.zig");
 
 pub fn main() !void {
-    std.debug.print("=== HTTP Client Test ===\n", .{});
+    log.print("=== HTTP Client Test ===\n", .{});
 
     // Init
     http.init();
     defer http.destroy();
-    std.debug.print("[ok] Workers spawned\n", .{});
+    log.print("[ok] Workers spawned\n", .{});
 
     // Queue a GET request
     _ = http.request(1, .{ .url = "https://httpbin.org/get" });
-    std.debug.print("[ok] Request queued (id=1, GET https://httpbin.org/get)\n", .{});
+    log.print("[ok] Request queued (id=1, GET https://httpbin.org/get)\n", .{});
 
     // Queue a second request
     _ = http.request(2, .{ .url = "https://httpbin.org/status/404" });
-    std.debug.print("[ok] Request queued (id=2, GET https://httpbin.org/status/404)\n", .{});
+    log.print("[ok] Request queued (id=2, GET https://httpbin.org/status/404)\n", .{});
 
     // Poll for responses (with timeout)
     var completed: u32 = 0;
@@ -30,9 +31,9 @@ pub fn main() !void {
         for (responses[0..n]) |resp| {
             completed += 1;
             if (resp.response_type == .err) {
-                std.debug.print("[response id={d}] ERROR: {s}\n", .{ resp.id, resp.errorSlice() });
+                log.print("[response id={d}] ERROR: {s}\n", .{ resp.id, resp.errorSlice() });
             } else {
-                std.debug.print("[response id={d}] status={d} body_len={d} body_preview=\"{s}\"\n", .{
+                log.print("[response id={d}] status={d} body_len={d} body_preview=\"{s}\"\n", .{
                     resp.id,
                     resp.status,
                     resp.body_len,
@@ -44,8 +45,8 @@ pub fn main() !void {
     }
 
     if (completed >= 2) {
-        std.debug.print("\n[PASS] All {d} responses received\n", .{completed});
+        log.print("\n[PASS] All {d} responses received\n", .{completed});
     } else {
-        std.debug.print("\n[FAIL] Only {d}/2 responses received (timeout)\n", .{completed});
+        log.print("\n[FAIL] Only {d}/2 responses received (timeout)\n", .{completed});
     }
 }

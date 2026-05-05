@@ -15,6 +15,7 @@
 //! processes pre-allocated float buffers via LuaJIT FFI zero-copy pointers.
 
 const std = @import("std");
+const log = @import("log.zig");
 const zluajit = @import("zluajit");
 
 // SDL3 C imports
@@ -480,16 +481,25 @@ fn processEnvelope(m: *Module, num_samples: u32) void {
         switch (stage) {
             1 => { // attack
                 level += inv_sr / @max(attack, 0.001);
-                if (level >= 1.0) { level = 1.0; stage = 2; }
+                if (level >= 1.0) {
+                    level = 1.0;
+                    stage = 2;
+                }
             },
             2 => { // decay
                 level -= (1.0 - sustain) * inv_sr / @max(decay, 0.001);
-                if (level <= sustain) { level = sustain; stage = 3; }
+                if (level <= sustain) {
+                    level = sustain;
+                    stage = 3;
+                }
             },
             3 => {}, // sustain — hold level
             4 => { // release
                 level -= level * inv_sr / @max(release, 0.001);
-                if (level < 0.001) { level = 0; stage = 0; }
+                if (level < 0.001) {
+                    level = 0;
+                    stage = 0;
+                }
             },
             else => {},
         }
@@ -570,10 +580,7 @@ fn processSequencer(m: *Module, num_samples: u32) void {
     const step_freq = bpm / 60.0; // steps per second
 
     // Simple C-major scale pattern
-    const scale = [_]f64{ 261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25,
-                          587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.5, 1174.7,
-                          261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25,
-                          587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.5, 1174.7 };
+    const scale = [_]f64{ 261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.5, 1174.7, 261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77, 1046.5, 1174.7 };
 
     for (0..num_samples) |i| {
         const step: u32 = @intFromFloat(@mod(phase * step_freq, @as(f64, @floatFromInt(steps))));
@@ -1034,7 +1041,7 @@ pub fn isInitialized() bool {
 
 pub fn logTelemetry() void {
     if (!g_engine.initialized) return;
-    std.debug.print("[audio] modules: {d} | connections: {d} | callbacks: {d} | last: {d}us\n", .{
+    log.print("[audio] modules: {d} | connections: {d} | callbacks: {d} | last: {d}us\n", .{
         g_engine.module_count,
         g_engine.connection_count,
         g_engine.callback_count.load(.monotonic),

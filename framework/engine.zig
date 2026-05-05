@@ -434,7 +434,7 @@ fn terminalHandleKey(sym: i32, mod_state: u16) void {
 fn terminalHandleTextInput(text: [*:0]const u8) void {
     const ti = g_focused_terminal;
     const slice = std.mem.span(text);
-    std.debug.print("[terminal] textInput: len={d} chars=\"{s}\"\n", .{ slice.len, slice });
+    log.print("[terminal] textInput: len={d} chars=\"{s}\"\n", .{ slice.len, slice });
     if (slice.len > 0) {
         termClearSelection();
         vterm_mod.scrollToBottomIdx(ti);
@@ -505,6 +505,10 @@ fn initPhysicsNode(node: *Node) void {
 // ── Hover state ─────────────────────────────────────────────────────────
 
 var hovered_node: ?*Node = null;
+// Set pre-tick when hovered_node is non-null and the tick may invalidate
+// the pointer; cleared post-layout after re-hit-testing at the cursor pos.
+// See the long comment around the tick call.
+var hover_needs_resolve: bool = false;
 var cursor_hand: ?*c.SDL_Cursor = null;
 var cursor_arrow: ?*c.SDL_Cursor = null;
 var cursor_is_hand: bool = false;
@@ -1271,7 +1275,7 @@ fn nodedumpWalk(node: *Node, count: *u32, depth: u32, limit: u32) void {
             text_len = take;
         }
         const dbg_name: []const u8 = node.debug_name orelse "";
-        std.debug.print("[nodedump] t=60 i={d} d={d} kids={d} tag={s} x={d} y={d} w={d} h={d} name={s} text={s}\n", .{
+        log.print("[nodedump] t=60 i={d} d={d} kids={d} tag={s} x={d} y={d} w={d} h={d} name={s} text={s}\n", .{
             count.*,
             depth,
             node.children.len,
@@ -1297,7 +1301,7 @@ fn nodedumpMaybeEmit(root: *Node, win_w: f32, win_h: f32) void {
     if (g_nodedump_tick != 60) return;
     g_nodedump_done = true;
     if (std.posix.getenv("REACTJIT_NODEDUMP") == null) return;
-    std.debug.print("[nodedump] window={d}x{d}\n", .{
+    log.print("[nodedump] window={d}x{d}\n", .{
         @as(i32, @intFromFloat(win_w)),
         @as(i32, @intFromFloat(win_h)),
     });
@@ -1548,7 +1552,10 @@ fn paintChildrenInZOrder(node: *Node) void {
     }
     var any_z = false;
     for (node.children) |*child| {
-        if (child.style.z_index != 0) { any_z = true; break; }
+        if (child.style.z_index != 0) {
+            any_z = true;
+            break;
+        }
     }
     if (!any_z) {
         for (node.children) |*child| if (!child.effect_background) paintNode(child);
@@ -1602,7 +1609,7 @@ fn paintNode(node: *Node) void {
     if (g_paint_count > PAINT_BUDGET) {
         if (!g_budget_exceeded) {
             g_budget_exceeded = true;
-            std.debug.print("[BUDGET] Paint pass exceeded {d} nodes — bailing (likely infinite loop)\n", .{PAINT_BUDGET});
+            log.print("[BUDGET] Paint pass exceeded {d} nodes — bailing (likely infinite loop)\n", .{PAINT_BUDGET});
         }
         return;
     }
@@ -1736,12 +1743,12 @@ fn paintNode(node: *Node) void {
     for (node.children) |*child| {
         if (child.effect_render != null and !g_effect_child_seen2) {
             g_effect_child_seen2 = true;
-            std.debug.print("[eng effect-seen] parent={x} child={x} bg={} parent_rect={d}x{d} child_rect={d}x{d}\n", .{ @intFromPtr(node), @intFromPtr(child), child.effect_background, r.w, r.h, child.computed.w, child.computed.h });
+            log.print("[eng effect-seen] parent={x} child={x} bg={} parent_rect={d}x{d} child_rect={d}x{d}\n", .{ @intFromPtr(node), @intFromPtr(child), child.effect_background, r.w, r.h, child.computed.w, child.computed.h });
         }
         if (child.effect_background and child.effect_render != null) {
             if (!g_effect_bg_logged2) {
                 g_effect_bg_logged2 = true;
-                std.debug.print("[eng effect-bg-paint] firing rect={d}x{d}\n", .{ r.w, r.h });
+                log.print("[eng effect-bg-paint] firing rect={d}x{d}\n", .{ r.w, r.h });
             }
             _ = effects.paintCustomEffect(child, r.x, r.y, r.w, r.h, g_paint_opacity);
         }
@@ -1848,7 +1855,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
                     }
                 }
                 if (paisleyDebugEnabled() and isPaisleyName(ename)) {
-                    std.debug.print(
+                    log.print(
                         "[paisley] paintCanvasPath name={s} d_len={d} bbox=({d:.1},{d:.1},{d:.1},{d:.1}) stroke_w={d:.2} curve_count={d} subpaths={d}\n",
                         .{
                             ename,
@@ -1893,7 +1900,7 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
                     );
                 }
             } else if (paisleyDebugEnabled() and isPaisleyName(ename)) {
-                std.debug.print("[paisley] paintCanvasPath name={s} missing fill source\n", .{ename});
+                log.print("[paisley] paintCanvasPath name={s} missing fill source\n", .{ename});
             }
         } else if (node.canvas_fill_gradient) |grad| {
             // Linear gradient fill — translate layout.GradientStop (u8 Color) to
@@ -1946,7 +1953,13 @@ fn paintCanvasPath(node: *Node) callconv(.auto) void {
 /// Separated from paintNode to reduce the recursive frame size.
 noinline fn paintNodeVisuals(node: *Node) void {
     const r = node.computed;
-    const is_hovered = (hovered_node == node) and (node.handlers.on_hover_enter != null or node.handlers.on_hover_exit != null or node.handlers.js_on_hover_enter != null or node.handlers.lua_on_hover_enter != null or node.handlers.js_on_hover_exit != null or node.handlers.lua_on_hover_exit != null or node.hoverable);
+    // Auto-hover affordance: dark slate rect drawn over hovered nodes that
+    // opt in via `hoverable=true`. Previously this fired for ANY node with
+    // hover handlers — but charts use Pressables purely as invisible hit
+    // overlays (onMouseEnter/Leave to drive React-side highlight), and the
+    // square hit box was getting painted as a dark "container" behind the
+    // visible chart elements. Make the visual opt-in explicit instead.
+    const is_hovered = (hovered_node == node) and node.hoverable;
 
     if (is_hovered and node.style.background_color == null) {
         gpu.drawRectCorners(r.x, r.y, r.w, r.h, 0.15, 0.15, 0.22, 0.6, node.style.radiusTL(), node.style.radiusTR(), node.style.radiusBR(), node.style.radiusBL(), 0, 0, 0, 0, 0);
@@ -2248,7 +2261,6 @@ noinline fn paintNodeVisuals(node: *Node) void {
         }
         paintTextInput(node, id);
     }
-
 }
 
 /// Render inline glyphs (polygons embedded in text) at their recorded slot positions.
@@ -2764,15 +2776,17 @@ pub fn run(config_in: AppConfig) !void {
     var init_y: c_int = c.SDL_WINDOWPOS_CENTERED;
     const explicit_size = config.width != 1280 or config.height != 800;
     const headless_skip_geo = std.posix.getenv("ZIGOS_HEADLESS") != null;
+    var loaded_geom: ?geometry.WindowGeometry = null;
     if (!headless_skip_geo) {
-        if (geometry.load()) |g| {
+        loaded_geom = geometry.load();
+        if (loaded_geom) |g| {
             init_x = g.x;
             init_y = g.y;
             if (!explicit_size) {
                 init_w = g.width;
                 init_h = g.height;
             }
-            log.info(.geometry, "restored {d}x{d} at ({d},{d})", .{ g.width, g.height, g.x, g.y });
+            log.info(.geometry, "restored {d}x{d} at ({d},{d}) max={d}", .{ g.width, g.height, g.x, g.y, g.maximized });
         }
     }
     if (std.posix.getenv("ZIGOS_WINDOW_W")) |ws| {
@@ -2822,7 +2836,10 @@ pub fn run(config_in: AppConfig) !void {
     // Enable text input events (SDL_EVENT_TEXT_INPUT) — required for keyboard input to work
     _ = c.SDL_StartTextInput(window);
 
-    if (geometry.load() != null) geometry.blockSaves();
+    if (loaded_geom) |g| {
+        geometry.blockSaves();
+        if (g.maximized != 0) _ = c.SDL_MaximizeWindow(window);
+    }
 
     videos.init();
     defer videos.deinit();
@@ -2838,13 +2855,13 @@ pub fn run(config_in: AppConfig) !void {
 
     // GPU init
     gpu.init(window) catch |err| {
-        std.debug.print("wgpu init failed: {}\n", .{err});
+        log.print("wgpu init failed: {}\n", .{err});
         return error.GPUInitFailed;
     };
     defer gpu.deinit();
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
-        std.debug.print("[startup] gpu: {d}ms\n", .{dt});
+        log.print("[startup] gpu: {d}ms\n", .{dt});
     }
 
     // Text engine (FreeType)
@@ -2862,7 +2879,7 @@ pub fn run(config_in: AppConfig) !void {
     input.setMeasureWidthFn(measureWidthOnly);
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
-        std.debug.print("[startup] text: {d}ms\n", .{dt});
+        log.print("[startup] text: {d}ms\n", .{dt});
     }
 
     var win_w: f32 = @floatFromInt(init_w);
@@ -2882,14 +2899,12 @@ pub fn run(config_in: AppConfig) !void {
     // up front means the worst case is "silently dropped event" rather
     // than "log spam every second forever." useIFTTT.ts later overwrites
     // these with the real emit dispatchers in the parent host.
-    js_vm.evalScript(
-        "for (const k of [" ++
+    js_vm.evalScript("for (const k of [" ++
         "'__ifttt_onKeyDown','__ifttt_onKeyUp','__ifttt_onClipboardChange'," ++
         "'__ifttt_onSystemFocus','__ifttt_onSystemDrop','__ifttt_onSystemCursor'," ++
         "'__ifttt_onSystemSlowFrame','__ifttt_onSystemHang'," ++
         "'__ifttt_onSystemRam','__ifttt_onSystemVram','__ifttt_onSystemResize'" ++
-        "]) if (typeof globalThis[k] !== 'function') globalThis[k] = () => {};"
-    );
+        "]) if (typeof globalThis[k] !== 'function') globalThis[k] = () => {};");
 
     // LuaJIT logic VM (main-thread — events, state, conditionals)
     luajit_runtime.initVM();
@@ -2902,7 +2917,7 @@ pub fn run(config_in: AppConfig) !void {
     @import("applescript.zig").registerQjsHostFunctions();
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
-        std.debug.print("[startup] vms: {d}ms\n", .{dt});
+        log.print("[startup] vms: {d}ms\n", .{dt});
     }
 
     // Register window-open bridge so JS can call __openWindow
@@ -2916,7 +2931,7 @@ pub fn run(config_in: AppConfig) !void {
     if (config.init) |initFn| initFn();
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
-        std.debug.print("[startup] app_init: {d}ms\n", .{dt});
+        log.print("[startup] app_init: {d}ms\n", .{dt});
     }
 
     // Load embedded scripts — after init so host functions are registered,
@@ -2926,7 +2941,7 @@ pub fn run(config_in: AppConfig) !void {
     if (config.js_logic.len > 0 or config.lua_logic.len > 0) state_mod.markDirty();
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
-        std.debug.print("[startup] scripts: {d}ms\n", .{dt});
+        log.print("[startup] scripts: {d}ms\n", .{dt});
     }
 
     // Test harness — enable if ZIGOS_TEST=1
@@ -2936,7 +2951,7 @@ pub fn run(config_in: AppConfig) !void {
     if (config.tick) |tickFn| tickFn(@truncate(c.SDL_GetTicks()));
     {
         const dt = @divTrunc(std.time.microTimestamp() - startup_t0, 1000);
-        std.debug.print("[startup] first_tick: {d}ms → ready\n", .{dt});
+        log.print("[startup] first_tick: {d}ms → ready\n", .{dt});
     }
 
     // PTY remote control socket
@@ -2987,7 +3002,7 @@ pub fn run(config_in: AppConfig) !void {
                 // Update chrome root for borderless hit-testing after root swap
                 if (config.borderless) g_chrome_root = config.root;
                 layout.markLayoutDirty();
-                std.debug.print("[hot-reload] App reloaded\n", .{});
+                log.print("[hot-reload] App reloaded\n", .{});
             }
         }
 
@@ -3008,12 +3023,12 @@ pub fn run(config_in: AppConfig) !void {
 
             switch (event.type) {
                 c.SDL_EVENT_QUIT => {
-                    std.debug.print("[engine] SDL_EVENT_QUIT received\n", .{});
+                    log.print("[engine] SDL_EVENT_QUIT received\n", .{});
                     witness.flush(); // save recording before exit
                     running = false;
                 },
                 c.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
-                    std.debug.print("[engine] SDL_EVENT_WINDOW_CLOSE_REQUESTED for window {d}\n", .{event.window.windowID});
+                    log.print("[engine] SDL_EVENT_WINDOW_CLOSE_REQUESTED for window {d}\n", .{event.window.windowID});
                     running = false;
                 },
                 c.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED => {
@@ -3230,14 +3245,14 @@ pub fn run(config_in: AppConfig) !void {
                                 input.unfocus();
                                 stampClickLatency();
                                 stampInputLatency("click");
-                                std.debug.print("[press] zig handler at ({d:.0},{d:.0})\n", .{ mx, my });
+                                log.print("[press] zig handler at ({d:.0},{d:.0})\n", .{ mx, my });
                                 handler();
                                 // Also run JS handler if present
                                 if (h.handlers.js_on_press) |js_expr| {
                                     const expr = std.mem.span(js_expr);
-                                    std.debug.print("[press] +js: '{s}'\n", .{expr});
+                                    log.print("[press] +js: '{s}'\n", .{expr});
                                     runJsHandlerExpr(expr);
-                                    std.debug.print("[press] +js done\n", .{});
+                                    log.print("[press] +js done\n", .{});
                                 }
                                 // Also run Lua handler if present
                                 if (h.handlers.lua_on_press) |lua_expr| {
@@ -3247,19 +3262,19 @@ pub fn run(config_in: AppConfig) !void {
                                 input.unfocus();
                                 stampClickLatency();
                                 stampInputLatency("click");
-                                std.debug.print("[lua_on_press] eval: '{s}'\n", .{std.mem.span(lua_expr)});
+                                log.print("[lua_on_press] eval: '{s}'\n", .{std.mem.span(lua_expr)});
                                 luajit_runtime.evalExpr(std.mem.span(lua_expr));
-                                std.debug.print("[lua_on_press] done\n", .{});
+                                log.print("[lua_on_press] done\n", .{});
                             } else if (h.handlers.js_on_press) |js_expr| {
                                 input.unfocus();
                                 stampClickLatency();
                                 stampInputLatency("click");
                                 const expr = std.mem.span(js_expr);
-                                std.debug.print("[js_on_press] eval: '{s}'\n", .{expr});
+                                log.print("[js_on_press] eval: '{s}'\n", .{expr});
                                 const jt0 = std.time.microTimestamp();
                                 runJsHandlerExpr(expr);
                                 const jt1 = std.time.microTimestamp();
-                                std.debug.print("[js_on_press] done ({d}us)\n", .{jt1 - jt0});
+                                log.print("[js_on_press] done ({d}us)\n", .{jt1 - jt0});
                             } else if (h.href) |url| {
                                 stampClickLatency();
                                 stampInputLatency("click");
@@ -3660,7 +3675,7 @@ pub fn run(config_in: AppConfig) !void {
                                 classifier.setModeIdx(g_focused_terminal, .basic);
                                 classifier.markDirtyIdx(g_focused_terminal);
                             }
-                            std.debug.print("[semantic] overlay {s}\n", .{if (g_semantic_overlay) "ON" else "OFF"});
+                            log.print("[semantic] overlay {s}\n", .{if (g_semantic_overlay) "ON" else "OFF"});
                             continue;
                         }
                         if (t_ctrl and t_shift and sym == c.SDLK_V) {
@@ -3852,15 +3867,18 @@ pub fn run(config_in: AppConfig) !void {
         // App tick (FFI polling, state updates, dynamic texts)
         const phase_t0 = std.time.microTimestamp();
         if (config.tick) |tickFn| {
-            // Cache the stable slot id BEFORE tick runs — tick may rebuild the
-            // arena that hovered_node points into, leaving it dangling. Reading
-            // prev.scroll_persist_slot after tick is a use-after-free.
-            const prev_hover_slot: u32 = if (hovered_node) |p| p.scroll_persist_slot else 0;
+            // tick may rebuild the arena that hovered_node points into, so the
+            // pre-tick pointer becomes stale. The old recovery path used
+            // scroll_persist_slot, but the V8 path never sets that field on
+            // Pressables — so hovered_node always got nulled, and the next
+            // updateHover call short-circuited (`hit == hovered_node` when both
+            // were null) without firing on_hover_exit. React state stayed stuck
+            // and chart highlights never released. Instead, defer until after
+            // the layout pass and re-hit-test at the current cursor position
+            // (post-tick / pre-layout the computed rects are stale).
+            hover_needs_resolve = hovered_node != null;
+            hovered_node = null;
             tickFn(@truncate(c.SDL_GetTicks()));
-            hovered_node = if (prev_hover_slot != 0)
-                findNodeByScrollSlot(config.root, prev_hover_slot)
-            else
-                null;
         }
         const phase_t1 = std.time.microTimestamp();
 
@@ -3951,6 +3969,18 @@ pub fn run(config_in: AppConfig) !void {
         layout.layout(config.root, 0, 0, win_w, app_h);
         const t3 = std.time.microTimestamp();
         qjs_runtime.telemetry_layout_us = @intCast(@max(0, t3 - t2));
+
+        // Re-resolve hovered_node after layout (computed rects are now valid).
+        // Pre-tick we nulled the stale pointer; this restores it so the next
+        // mouse-motion can dispatch on_hover_exit when the cursor leaves.
+        if (hover_needs_resolve) {
+            hover_needs_resolve = false;
+            var hx: f32 = 0;
+            var hy: f32 = 0;
+            _ = c.SDL_GetMouseState(&hx, &hy);
+            const events_mod = @import("events.zig");
+            hovered_node = events_mod.hitTestHoverable(config.root, hx, hy);
+        }
 
         // One-shot visible-node coord dump at tick 60 (REACTJIT_NODEDUMP gate).
         nodedumpMaybeEmit(config.root, win_w, app_h);
@@ -4063,7 +4093,7 @@ pub fn run(config_in: AppConfig) !void {
         if (g_input_latency_ts_us != 0) {
             const since_click = phase_t_postframe - g_input_latency_ts_us;
             if (since_click > 50000) {
-                std.debug.print("[frame-timing] since_click={d}ms  tick={d}us  layout={d}us  paint={d}us  gpu.frame={d}us\n", .{
+                log.print("[frame-timing] since_click={d}ms  tick={d}us  layout={d}us  paint={d}us  gpu.frame={d}us\n", .{
                     @divTrunc(since_click, 1000),
                     phase_t1 - phase_t0,
                     qjs_runtime.telemetry_layout_us,
@@ -4078,7 +4108,7 @@ pub fn run(config_in: AppConfig) !void {
         // or drag session produces a running latency trace in stderr.
         if (g_input_latency_ts_us != 0) {
             const latency_us = std.time.microTimestamp() - g_input_latency_ts_us;
-            std.debug.print("[input-latency] {s}: {d}ms (batched {d} event{s})\n", .{
+            log.print("[input-latency] {s}: {d}ms (batched {d} event{s})\n", .{
                 g_input_latency_kind,
                 @divTrunc(latency_us, 1000),
                 g_input_latency_event_count,
@@ -4142,7 +4172,7 @@ pub fn run(config_in: AppConfig) !void {
             const verbose = std.posix.getenv("ZIGOS_TELEMETRY") != null;
             if (verbose or (now -% telemetry_stderr_last) >= 10_000) {
                 telemetry_stderr_last = now;
-                std.debug.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
+                log.print("[telemetry] FPS: {d} | layout: {d}us | paint: {d}us | visible: {d}/{d} | gpu: {d}/{d} | hidden: {d} | zero: {d} | bridge: {d}/s\n", .{
                     fps_frames, qjs_runtime.telemetry_layout_us, qjs_runtime.telemetry_paint_us, ppf, PAINT_BUDGET, gpu.g_gpu_ops, gpu.GPU_OPS_BUDGET, hpf, zpf, qjs_runtime.bridge_calls_this_second,
                 });
             }

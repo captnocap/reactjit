@@ -132,7 +132,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .code = shaders.image_wgsl,
     });
     const shader_module = device.createShaderModule(&shader_desc) orelse {
-        std.debug.print("Failed to create image shader module\n", .{});
+        log.print("Failed to create image shader module\n", .{});
         return;
     };
     defer shader_module.release();
@@ -150,7 +150,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .{ // binding 0: globals uniform
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex,
-            .buffer = .{ .@"type" = .uniform, .has_dynamic_offset = 0, .min_binding_size = 8 },
+            .buffer = .{ .type = .uniform, .has_dynamic_offset = 0, .min_binding_size = 8 },
         },
         .{ // binding 1: image texture
             .binding = 1,
@@ -164,7 +164,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .{ // binding 2: sampler
             .binding = 2,
             .visibility = wgpu.ShaderStages.fragment,
-            .sampler = .{ .@"type" = .filtering },
+            .sampler = .{ .type = .filtering },
         },
     };
 
@@ -224,7 +224,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
     });
 
     if (g_pipeline == null) {
-        std.debug.print("Failed to create image render pipeline\n", .{});
+        log.print("Failed to create image render pipeline\n", .{});
     }
 }
 

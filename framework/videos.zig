@@ -22,6 +22,7 @@
 //! Status lifecycle per src: null → loading → ready | error
 
 const std = @import("std");
+const log = @import("log.zig");
 const builtin = @import("builtin");
 const wgpu = @import("wgpu");
 const c = @import("c.zig").imports;
@@ -245,14 +246,14 @@ fn initGLContext() bool {
         1,
         c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_HIDDEN,
     ) orelse {
-        std.debug.print("[videos] failed to create GL window\n", .{});
+        log.print("[videos] failed to create GL window\n", .{});
         return false;
     };
 
     // Create GL context
     gl_context = c.SDL_GL_CreateContext(gl_window.?);
     if (gl_context == null) {
-        std.debug.print("[videos] failed to create GL context: {s}\n", .{c.SDL_GetError()});
+        log.print("[videos] failed to create GL context: {s}\n", .{c.SDL_GetError()});
         c.SDL_DestroyWindow(gl_window.?);
         gl_window = null;
         return false;
@@ -273,12 +274,12 @@ fn initGLContext() bool {
     gl.pixelStorei = loadGlFn(@TypeOf(gl.pixelStorei), "glPixelStorei") orelse return glInitFail("glPixelStorei");
 
     gl_available = true;
-    std.debug.print("[videos] GL context ready (dedicated for mpv)\n", .{});
+    log.print("[videos] GL context ready (dedicated for mpv)\n", .{});
     return true;
 }
 
 fn glInitFail(name: [*:0]const u8) bool {
-    std.debug.print("[videos] failed to load GL function: {s}\n", .{std.mem.span(name)});
+    log.print("[videos] failed to load GL function: {s}\n", .{std.mem.span(name)});
     deinitGLContext();
     return false;
 }
@@ -321,7 +322,7 @@ fn createPrivateFBO(w: u32, h: u32) struct { fbo: c_uint, tex: c_uint } {
     gl.bindFramebuffer(GL_FRAMEBUFFER, 0);
 
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        std.debug.print("[videos] private FBO incomplete (status=0x{x})\n", .{status});
+        log.print("[videos] private FBO incomplete (status=0x{x})\n", .{status});
         gl.deleteTextures(1, &tex);
         gl.deleteFramebuffers(1, &fbo);
         return .{ .fbo = 0, .tex = 0 };
@@ -357,12 +358,12 @@ pub fn loadLibrary() bool {
     for (paths) |path| {
         handle = dlopen(path, flags);
         if (handle != null) {
-            std.debug.print("[videos] libmpv loaded from {s}\n", .{std.mem.span(path)});
+            log.print("[videos] libmpv loaded from {s}\n", .{std.mem.span(path)});
             break;
         }
     }
     const h = handle orelse {
-        std.debug.print("[videos] libmpv not available — install libmpv-dev for video playback\n", .{});
+        log.print("[videos] libmpv not available — install libmpv-dev for video playback\n", .{});
         return false;
     };
     lib_handle = h;
@@ -386,10 +387,10 @@ pub fn loadLibrary() bool {
     // Try to set up GL context (primary path). Fall back to SW if it fails.
     if (initGLContext()) {
         render_mode = .opengl;
-        std.debug.print("[videos] render mode: OpenGL (GPU-accelerated)\n", .{});
+        log.print("[videos] render mode: OpenGL (GPU-accelerated)\n", .{});
     } else {
         render_mode = .software;
-        std.debug.print("[videos] render mode: software (GL context failed, CPU fallback)\n", .{});
+        log.print("[videos] render mode: software (GL context failed, CPU fallback)\n", .{});
     }
 
     lib_available = true;
@@ -397,7 +398,7 @@ pub fn loadLibrary() bool {
 }
 
 fn loadFail(name: [*:0]const u8) bool {
-    std.debug.print("[videos] failed to load symbol: {s}\n", .{std.mem.span(name)});
+    log.print("[videos] failed to load symbol: {s}\n", .{std.mem.span(name)});
     if (lib_handle) |h| _ = dlclose(h);
     lib_handle = null;
     return false;
@@ -406,7 +407,7 @@ fn loadFail(name: [*:0]const u8) bool {
 /// Fully unload libmpv: destroy all videos, dlclose handle, reset flags.
 pub fn unloadLibrary() void {
     if (!lib_available) return;
-    std.debug.print("[videos] unloadLibrary: tearing down mpv...\n", .{});
+    log.print("[videos] unloadLibrary: tearing down mpv...\n", .{});
 
     clearCache();
     deinitGLContext();
@@ -418,7 +419,7 @@ pub fn unloadLibrary() void {
 
     lib_available = false;
     load_attempted = false;
-    std.debug.print("[videos] unloadLibrary: complete\n", .{});
+    log.print("[videos] unloadLibrary: complete\n", .{});
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -457,14 +458,14 @@ fn findEntry(src: []const u8) ?*VideoEntry {
 fn loadVideo(src: []const u8) void {
     if (!loadLibrary()) return;
     if (entry_count >= MAX_VIDEOS) {
-        std.debug.print("[videos] max videos reached ({d})\n", .{MAX_VIDEOS});
+        log.print("[videos] max videos reached ({d})\n", .{MAX_VIDEOS});
         return;
     }
 
-    std.debug.print("[videos] loadVideo: {s}\n", .{src});
+    log.print("[videos] loadVideo: {s}\n", .{src});
 
     const handle = mpv_fns.create() orelse {
-        std.debug.print("[videos] mpv_create failed\n", .{});
+        log.print("[videos] mpv_create failed\n", .{});
         entries[entry_count] = .{ .src = src, .status = .@"error" };
         entry_count += 1;
         return;
@@ -487,7 +488,7 @@ fn loadVideo(src: []const u8) void {
 
     var err = mpv_fns.initialize(handle);
     if (err < 0) {
-        std.debug.print("[videos] mpv_initialize failed: {s}\n", .{std.mem.span(mpv_fns.error_string(err))});
+        log.print("[videos] mpv_initialize failed: {s}\n", .{std.mem.span(mpv_fns.error_string(err))});
         mpv_fns.terminate_destroy(handle);
         entries[entry_count] = .{ .src = src, .status = .@"error" };
         entry_count += 1;
@@ -499,7 +500,7 @@ fn loadVideo(src: []const u8) void {
     const entry_mode = createRenderContext(handle, &render_ctx);
 
     if (render_ctx == null) {
-        std.debug.print("[videos] render_context_create failed on both paths\n", .{});
+        log.print("[videos] render_context_create failed on both paths\n", .{});
         mpv_fns.terminate_destroy(handle);
         entries[entry_count] = .{ .src = src, .status = .@"error" };
         entry_count += 1;
@@ -518,7 +519,7 @@ fn loadVideo(src: []const u8) void {
 
     if (!isRemoteUrl(src)) {
         const f = std.fs.cwd().openFile(src, .{}) catch {
-            std.debug.print("[videos] file not found: {s}\n", .{src});
+            log.print("[videos] file not found: {s}\n", .{src});
             mpv_fns.render_ctx_free(render_ctx);
             mpv_fns.terminate_destroy(handle);
             entries[entry_count] = .{ .src = src, .status = .@"error" };
@@ -535,7 +536,7 @@ fn loadVideo(src: []const u8) void {
     var cmd = [_]?[*:0]const u8{ "loadfile", resolved, "replace", null };
     err = mpv_fns.command(handle, &cmd);
     if (err < 0) {
-        std.debug.print("[videos] loadfile failed: {s}\n", .{std.mem.span(mpv_fns.error_string(err))});
+        log.print("[videos] loadfile failed: {s}\n", .{std.mem.span(mpv_fns.error_string(err))});
         mpv_fns.render_ctx_free(render_ctx);
         mpv_fns.terminate_destroy(handle);
         entries[entry_count] = .{ .src = src, .status = .@"error" };
@@ -552,7 +553,7 @@ fn loadVideo(src: []const u8) void {
         .mode = entry_mode,
     };
     entry_count += 1;
-    std.debug.print("[videos] loading: {s} (mode={s})\n", .{ src, @tagName(entry_mode) });
+    log.print("[videos] loading: {s} (mode={s})\n", .{ src, @tagName(entry_mode) });
 }
 
 /// Create mpv render context. Tries OpenGL first, falls back to software.
@@ -574,7 +575,7 @@ fn createRenderContext(handle: ?*anyopaque, out_ctx: *?*anyopaque) RenderMode {
         if (err >= 0 and out_ctx.* != null) {
             return .opengl;
         }
-        std.debug.print("[videos] GL render context failed ({s}), trying SW\n", .{std.mem.span(mpv_fns.error_string(err))});
+        log.print("[videos] GL render context failed ({s}), trying SW\n", .{std.mem.span(mpv_fns.error_string(err))});
     }
 
     // Fallback: software renderer
@@ -588,7 +589,7 @@ fn createRenderContext(handle: ?*anyopaque, out_ctx: *?*anyopaque) RenderMode {
     if (err >= 0 and out_ctx.* != null) {
         return .software;
     }
-    std.debug.print("[videos] SW render context also failed: {s}\n", .{std.mem.span(mpv_fns.error_string(err))});
+    log.print("[videos] SW render context also failed: {s}\n", .{std.mem.span(mpv_fns.error_string(err))});
     return .software;
 }
 
@@ -606,7 +607,10 @@ pub fn update() void {
     // Make GL context current for all GL-mode videos
     var need_gl = false;
     for (entries[0..entry_count]) |e| {
-        if (e.mode == .opengl and e.handle != null) { need_gl = true; break; }
+        if (e.mode == .opengl and e.handle != null) {
+            need_gl = true;
+            break;
+        }
     }
     if (need_gl and gl_available) makeGLCurrent();
 
@@ -623,19 +627,19 @@ pub fn update() void {
             const raw_h = getMpvInt(e.handle, "height");
             if (w_opt) |w_i| {
                 if (h_opt) |h_i| {
-                    std.debug.print("[videos] mpv dims: video-params/w={d} h={d} dw={?} dh={?} raw_w={?} raw_h={?}\n", .{ w_i, h_i, dw_opt, dh_opt, raw_w, raw_h });
+                    log.print("[videos] mpv dims: video-params/w={d} h={d} dw={?} dh={?} raw_w={?} raw_h={?}\n", .{ w_i, h_i, dw_opt, dh_opt, raw_w, raw_h });
                     const w: u32 = @intCast(@max(1, w_i));
                     const h: u32 = @intCast(@max(1, h_i));
                     if (initVideoResources(e, device, w, h)) {
                         e.status = .ready;
-                        std.debug.print("[videos] ready: {s} ({d}x{d}, {s})\n", .{ e.src, w, h, @tagName(e.mode) });
+                        log.print("[videos] ready: {s} ({d}x{d}, {s})\n", .{ e.src, w, h, @tagName(e.mode) });
                         // Force-render first frame immediately (mpv fires RENDER_UPDATE_FRAME
                         // during loadVideo, before our first update() — we miss it for paused videos)
                         if (e.mode == .opengl) renderGL(e, queue) else renderSW(e, queue);
-                        std.debug.print("[videos] first frame rendered\n", .{});
+                        log.print("[videos] first frame rendered\n", .{});
                     } else {
                         e.status = .@"error";
-                        std.debug.print("[videos] failed to create resources for {s}\n", .{e.src});
+                        log.print("[videos] failed to create resources for {s}\n", .{e.src});
                     }
                 }
             }
@@ -900,7 +904,7 @@ pub fn paintVideo(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f32)
     const draw_y = y + (ch - draw_h) / 2;
 
     if (!_paint_logged) {
-        std.debug.print("[videos] paintVideo: rect=({d:.0},{d:.0},{d:.0},{d:.0}) clamped_h={d:.0} vid={d}x{d} draw=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ x, y, w, h, ch, e.width, e.height, draw_x, draw_y, draw_w, draw_h });
+        log.print("[videos] paintVideo: rect=({d:.0},{d:.0},{d:.0},{d:.0}) clamped_h={d:.0} vid={d}x{d} draw=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ x, y, w, h, ch, e.width, e.height, draw_x, draw_y, draw_w, draw_h });
         _paint_logged = true;
     }
 
@@ -990,7 +994,7 @@ pub fn getPaused(src: []const u8) bool {
 // ════════════════════════════════════════════════════════════════════════
 
 fn destroyEntry(e: *VideoEntry) void {
-    std.debug.print("[videos] destroyEntry: stopping playback...\n", .{});
+    log.print("[videos] destroyEntry: stopping playback...\n", .{});
     if (e.handle) |h| {
         _ = mpv_fns.set_property_string(h, "pause", "yes");
         var stop_cmd = [_]?[*:0]const u8{ "stop", null };
@@ -1008,14 +1012,14 @@ fn destroyEntry(e: *VideoEntry) void {
         gl.deleteFramebuffers(1, &fbo);
         gl.deleteTextures(1, &tex);
     }
-    std.debug.print("[videos] destroyEntry: freeing render ctx...\n", .{});
+    log.print("[videos] destroyEntry: freeing render ctx...\n", .{});
     if (e.render_ctx) |ctx| mpv_fns.render_ctx_free(ctx);
-    std.debug.print("[videos] destroyEntry: render ctx freed, calling terminate_destroy...\n", .{});
+    log.print("[videos] destroyEntry: render ctx freed, calling terminate_destroy...\n", .{});
     if (e.handle) |h| mpv_fns.terminate_destroy(h);
-    std.debug.print("[videos] destroyEntry: terminate_destroy done\n", .{});
+    log.print("[videos] destroyEntry: terminate_destroy done\n", .{});
     if (e.pixel_buf) |buf| page_alloc.free(buf);
     e.* = .{};
-    std.debug.print("[videos] destroyEntry: complete\n", .{});
+    log.print("[videos] destroyEntry: complete\n", .{});
 }
 
 fn clearCache() void {
@@ -1046,7 +1050,7 @@ pub fn init() void {
 fn onFileDrop(path: []const u8, root: *Node) void {
     if (!loadLibrary()) return;
 
-    std.debug.print("[videos] file drop: {s}\n", .{path});
+    log.print("[videos] file drop: {s}\n", .{path});
 
     // Destroy all existing videos and load the new one
     clearCache();

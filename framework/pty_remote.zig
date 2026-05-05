@@ -27,6 +27,7 @@
 //!   ← {"ok":true,"alive":true}
 
 const std = @import("std");
+const log = @import("log.zig");
 const vterm_mod = @import("vterm.zig");
 const classifier = @import("classifier.zig");
 const posix = std.posix;
@@ -60,7 +61,7 @@ pub fn init() void {
 
     // Create unix socket
     const fd = posix.socket(posix.AF.UNIX, posix.SOCK.STREAM | posix.SOCK.NONBLOCK | posix.SOCK.CLOEXEC, 0) catch |err| {
-        std.debug.print("[pty_remote] socket failed: {}\n", .{err});
+        log.print("[pty_remote] socket failed: {}\n", .{err});
         return;
     };
 
@@ -70,26 +71,29 @@ pub fn init() void {
     @memcpy(addr.path[0..g_sock_path_len], g_sock_path_buf[0..g_sock_path_len]);
 
     posix.bind(fd, @ptrCast(&addr), @sizeOf(posix.sockaddr.un)) catch |err| {
-        std.debug.print("[pty_remote] bind failed: {}\n", .{err});
+        log.print("[pty_remote] bind failed: {}\n", .{err});
         posix.close(fd);
         return;
     };
 
     // Listen
     posix.listen(fd, 4) catch |err| {
-        std.debug.print("[pty_remote] listen failed: {}\n", .{err});
+        log.print("[pty_remote] listen failed: {}\n", .{err});
         posix.close(fd);
         return;
     };
 
     g_server_fd = fd;
     g_initialized = true;
-    std.debug.print("[pty_remote] listening on {s}\n", .{path_z});
+    log.print("[pty_remote] listening on {s}\n", .{path_z});
 }
 
 pub fn deinit() void {
     for (&g_clients) |*c| {
-        if (c.*) |fd| { posix.close(fd); c.* = null; }
+        if (c.*) |fd| {
+            posix.close(fd);
+            c.* = null;
+        }
     }
     if (g_server_fd) |fd| {
         posix.close(fd);
@@ -115,7 +119,7 @@ fn acceptNewClients() void {
         if (slot.* != null) continue;
         const result = posix.accept(server, null, null, posix.SOCK.NONBLOCK | posix.SOCK.CLOEXEC) catch return;
         slot.* = result;
-        std.debug.print("[pty_remote] client connected\n", .{});
+        log.print("[pty_remote] client connected\n", .{});
         return;
     }
 }
@@ -130,7 +134,7 @@ fn readClients() void {
             posix.close(fd);
             g_clients[i] = null;
             g_client_buf_lens[i] = 0;
-            std.debug.print("[pty_remote] client disconnected\n", .{});
+            log.print("[pty_remote] client disconnected\n", .{});
             continue;
         };
         if (n == 0) {
@@ -251,7 +255,9 @@ fn listTerminals(buf: []u8) []const u8 {
         const idx: u8 = @intCast(i);
         const alive = vterm_mod.ptyAliveIdx(idx);
         if (!alive and vterm_mod.getRowsIdx(idx) == 0) continue;
-        if (!first) { pos += copyTo(buf[pos..], ","); }
+        if (!first) {
+            pos += copyTo(buf[pos..], ",");
+        }
         first = false;
         const rows = vterm_mod.getRowsIdx(idx);
         const cols = vterm_mod.getColsIdx(idx);
@@ -274,7 +280,9 @@ fn readTerminal(slot: u8, buf: []u8) []const u8 {
 
     var r: u16 = 0;
     while (r < rows) : (r += 1) {
-        if (r > 0) { pos += copyTo(buf[pos..], ","); }
+        if (r > 0) {
+            pos += copyTo(buf[pos..], ",");
+        }
         const text = vterm_mod.getRowTextIdx(slot, r);
         pos += copyTo(buf[pos..], "\"");
         pos += jsonEscape(buf[pos..], text);
@@ -329,12 +337,36 @@ fn jsonUnescape(dest: []u8, src: []const u8) []const u8 {
     while (i < src.len and pos < dest.len) {
         if (src[i] == '\\' and i + 1 < src.len) {
             switch (src[i + 1]) {
-                'n' => { dest[pos] = '\n'; pos += 1; i += 2; },
-                'r' => { dest[pos] = '\r'; pos += 1; i += 2; },
-                't' => { dest[pos] = '\t'; pos += 1; i += 2; },
-                '\\' => { dest[pos] = '\\'; pos += 1; i += 2; },
-                '"' => { dest[pos] = '"'; pos += 1; i += 2; },
-                else => { dest[pos] = src[i]; pos += 1; i += 1; },
+                'n' => {
+                    dest[pos] = '\n';
+                    pos += 1;
+                    i += 2;
+                },
+                'r' => {
+                    dest[pos] = '\r';
+                    pos += 1;
+                    i += 2;
+                },
+                't' => {
+                    dest[pos] = '\t';
+                    pos += 1;
+                    i += 2;
+                },
+                '\\' => {
+                    dest[pos] = '\\';
+                    pos += 1;
+                    i += 2;
+                },
+                '"' => {
+                    dest[pos] = '"';
+                    pos += 1;
+                    i += 2;
+                },
+                else => {
+                    dest[pos] = src[i];
+                    pos += 1;
+                    i += 1;
+                },
             }
         } else {
             dest[pos] = src[i];
@@ -350,11 +382,31 @@ fn jsonEscape(dest: []u8, src: []const u8) usize {
     for (src) |ch| {
         if (pos >= dest.len - 6) break;
         switch (ch) {
-            '"' => { dest[pos] = '\\'; dest[pos + 1] = '"'; pos += 2; },
-            '\\' => { dest[pos] = '\\'; dest[pos + 1] = '\\'; pos += 2; },
-            '\n' => { dest[pos] = '\\'; dest[pos + 1] = 'n'; pos += 2; },
-            '\r' => { dest[pos] = '\\'; dest[pos + 1] = 'r'; pos += 2; },
-            '\t' => { dest[pos] = '\\'; dest[pos + 1] = 't'; pos += 2; },
+            '"' => {
+                dest[pos] = '\\';
+                dest[pos + 1] = '"';
+                pos += 2;
+            },
+            '\\' => {
+                dest[pos] = '\\';
+                dest[pos + 1] = '\\';
+                pos += 2;
+            },
+            '\n' => {
+                dest[pos] = '\\';
+                dest[pos + 1] = 'n';
+                pos += 2;
+            },
+            '\r' => {
+                dest[pos] = '\\';
+                dest[pos + 1] = 'r';
+                pos += 2;
+            },
+            '\t' => {
+                dest[pos] = '\\';
+                dest[pos + 1] = 't';
+                pos += 2;
+            },
             else => |c| {
                 if (c < 0x20) {
                     // Skip control chars

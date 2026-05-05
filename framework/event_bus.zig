@@ -253,39 +253,23 @@ fn writeJsonString(writer: anytype, s: []const u8) !void {
     try writer.writeByte('"');
 }
 
-pub fn fromStdLog(
-    comptime level: std.log.Level,
-    comptime scope: @TypeOf(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    var msg_buf: [4096]u8 = undefined;
-    const msg_full: []const u8 = std.fmt.bufPrint(&msg_buf, format, args) catch blk: {
-        // Format too long — truncate. (Don't try to mark with an ellipsis;
-        // we'd need three bytes for U+2026 and the bounds tracking isn't
-        // worth it. Truncated logs are rare and obviously truncated.)
-        const n = msg_buf.len;
-        msg_buf[n - 3] = '.';
-        msg_buf[n - 2] = '.';
-        msg_buf[n - 1] = '.';
-        break :blk msg_buf[0..];
-    };
-
+/// Runtime-arg log emitter — used by both fromStdLog (the std.options
+/// override) and framework/log.zig's print/info/warn/err helpers. Keeps
+/// the formatting + escape + console-gate logic in one place.
+pub fn emitFromLog(level: std.log.Level, scope: []const u8, msg: []const u8) u64 {
     const lvl_str = @tagName(level);
-    const scope_str = @tagName(scope);
 
     // Console gate — errors and warns ALWAYS hit stderr regardless of bus
-    // state. This guarantees boot-time failures (before init() runs) are
-    // visible. Lower levels are bus-only; if the bus is dead they're lost,
-    // which is the documented best-effort contract.
+    // state, so pre-bus boot failures and post-deinit shutdown errors stay
+    // visible. Lower levels are bus-only.
     if (level == .err or level == .warn) {
         const stderr = std.fs.File.stderr();
         var line_buf: [4200]u8 = undefined;
-        const line = std.fmt.bufPrint(&line_buf, "[{s}/{s}] {s}\n", .{ lvl_str, scope_str, msg_full }) catch msg_full;
+        const line = std.fmt.bufPrint(&line_buf, "[{s}/{s}] {s}\n", .{ lvl_str, scope, msg }) catch msg;
         stderr.writeAll(line) catch {};
     }
 
-    if (!g_inited) return;
+    if (!g_inited) return 0;
 
     const importance: f32 = switch (level) {
         .err => 0.85,
@@ -297,16 +281,16 @@ pub fn fromStdLog(
     var pbuf: std.ArrayList(u8) = .{};
     defer pbuf.deinit(alloc);
     const w = pbuf.writer(alloc);
-    w.writeAll("{\"msg\":") catch return;
-    writeJsonString(w, msg_full) catch return;
-    w.writeAll(",\"scope\":") catch return;
-    writeJsonString(w, scope_str) catch return;
-    w.writeAll(",\"level\":") catch return;
-    writeJsonString(w, lvl_str) catch return;
-    w.writeAll("}") catch return;
+    w.writeAll("{\"msg\":") catch return 0;
+    writeJsonString(w, msg) catch return 0;
+    w.writeAll(",\"scope\":") catch return 0;
+    writeJsonString(w, scope) catch return 0;
+    w.writeAll(",\"level\":") catch return 0;
+    writeJsonString(w, lvl_str) catch return 0;
+    w.writeAll("}") catch return 0;
 
     var src_buf: [80]u8 = undefined;
-    const src = std.fmt.bufPrint(&src_buf, "log:{s}", .{scope_str}) catch "log:?";
+    const src = std.fmt.bufPrint(&src_buf, "log:{s}", .{scope}) catch "log:?";
 
     const event_type = switch (level) {
         .err => "log.err",
@@ -315,7 +299,24 @@ pub fn fromStdLog(
         .debug => "log.debug",
     };
 
-    _ = emitWithImportance(event_type, src, importance, null, pbuf.items);
+    return emitWithImportance(event_type, src, importance, null, pbuf.items);
+}
+
+pub fn fromStdLog(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    var msg_buf: [4096]u8 = undefined;
+    const msg_full: []const u8 = std.fmt.bufPrint(&msg_buf, format, args) catch blk: {
+        const n = msg_buf.len;
+        msg_buf[n - 3] = '.';
+        msg_buf[n - 2] = '.';
+        msg_buf[n - 1] = '.';
+        break :blk msg_buf[0..];
+    };
+    _ = emitFromLog(level, @tagName(scope), msg_full);
 }
 
 /// JS-side log adapter — paired with the __hostLog host fn. Severity:

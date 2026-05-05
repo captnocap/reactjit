@@ -9,6 +9,7 @@
 //!   // engine calls harness.tick() each frame — runs after frame 1
 
 const std = @import("std");
+const log = @import("log.zig");
 const layout = @import("layout.zig");
 const Node = layout.Node;
 const testassert = @import("testassert.zig");
@@ -61,7 +62,7 @@ pub fn tick() bool {
 
 /// Run all registered tests. Returns 0 if all pass, 1 if any fail.
 pub fn runAll(root: *Node) u8 {
-    std.debug.print("\n", .{});
+    log.print("\n", .{});
     var results: [MAX_TESTS]TestResult = undefined;
     var result_count: usize = 0;
 

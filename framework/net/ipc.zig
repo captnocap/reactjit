@@ -34,6 +34,7 @@
 //!   client.close();
 
 const std = @import("std");
+const log = @import("../log.zig");
 const event_bus = @import("../event_bus.zig");
 
 // ════════════════════════════════════════════════════════════════════════
@@ -97,7 +98,7 @@ const RecvBuffer = struct {
         const space = self.buf.len - self.len;
         if (data.len > space) {
             const dropped = data.len - space;
-            std.debug.print(
+            log.print(
                 "[ipc] RecvBuffer OVERFLOW — dropping {d} bytes; bump MAX_MSG_SIZE (cap={d}, len={d}, incoming={d})\n",
                 .{ dropped, self.buf.len, self.len, data.len },
             );

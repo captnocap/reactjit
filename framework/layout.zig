@@ -334,13 +334,19 @@ pub const Node = struct {
     /// off, no boot wait. Use for putting build/test sandbox VMs in the
     /// background.
     render_suspended: bool = false,
-    /// Latch binding for layout-affecting style props. When set, the
-    /// layout engine resolves the value from `framework/latches.zig` at
-    /// measure time instead of using `style.height`. Lets cart code
-    /// animate a height per-frame via `__latchSet(key, value)` without
-    /// going through React reconciliation. See latches.zig and the
+    /// Latch bindings for layout-affecting style props. When set, the
+    /// pre-frame syncLatchesToNodes pass resolves the value from
+    /// `framework/latches.zig` and writes it into the corresponding
+    /// `style.*` field before layout runs. Lets cart code animate any
+    /// of these per-frame via `__latchSet(key, value)` without going
+    /// through React reconciliation. See latches.zig and the
     /// `latch:KEY` style-prop token resolver in v8_app.zig:applyStyle.
     latch_height_key: ?[]const u8 = null,
+    latch_width_key: ?[]const u8 = null,
+    latch_left_key: ?[]const u8 = null,
+    latch_top_key: ?[]const u8 = null,
+    latch_right_key: ?[]const u8 = null,
+    latch_bottom_key: ?[]const u8 = null,
 
     static_surface: bool = false,
     static_surface_key: ?[]const u8 = null,
@@ -365,7 +371,6 @@ pub const Node = struct {
     // animate normally inside.
     filter_name: ?[]const u8 = null,
     filter_intensity: f32 = 1.0,
-    cartridge_src: ?[]const u8 = null,
     effect_type: ?[]const u8 = null,
     input_id: ?u8 = null,
     input_paint_text: bool = true,
@@ -423,6 +428,13 @@ pub const Node = struct {
     scene3d_size_z: f32 = 1, // Box depth
     scene3d_show_grid: bool = false, // Scene3D navigation grid overlay
     scene3d_show_axes: bool = false, // Scene3D origin axes overlay
+    // Per-mesh diffuse texture. When tex_w * tex_h > 0 and tex_rgba is set,
+    // gpu/3d.zig uploads it to a wgpu texture (cached by hash) and binds
+    // it as group(1) for that mesh's draw call. Otherwise the mesh samples
+    // the global default white texture.
+    scene3d_tex_w: u32 = 0,
+    scene3d_tex_h: u32 = 0,
+    scene3d_tex_rgba: ?[]const u8 = null, // raw RGBA bytes, length = w*h*4
     // Physics 2D — inline in the 2D tree, driven by framework/physics2d.zig
     physics_world_id: u8 = 0, // multi-physics-world instance index (0..MAX_PHYSICS_WORLDS-1)
     physics_world: bool = false, // true = Physics.World container
@@ -895,13 +907,28 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
         return s.height.?;
     }
     if (s.aspect_ratio != null and s.aspect_ratio.? > 0 and s.width != null) {
-        return s.width.? / s.aspect_ratio.?;
+        if (resolveMaybePct(s.width, availableWidth)) |rw| {
+            const ownW = clampVal(rw, resolveMaybePct(s.min_width, availableWidth), resolveMaybePct(s.max_width, availableWidth));
+            return ownW / s.aspect_ratio.?;
+        }
     }
     // Scroll containers isolate their content from intrinsic sizing.
-    // Summing children of an overflow:scroll|auto|hidden box makes the box
-    // appear as tall as its content, which pushes flex siblings (in a Row,
+    // Summing children of an overflow:scroll|auto box makes the box appear
+    // as tall as its content, which pushes flex siblings (in a Row,
     // cross-axis is height) to grow past the viewport. Real browsers don't
     // do this — scroll boxes use their own explicit/min height, not content.
+    //
+    // overflow:hidden is intentionally NOT in this short-circuit. CSS
+    // hidden does not establish a scrolling viewport; it just clips
+    // overflow that exceeds the box's natural size. A bare overflow:hidden
+    // box with no explicit height should still size to its children, then
+    // clip anything that overflows that natural size. Lumping it with
+    // scroll/auto produced the "card body collapses to ~padding" bug:
+    // every wrap-row card hit this branch, the row decided its height was
+    // ~24px (padding only), and overflow:hidden then clipped the actual
+    // children that the layout pass painted at correct y offsets. If you
+    // want the scroll-style isolation for a hidden box, give it an
+    // explicit height/min_height/max_height — those branches handle it.
     //
     // Exception: when the box has a max_height, we DO sum children (the
     // outer estimateIntrinsicHeight wrapper then clamps to max_height). A
@@ -911,8 +938,7 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     // the box is ~28px tall while the box paints at ~max_height. Result:
     // siblings overlap the box. With max_height in play, both passes
     // need to agree on min(content, max_height).
-    if ((s.overflow == .scroll or s.overflow == .auto or s.overflow == .hidden)
-        and s.max_height == null) {
+    if ((s.overflow == .scroll or s.overflow == .auto) and s.max_height == null) {
         const mh = s.min_height orelse 0;
         const mhResolved = if (mh >= 0) mh else 0;
         return mhResolved + padTop(s) + padBottom(s);
@@ -923,7 +949,12 @@ fn estimateIntrinsicHeightUncached(node: *Node, availableWidth: f32) f32 {
     const pr = padRight(s);
     const g = s.gap;
     const isRow = s.flex_direction == .row or s.flex_direction == .row_reverse;
-    const innerW = if (s.width != null) s.width.? - pl - pr else if (availableWidth > 0) availableWidth - pl - pr else 0;
+    const ownW = clampVal(
+        resolveMaybePct(s.width, availableWidth) orelse availableWidth,
+        resolveMaybePct(s.min_width, availableWidth),
+        resolveMaybePct(s.max_width, availableWidth),
+    );
+    const innerW = @max(0, ownW - pl - pr);
     if (node.text != null) {
         const m = measureNodeTextW(node, innerW);
         return m.height + pt + pb;
@@ -1539,22 +1570,28 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                 while (dbgi < ls + lc) : (dbgi += 1) {
                     const dchild = &node.children[visibleIndices[@intCast(dbgi)]];
                     if (dchild.text) |dt| {
-                        if (std.mem.eql(u8, dt, "Frames \xc2\xb7 italianMan")) { dbg_hit = true; break; }
+                        if (std.mem.eql(u8, dt, "Frames \xc2\xb7 italianMan")) {
+                            dbg_hit = true;
+                            break;
+                        }
                     }
                     for (dchild.children) |*gc| {
                         if (gc.text) |gt| {
-                            if (std.mem.eql(u8, gt, "Frames \xc2\xb7 italianMan")) { dbg_hit = true; break; }
+                            if (std.mem.eql(u8, gt, "Frames \xc2\xb7 italianMan")) {
+                                dbg_hit = true;
+                                break;
+                            }
                         }
                     }
                     if (dbg_hit) break;
                 }
                 if (dbg_hit) {
-                    std.debug.print("[layout-dbg] flex isRow={} mainSize={d:.1} innerW={d:.1} totalBasis={d:.1} freeSpace={d:.1} lc={d}\n", .{ isRow, mainSize, innerW, totalBasis, freeSpace, lc });
+                    log.print("[layout-dbg] flex isRow={} mainSize={d:.1} innerW={d:.1} totalBasis={d:.1} freeSpace={d:.1} lc={d}\n", .{ isRow, mainSize, innerW, totalBasis, freeSpace, lc });
                     var pi = ls;
                     while (pi < ls + lc) : (pi += 1) {
                         const cn = &node.children[visibleIndices[@intCast(pi)]];
                         const txt: []const u8 = cn.text orelse if (cn.children.len > 0 and cn.children[0].text != null) cn.children[0].text.? else "(no text)";
-                        std.debug.print("[layout-dbg]   child[{d}] basis={d:.1} grow={d:.2} shrink={d:.2} explicit_w={?d:.1} text=\"{s}\"\n", .{ pi, childBasis[@intCast(pi)], childGrow[@intCast(pi)], childShrink[@intCast(pi)], cn.style.width, txt });
+                        log.print("[layout-dbg]   child[{d}] basis={d:.1} grow={d:.2} shrink={d:.2} explicit_w={?d:.1} text=\"{s}\"\n", .{ pi, childBasis[@intCast(pi)], childGrow[@intCast(pi)], childShrink[@intCast(pi)], cn.style.width, txt });
                     }
                 }
             }
@@ -1675,7 +1712,7 @@ pub fn layoutNode(node: *Node, px: f32, py: f32, pw: f32, ph: f32) void {
                     const cn = &node.children[visibleIndices[@intCast(pj)]];
                     if (cn.text) |dt| {
                         if (std.mem.eql(u8, dt, "Frames \xc2\xb7 italianMan")) {
-                            std.debug.print("[layout-dbg]   POST-RESOLVE child[{d}] basis={d:.1} mainSize_used\n", .{ pj, childBasis[@intCast(pj)] });
+                            log.print("[layout-dbg]   POST-RESOLVE child[{d}] basis={d:.1} mainSize_used\n", .{ pj, childBasis[@intCast(pj)] });
                         }
                     }
                 }

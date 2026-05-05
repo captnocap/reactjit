@@ -20,6 +20,7 @@
 //!   pty.resize(30, 120);
 
 const std = @import("std");
+const log = @import("log.zig");
 
 // ════════════════════════════════════════════════════════════════════════
 // POSIX constants (Linux x86-64)
@@ -118,7 +119,10 @@ pub const Pty = struct {
             } else {
                 const e = getErrno();
                 if (e == EAGAIN or e == EINTR) break;
-                if (e == EIO) { self.child_exited = true; break; }
+                if (e == EIO) {
+                    self.child_exited = true;
+                    break;
+                }
                 break;
             }
         }
@@ -138,7 +142,10 @@ pub const Pty = struct {
             if (n < 0) {
                 const e = getErrno();
                 if (e == EAGAIN or e == EINTR) continue;
-                if (e == EIO) { self.child_exited = true; return false; }
+                if (e == EIO) {
+                    self.child_exited = true;
+                    return false;
+                }
                 return false;
             }
             written += @intCast(n);
@@ -223,19 +230,31 @@ pub fn openPty(opts: OpenOptions) !Pty {
     if (masterfd < 0) return error.PosixOpenPtFailed;
 
     // 2. Grant and unlock slave
-    if (grantpt(masterfd) != 0) { _ = close(masterfd); return error.GrantPtFailed; }
-    if (unlockpt(masterfd) != 0) { _ = close(masterfd); return error.UnlockPtFailed; }
+    if (grantpt(masterfd) != 0) {
+        _ = close(masterfd);
+        return error.GrantPtFailed;
+    }
+    if (unlockpt(masterfd) != 0) {
+        _ = close(masterfd);
+        return error.UnlockPtFailed;
+    }
 
     // 3. Get slave device name
     var namebuf: [64]u8 = undefined;
-    if (ptsname_r(masterfd, &namebuf, 64) != 0) { _ = close(masterfd); return error.PtsnameFailed; }
+    if (ptsname_r(masterfd, &namebuf, 64) != 0) {
+        _ = close(masterfd);
+        return error.PtsnameFailed;
+    }
     // Find null terminator for the name
     var name_len: usize = 0;
     while (name_len < 64 and namebuf[name_len] != 0) name_len += 1;
 
     // 4. Fork
     const pid = fork();
-    if (pid < 0) { _ = close(masterfd); return error.ForkFailed; }
+    if (pid < 0) {
+        _ = close(masterfd);
+        return error.ForkFailed;
+    }
 
     if (pid == 0) {
         // ── CHILD ──
@@ -270,7 +289,7 @@ pub fn openPty(opts: OpenOptions) !Pty {
     const flags = fcntl(masterfd, F_GETFL);
     if (flags >= 0) _ = fcntl(masterfd, F_SETFL, flags | O_NONBLOCK);
 
-    std.debug.print("[pty] PID={d} slave={s} shell={s}\n", .{ pid, namebuf[0..name_len], std.mem.span(opts.shell) });
+    log.print("[pty] PID={d} slave={s} shell={s}\n", .{ pid, namebuf[0..name_len], std.mem.span(opts.shell) });
 
     return Pty{ .pid = pid, .masterfd = masterfd };
 }

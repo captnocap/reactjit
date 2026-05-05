@@ -12,6 +12,7 @@
 //! ffi.callHost / ffi.callHostJson.
 
 const std = @import("std");
+const log = @import("log.zig");
 const qjs_c = @import("qjs_c.zig");
 const qjs = qjs_c.qjs;
 const HAS_QUICKJS = qjs_c.HAS_QUICKJS;
@@ -481,9 +482,18 @@ const SqlRequest = struct {
 fn parseSqlRequest(json_str: []const u8) ?SqlRequest {
     var parsed = std.json.parseFromSlice(std.json.Value, std.heap.page_allocator, json_str, .{}) catch return null;
     const root = parsed.value;
-    if (root != .object) { parsed.deinit(); return null; }
-    const sql_v = root.object.get("sql") orelse { parsed.deinit(); return null; };
-    if (sql_v != .string) { parsed.deinit(); return null; }
+    if (root != .object) {
+        parsed.deinit();
+        return null;
+    }
+    const sql_v = root.object.get("sql") orelse {
+        parsed.deinit();
+        return null;
+    };
+    if (sql_v != .string) {
+        parsed.deinit();
+        return null;
+    }
     const params_slice: []const std.json.Value = blk: {
         if (root.object.get("params")) |p| {
             if (p == .array) break :blk p.array.items;
@@ -823,11 +833,11 @@ fn parseHttpReqToOpts(req: HttpReq, headers_buf: *[HTTP_MAX_HEADERS][2][]const u
         .body = req.body,
     };
     opts.method = if (std.ascii.eqlIgnoreCase(req.method, "POST")) .POST //
-    else if (std.ascii.eqlIgnoreCase(req.method, "PUT")) .PUT //
-    else if (std.ascii.eqlIgnoreCase(req.method, "DELETE")) .DELETE //
-    else if (std.ascii.eqlIgnoreCase(req.method, "PATCH")) .PATCH //
-    else if (std.ascii.eqlIgnoreCase(req.method, "HEAD")) .HEAD //
-    else .GET;
+        else if (std.ascii.eqlIgnoreCase(req.method, "PUT")) .PUT //
+        else if (std.ascii.eqlIgnoreCase(req.method, "DELETE")) .DELETE //
+        else if (std.ascii.eqlIgnoreCase(req.method, "PATCH")) .PATCH //
+        else if (std.ascii.eqlIgnoreCase(req.method, "HEAD")) .HEAD //
+        else .GET;
 
     if (req.headers) |hdrs| {
         var it = hdrs.iterator();
@@ -1112,7 +1122,7 @@ fn hotGet(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSVal
     defer freeStr(c2, key_p);
     const key = std.mem.span(key_p);
     const val = hotstate.get(key);
-    std.debug.print("[hot_get] key='{s}' hit={} count={}\n", .{ key, val != null, hotstate.count() });
+    log.print("[hot_get] key='{s}' hit={} count={}\n", .{ key, val != null, hotstate.count() });
     if (val) |v| return jsNewStr(c2, v);
     return QJS_NULL;
 }
@@ -1125,7 +1135,7 @@ fn hotSet(ctx: ?*qjs.JSContext, _: qjs.JSValue, argc: c_int, argv: [*c]qjs.JSVal
     defer freeStr(c2, val_p);
     const key = std.mem.span(key_p);
     const val = std.mem.span(val_p);
-    std.debug.print("[hot_set] key='{s}' val='{s}'\n", .{ key, val });
+    log.print("[hot_set] key='{s}' val='{s}'\n", .{ key, val });
     hotstate.set(key, val);
     return QJS_UNDEFINED;
 }

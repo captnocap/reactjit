@@ -146,8 +146,12 @@ var xshm_available: bool = false;
 pub var xtest_available: bool = false;
 var x11_load_attempted: bool = false;
 
-pub fn getX11() X11Fns { return x11; }
-pub fn getXtst() XTestFns { return xtst; }
+pub fn getX11() X11Fns {
+    return x11;
+}
+pub fn getXtst() XTestFns {
+    return xtst;
+}
 
 // Shared X11 display connection (dedicated for capture)
 var x_display: ?*Display = null;
@@ -1254,15 +1258,15 @@ fn createFeed(src: []const u8, node_w: f32, node_h: f32) ?*Feed {
         .vm => {
             // QEMU + VNC capture
             const disk = parsed.path orelse {
-                std.debug.print("[render] VM: no disk path in source\n", .{});
+                log.print("[render] VM: no disk path in source\n", .{});
                 log.info(.render, "VM: no disk path in source", .{});
                 setError(feed);
                 return feed;
             };
-            std.debug.print("[render] VM: creating feed for disk={s}\n", .{disk});
+            log.print("[render] VM: creating feed for disk={s}\n", .{disk});
             log.info(.render, "VM: creating feed for disk={s}", .{disk});
             if (!vm.startVM(feed, disk, 2048, 2)) {
-                std.debug.print("[render] VM: startVM FAILED\n", .{});
+                log.print("[render] VM: startVM FAILED\n", .{});
                 log.info(.render, "VM: startVM FAILED", .{});
                 setError(feed);
             }
@@ -1381,12 +1385,12 @@ pub fn update() void {
 
                 if (feed.dirty) {
                     if (!feed.diag_first_upload_logged) {
-                        std.debug.print("[render] first GPU upload for backend={s} {d}x{d}\n", .{ @tagName(feed.backend), feed.width, feed.height });
+                        log.print("[render] first GPU upload for backend={s} {d}x{d}\n", .{ @tagName(feed.backend), feed.width, feed.height });
                         feed.diag_first_upload_logged = true;
                     }
                     if (_upd_dbg % 60 == 1) log.info(.render, "frame dirty, uploading {d}x{d}", .{ feed.width, feed.height });
                     if (!ensureTexture(feed)) {
-                        std.debug.print("[render] ensureTexture FAILED for {d}x{d}\n", .{ feed.width, feed.height });
+                        log.print("[render] ensureTexture FAILED for {d}x{d}\n", .{ feed.width, feed.height });
                         log.info(.render, "ensureTexture FAILED", .{});
                         continue;
                     }
@@ -1453,7 +1457,7 @@ pub fn paintSurface(src: []const u8, x: f32, y: f32, w: f32, h: f32, opacity: f3
         return false;
     }
     if (!f.diag_first_paint_logged) {
-        std.debug.print("[render] first paint queued for backend={s} fb={d}x{d} rect=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ @tagName(f.backend), f.width, f.height, x, y, w, h });
+        log.print("[render] first paint queued for backend={s} fb={d}x{d} rect=({d:.0},{d:.0},{d:.0},{d:.0})\n", .{ @tagName(f.backend), f.width, f.height, x, y, w, h });
         f.diag_first_paint_logged = true;
     }
 
@@ -1535,11 +1539,11 @@ pub fn setSuspended(src: []const u8, suspended: bool) void {
     for (pids) |maybe_child| {
         const child = maybe_child orelse continue;
         std.posix.kill(child.id, sig) catch |err| {
-            std.debug.print("[render] setSuspended kill pid={d} sig={d} failed: {s}\n", .{ child.id, sig, @errorName(err) });
+            log.print("[render] setSuspended kill pid={d} sig={d} failed: {s}\n", .{ child.id, sig, @errorName(err) });
         };
     }
     f.suspended = suspended;
-    std.debug.print("[render] feed src=\"{s}\" {s}\n", .{ src, if (suspended) "SUSPENDED" else "RESUMED" });
+    log.print("[render] feed src=\"{s}\" {s}\n", .{ src, if (suspended) "SUSPENDED" else "RESUMED" });
 }
 
 // ════════════════════════════════════════════════════════════════════════

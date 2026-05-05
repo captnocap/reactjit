@@ -8,6 +8,7 @@
 //! read dirty_rows/getCell/getRowText and render via Box+Text primitives.
 
 const std = @import("std");
+const log = @import("log.zig");
 const rec_mod = @import("recorder.zig");
 
 // ── Session recording — taps into pollPty data stream ──────────────
@@ -488,7 +489,7 @@ pub fn initVterm(rows: u16, cols: u16) void {
         g_vterm.?.deinitVterm();
     }
     g_vterm = VTerm.init(rows, cols) catch |err| {
-        std.debug.print("[vterm] init failed: {}\n", .{err});
+        log.print("[vterm] init failed: {}\n", .{err});
         return;
     };
 }
@@ -585,10 +586,10 @@ pub fn spawnShell(shell: [*:0]const u8, rows: u16, cols: u16) void {
 
     const cwd: ?[*:0]const u8 = if (g_spawn_cwd_len > 0) @ptrCast(&g_spawn_cwd_buf) else null;
     g_pty = pty_mod.openPty(.{ .shell = shell, .rows = rows, .cols = cols, .cwd = cwd }) catch |err| {
-        std.debug.print("[vterm] spawnShell failed: {}\n", .{err});
+        log.print("[vterm] spawnShell failed: {}\n", .{err});
         return;
     };
-    std.debug.print("[vterm] shell spawned: {s} ({d}x{d})\n", .{ std.mem.span(shell), cols, rows });
+    log.print("[vterm] shell spawned: {s} ({d}x{d})\n", .{ std.mem.span(shell), cols, rows });
 }
 
 /// Drain PTY output → feed to vterm → flush vterm responses back to PTY.
@@ -613,11 +614,11 @@ pub fn pollPty() bool {
 /// Send keystrokes to the PTY (keyboard input from the user).
 pub fn writePty(data: []const u8) void {
     var p = &(g_pty orelse {
-        std.debug.print("[vterm] writePty: no PTY open!\n", .{});
+        log.print("[vterm] writePty: no PTY open!\n", .{});
         return;
     });
     const ok = p.writeData(data);
-    std.debug.print("[vterm] writePty: {d} bytes, ok={}\n", .{ data.len, ok });
+    log.print("[vterm] writePty: {d} bytes, ok={}\n", .{ data.len, ok });
 }
 
 /// Check if the shell is still running.
@@ -694,16 +695,22 @@ pub fn scrollToBottom() void {
 /// Extract text from a rectangular selection region (viewport coordinates).
 /// Handles scrollback vs live rows automatically. Returns bytes written.
 pub fn copySelectedText(
-    start_row: u16, start_col: u16,
-    end_row: u16, end_col: u16,
+    start_row: u16,
+    start_col: u16,
+    end_row: u16,
+    end_col: u16,
     buf: []u8,
 ) usize {
     // Normalize: ensure start before end
-    var r0 = start_row; var c0 = start_col;
-    var r1 = end_row; var c1 = end_col;
+    var r0 = start_row;
+    var c0 = start_col;
+    var r1 = end_row;
+    var c1 = end_col;
     if (r0 > r1 or (r0 == r1 and c0 > c1)) {
-        r0 = end_row; c0 = end_col;
-        r1 = start_row; c1 = start_col;
+        r0 = end_row;
+        c0 = end_col;
+        r1 = start_row;
+        c1 = start_col;
     }
 
     const sb_vis = sb_scroll;
@@ -729,11 +736,17 @@ pub fn copySelectedText(
 
             if (cell.char_len > 0) {
                 for (0..cell.char_len) |j| {
-                    if (pos < buf.len) { buf[pos] = cell.char_buf[j]; pos += 1; }
+                    if (pos < buf.len) {
+                        buf[pos] = cell.char_buf[j];
+                        pos += 1;
+                    }
                 }
                 if (cell.char_buf[0] != ' ') last_nonspace = pos;
             } else {
-                if (pos < buf.len) { buf[pos] = ' '; pos += 1; }
+                if (pos < buf.len) {
+                    buf[pos] = ' ';
+                    pos += 1;
+                }
             }
         }
         pos = last_nonspace; // trim trailing spaces
@@ -811,8 +824,10 @@ pub fn scrollToBottomIdx(_: u8) void {
 
 pub fn copySelectedTextIdx(
     _: u8,
-    start_row: u16, start_col: u16,
-    end_row: u16, end_col: u16,
+    start_row: u16,
+    start_col: u16,
+    end_row: u16,
+    end_col: u16,
     buf: []u8,
 ) usize {
     return copySelectedText(start_row, start_col, end_row, end_col, buf);

@@ -22,6 +22,7 @@
 //!   4. zig-out/bin/rjit-llm-worker — repo dev fallback
 
 const std = @import("std");
+const log = @import("log.zig");
 const RingBuffer = @import("net/ring_buffer.zig").RingBuffer;
 
 pub const SessionOptions = struct {
@@ -113,8 +114,8 @@ pub const Session = struct {
     // Mutex-protected so set_tools from JS thread doesn't race the worker
     // thread reading + clearing it.
     tools_mutex: std.Thread.Mutex = .{},
-    tools_json: ?[]u8 = null,    // owned, freed when consumed or session destroyed
-    tools_dirty: bool = false,   // true after setTools, false after worker sends
+    tools_json: ?[]u8 = null, // owned, freed when consumed or session destroyed
+    tools_dirty: bool = false, // true after setTools, false after worker sends
 
     pub fn create(allocator: std.mem.Allocator, options: SessionOptions) !*Session {
         const session = try allocator.create(Session);
@@ -218,7 +219,7 @@ pub const Session = struct {
     fn pushToolCall(self: *Session, id: []const u8, name: []const u8, args: []const u8) !void {
         try self.pushEvent(.{
             .kind = .tool_call,
-            .tool_call_id   = try self.allocator.dupe(u8, id),
+            .tool_call_id = try self.allocator.dupe(u8, id),
             .tool_call_name = try self.allocator.dupe(u8, name),
             .tool_call_args = try self.allocator.dupe(u8, args),
         });
@@ -304,8 +305,8 @@ fn resolveWorkerPathAlloc(allocator: std.mem.Allocator) ![]u8 {
 const LineReader = struct {
     file: std.fs.File,
     buf: [16 * 1024]u8 = undefined,
-    head: usize = 0,   // start of next unread byte
-    tail: usize = 0,   // one past last buffered byte
+    head: usize = 0, // start of next unread byte
+    tail: usize = 0, // one past last buffered byte
     eof: bool = false,
 
     /// Read one line (without trailing \n). Returns null on EOF / error.
@@ -551,7 +552,7 @@ fn workerMainInner(session: *Session) !void {
                 // actually receives from the worker after generate ends.
                 if (!std.mem.startsWith(u8, line, "TOK ")) {
                     const preview_len = @min(line.len, 200);
-                    std.debug.print("[zig-session] CHAT line: '{s}' (len={d})\n", .{ line[0..preview_len], line.len });
+                    log.print("[zig-session] CHAT line: '{s}' (len={d})\n", .{ line[0..preview_len], line.len });
                 }
 
                 if (std.mem.eql(u8, line, "DONE")) {
@@ -573,7 +574,7 @@ fn workerMainInner(session: *Session) !void {
                     continue;
                 }
                 if (std.mem.startsWith(u8, line, "TOOL_CALL ")) {
-                    std.debug.print("[zig-session] TOOL_CALL line received: {s}\n", .{line});
+                    log.print("[zig-session] TOOL_CALL line received: {s}\n", .{line});
                     const id = try session.allocator.dupe(u8, line[10..]);
                     defer session.allocator.free(id);
 
@@ -598,17 +599,17 @@ fn workerMainInner(session: *Session) !void {
                         try args_buf.appendSlice(session.allocator, al);
                     }
 
-                    std.debug.print("[zig-session] pushing tool_call event id={s} name={s} args.len={d}\n", .{ id, name, args_buf.items.len });
+                    log.print("[zig-session] pushing tool_call event id={s} name={s} args.len={d}\n", .{ id, name, args_buf.items.len });
                     try session.pushToolCall(id, name, args_buf.items);
 
                     // Block-poll for matching TOOL_RESULT. The JS side
                     // dispatches the tool_call event, runs the handler,
                     // then calls submitToolReply.
-                    std.debug.print("[zig-session] awaiting TOOL_RESULT for id={s}\n", .{id});
+                    log.print("[zig-session] awaiting TOOL_RESULT for id={s}\n", .{id});
                     const reply = try awaitToolReply(session, id);
                     var owned_reply = reply;
                     defer owned_reply.deinit(session.allocator);
-                    std.debug.print("[zig-session] got TOOL_RESULT for id={s} body.len={d}\n", .{ owned_reply.id, owned_reply.body.len });
+                    log.print("[zig-session] got TOOL_RESULT for id={s} body.len={d}\n", .{ owned_reply.id, owned_reply.body.len });
 
                     const tr_cmd = try std.fmt.allocPrint(
                         session.allocator,
@@ -649,7 +650,7 @@ fn flushPendingTools(session: *Session, stdin_file: std.fs.File, reader: *LineRe
     const json_body = pending orelse "[]";
     defer if (pending) |p| session.allocator.free(p);
 
-    std.debug.print("[zig-session] flushing TOOLS to subprocess ({d} bytes)\n", .{json_body.len});
+    log.print("[zig-session] flushing TOOLS to subprocess ({d} bytes)\n", .{json_body.len});
     const cmd = try std.fmt.allocPrint(session.allocator, "TOOLS\n{s}\n.\n", .{json_body});
     defer session.allocator.free(cmd);
     try stdin_file.writeAll(cmd);
@@ -658,11 +659,11 @@ fn flushPendingTools(session: *Session, stdin_file: std.fs.File, reader: *LineRe
     while (true) {
         const line = reader.next() orelse return error.WorkerEofDuringTools;
         if (std.mem.eql(u8, line, "READY")) {
-            std.debug.print("[zig-session] TOOLS ack: READY\n", .{});
+            log.print("[zig-session] TOOLS ack: READY\n", .{});
             return;
         }
         if (std.mem.startsWith(u8, line, "ERR ")) {
-            std.debug.print("[zig-session] TOOLS ack: ERR {s}\n", .{line[4..]});
+            log.print("[zig-session] TOOLS ack: ERR {s}\n", .{line[4..]});
             try session.pushStatus(line[4..], true);
             return;
         }

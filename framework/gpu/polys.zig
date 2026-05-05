@@ -6,6 +6,7 @@
 //! Canvas transform is applied on the CPU side (same as rects/curves).
 
 const std = @import("std");
+const log = @import("../log.zig");
 const wgpu = @import("wgpu");
 const shaders = @import("shaders.zig");
 const core = @import("gpu.zig");
@@ -72,19 +73,40 @@ fn applyTransform(px: f32, py: f32) [2]f32 {
 
 /// Queue a flat-colored triangle for drawing this frame.
 pub fn drawTri(
-    ax: f32, ay: f32,
-    bx: f32, by: f32,
-    cx: f32, cy: f32,
-    r: f32, g: f32, b: f32, a: f32,
+    ax: f32,
+    ay: f32,
+    bx: f32,
+    by: f32,
+    cx: f32,
+    cy: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32,
 ) void {
     drawTriColored(ax, ay, r, g, b, a, bx, by, r, g, b, a, cx, cy, r, g, b, a);
 }
 
 /// Queue a triangle with per-vertex colors (for effect texture sampling).
 pub fn drawTriColored(
-    ax: f32, ay: f32, r0: f32, g0: f32, b0: f32, a0: f32,
-    bx: f32, by: f32, r1: f32, g1: f32, b1: f32, a1: f32,
-    cx: f32, cy: f32, r2: f32, g2: f32, b2: f32, a2: f32,
+    ax: f32,
+    ay: f32,
+    r0: f32,
+    g0: f32,
+    b0: f32,
+    a0: f32,
+    bx: f32,
+    by: f32,
+    r1: f32,
+    g1: f32,
+    b1: f32,
+    a1: f32,
+    cx: f32,
+    cy: f32,
+    r2: f32,
+    g2: f32,
+    b2: f32,
+    a2: f32,
 ) void {
     if (g_tri_count >= MAX_TRIS or core.g_gpu_ops >= core.GPU_OPS_BUDGET) return;
     core.g_gpu_ops += 1;
@@ -93,9 +115,24 @@ pub fn drawTriColored(
     const tc = applyTransform(cx, cy);
 
     g_tris[g_tri_count] = .{
-        .x0 = ta[0], .y0 = ta[1], .r0 = r0, .g0 = g0, .b0 = b0, .a0 = a0,
-        .x1 = tb[0], .y1 = tb[1], .r1 = r1, .g1 = g1, .b1 = b1, .a1 = a1,
-        .x2 = tc[0], .y2 = tc[1], .r2 = r2, .g2 = g2, .b2 = b2, .a2 = a2,
+        .x0 = ta[0],
+        .y0 = ta[1],
+        .r0 = r0,
+        .g0 = g0,
+        .b0 = b0,
+        .a0 = a0,
+        .x1 = tb[0],
+        .y1 = tb[1],
+        .r1 = r1,
+        .g1 = g1,
+        .b1 = b1,
+        .a1 = a1,
+        .x2 = tc[0],
+        .y2 = tc[1],
+        .r2 = r2,
+        .g2 = g2,
+        .b2 = b2,
+        .a2 = a2,
     };
     g_tri_count += 1;
 }
@@ -107,7 +144,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
         .code = shaders.poly_wgsl,
     });
     const shader_module = device.createShaderModule(&shader_desc) orelse {
-        std.debug.print("Failed to create poly shader module\n", .{});
+        log.print("Failed to create poly shader module\n", .{});
         return;
     };
     defer shader_module.release();
@@ -127,7 +164,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
             .binding = 0,
             .visibility = wgpu.ShaderStages.vertex | wgpu.ShaderStages.fragment,
             .buffer = .{
-                .@"type" = .uniform,
+                .type = .uniform,
                 .has_dynamic_offset = 0,
                 .min_binding_size = 8,
             },
@@ -156,12 +193,12 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
 
     // Instance vertex attributes: 3 vertices × (pos2 + color4) = 6 locations, 18 floats
     const instance_attrs = [_]wgpu.VertexAttribute{
-        .{ .format = .float32x2, .offset = 0, .shader_location = 0 },   // v0 pos
-        .{ .format = .float32x4, .offset = 8, .shader_location = 1 },   // v0 color
-        .{ .format = .float32x2, .offset = 24, .shader_location = 2 },  // v1 pos
-        .{ .format = .float32x4, .offset = 32, .shader_location = 3 },  // v1 color
-        .{ .format = .float32x2, .offset = 48, .shader_location = 4 },  // v2 pos
-        .{ .format = .float32x4, .offset = 56, .shader_location = 5 },  // v2 color
+        .{ .format = .float32x2, .offset = 0, .shader_location = 0 }, // v0 pos
+        .{ .format = .float32x4, .offset = 8, .shader_location = 1 }, // v0 color
+        .{ .format = .float32x2, .offset = 24, .shader_location = 2 }, // v1 pos
+        .{ .format = .float32x4, .offset = 32, .shader_location = 3 }, // v1 color
+        .{ .format = .float32x2, .offset = 48, .shader_location = 4 }, // v2 pos
+        .{ .format = .float32x4, .offset = 56, .shader_location = 5 }, // v2 color
     };
 
     const instance_buffer_layout = wgpu.VertexBufferLayout{
@@ -203,7 +240,7 @@ pub fn initPipeline(device: *wgpu.Device, globals_buffer: *wgpu.Buffer) void {
     });
 
     if (g_pipeline == null) {
-        std.debug.print("Failed to create poly render pipeline\n", .{});
+        log.print("Failed to create poly render pipeline\n", .{});
     }
 }
 

@@ -5,6 +5,7 @@
 //! violations: child overflow, sibling overlap, off-viewport nodes.
 
 const std = @import("std");
+const log = @import("log.zig");
 const layout = @import("layout.zig");
 const Node = layout.Node;
 const query = @import("query.zig");
@@ -106,8 +107,7 @@ fn auditRecurse(node: *Node, viewport_w: f32, viewport_h: f32, out: []Violation,
     // Off-viewport check
     if (r.w > 0 and r.h > 0) {
         if (r.x + r.w < 0 or r.y + r.h < 0 or r.x > viewport_w or r.y > viewport_h) {
-            writeViolation(out, count, .off_viewport, node,
-                "off-viewport: at ({d:.0},{d:.0} {d:.0}x{d:.0})", .{ r.x, r.y, r.w, r.h });
+            writeViolation(out, count, .off_viewport, node, "off-viewport: at ({d:.0},{d:.0} {d:.0}x{d:.0})", .{ r.x, r.y, r.w, r.h });
         }
     }
 
@@ -122,8 +122,7 @@ fn auditRecurse(node: *Node, viewport_w: f32, viewport_h: f32, out: []Violation,
             if (cr.x + cr.w > r.x + r.w + 2 or cr.y + cr.h > r.y + r.h + 2 or
                 cr.x < r.x - 2 or cr.y < r.y - 2)
             {
-                writeViolation(out, count, .child_overflow, child,
-                    "child overflow: ({d:.0}x{d:.0}) in ({d:.0}x{d:.0})", .{ cr.w, cr.h, r.w, r.h });
+                writeViolation(out, count, .child_overflow, child, "child overflow: ({d:.0}x{d:.0}) in ({d:.0}x{d:.0})", .{ cr.w, cr.h, r.w, r.h });
             }
         }
 
@@ -138,8 +137,7 @@ fn auditRecurse(node: *Node, viewport_w: f32, viewport_h: f32, out: []Violation,
             const overlap_x = @min(cr.x + cr.w, sr.x + sr.w) - @max(cr.x, sr.x);
             const overlap_y = @min(cr.y + cr.h, sr.y + sr.h) - @max(cr.y, sr.y);
             if (overlap_x > 2 and overlap_y > 2) {
-                writeViolation(out, count, .sibling_overlap, child,
-                    "sibling overlap: {d:.0}x{d:.0}px", .{ overlap_x, overlap_y });
+                writeViolation(out, count, .sibling_overlap, child, "sibling overlap: {d:.0}x{d:.0}px", .{ overlap_x, overlap_y });
             }
         }
     }
@@ -171,11 +169,11 @@ pub fn printResult(result: TestResult) void {
         .fail => "FAIL",
         .skip => "SKIP",
     };
-    std.debug.print("TEST {s} ... {s}", .{ result.name, status_str });
+    log.print("TEST {s} ... {s}", .{ result.name, status_str });
     if (result.error_msg) |msg| {
-        std.debug.print(" ({s})", .{msg});
+        log.print(" ({s})", .{msg});
     }
-    std.debug.print("\n", .{});
+    log.print("\n", .{});
 }
 
 pub fn printSummary(results: []const TestResult) void {
@@ -189,7 +187,7 @@ pub fn printSummary(results: []const TestResult) void {
             .skip => skipped += 1,
         }
     }
-    std.debug.print("\n{d}/{d} tests passed", .{ passed, passed + failed });
-    if (skipped > 0) std.debug.print(" ({d} skipped)", .{skipped});
-    std.debug.print("\n", .{});
+    log.print("\n{d}/{d} tests passed", .{ passed, passed + failed });
+    if (skipped > 0) log.print(" ({d} skipped)", .{skipped});
+    log.print("\n", .{});
 }

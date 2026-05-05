@@ -87,9 +87,17 @@ pub fn isEffect(name: []const u8) bool {
 // Safety budgets — prevent runaway effects from crashing the GPU
 // ════════════════════════════════════════════════════════════════════════
 
-const MAX_EFFECT_PIXELS: u32 = 2_000_000; // ~1920x1040 total per frame
-const MAX_EFFECT_DIM: u32 = 2048; // no single dimension > 2048
-const MAX_UPLOAD_BYTES: u32 = 8 * 1024 * 1024; // 8MB texture uploads per frame
+// Per-frame safety budgets — prevent runaway effects from saturating
+// the GPU. Sized for "many small Effect instances" patterns like
+// per-card animated visuals (card_stress at 2000 × 64×64 = ~8.2M
+// pixels) and "single big shader rendering many cards in a tall
+// grid" patterns (card_stress ONE-FX at 2000 cards × 18 cols = 112
+// rows ≈ 1232×7624). Modern desktop GPUs support 8192–16384 max
+// texture dim trivially; bumping past 2048 unblocks tall grids
+// without per-frame downscale-and-stretch artifacts.
+const MAX_EFFECT_PIXELS: u32 = 64_000_000; // ~8192×7812 total per frame
+const MAX_EFFECT_DIM: u32 = 8192; // no single dimension > 8192
+const MAX_UPLOAD_BYTES: u32 = 32 * 1024 * 1024; // 32MB texture uploads per frame
 var g_frame_effect_pixels: u32 = 0;
 var g_frame_upload_bytes: u32 = 0;
 var g_effect_budget_logged: bool = false;
@@ -102,7 +110,14 @@ var g_effect_queue_logged: bool = false;
 // Instances — shared between registry and custom render paths
 // ════════════════════════════════════════════════════════════════════════
 
-const MAX_INSTANCES = 32;
+// Bumped from 32 → 4096 to support per-card / per-tile Effect usage
+// at scale (e.g. card_stress at 2000 cards). Each Instance holds an
+// Instance struct (~couple hundred bytes incl. GPU pipeline pointers
+// and uniform buffer handles) — 4096 × ~256 bytes ≈ 1MB, fine.
+// GPU pipelines themselves are shared across instances with the same
+// shader source via `gpu_shader_hash`, so increasing the instance
+// count doesn't multiply pipeline objects.
+const MAX_INSTANCES = 4096;
 
 const BackendPref = enum { auto, cpu, gpu };
 const InstanceBackend = enum { cpu, gpu };
@@ -186,6 +201,10 @@ const Instance = struct {
     gpu_pipeline: ?*wgpu.RenderPipeline = null,
     gpu_uniform_buffer: ?*wgpu.Buffer = null,
     gpu_bind_group: ?*wgpu.BindGroup = null,
+    // Hash of the WGSL source that produced the cached pipeline, so a prop
+    // change to the shader string forces a recompile instead of silently
+    // running the old pipeline. 0 = no pipeline yet.
+    gpu_shader_hash: u64 = 0,
 
     // Timing (for custom render path)
     time: f32 = 0,
@@ -332,7 +351,7 @@ const Instance = struct {
         if (g_frame_upload_bytes + upload_size > MAX_UPLOAD_BYTES) {
             if (!g_effect_budget_logged) {
                 g_effect_budget_logged = true;
-                std.debug.print("[BUDGET] Texture upload budget exceeded {d} bytes/frame — skipping upload\n", .{MAX_UPLOAD_BYTES});
+                log.print("[BUDGET] Texture upload budget exceeded {d} bytes/frame — skipping upload\n", .{MAX_UPLOAD_BYTES});
             }
             return;
         }
@@ -508,7 +527,7 @@ fn ensureGpuBindGroupLayout(device: *wgpu.Device) ?*wgpu.BindGroupLayout {
             .binding = 0,
             .visibility = wgpu.ShaderStages.fragment,
             .buffer = .{
-                .@"type" = .uniform,
+                .type = .uniform,
                 .has_dynamic_offset = 0,
                 .min_binding_size = @sizeOf(GpuUniforms),
             },
@@ -519,8 +538,23 @@ fn ensureGpuBindGroupLayout(device: *wgpu.Device) ?*wgpu.BindGroupLayout {
 }
 
 fn ensureGpuPipeline(self: *Instance) bool {
-    if (self.gpu_pipeline != null and self.gpu_bind_group != null and self.gpu_uniform_buffer != null) return true;
     const shader_desc = self.shader_desc orelse return false;
+
+    // If the WGSL source has changed since the cached pipeline was built,
+    // tear down the GPU resources so the build path below recreates them
+    // against the new shader. Without this, prop swaps to a node's shader
+    // string silently keep the original pipeline running.
+    const new_hash = std.hash.Wyhash.hash(0, shader_desc.wgsl);
+    if (self.gpu_pipeline != null and new_hash != self.gpu_shader_hash) {
+        if (self.gpu_pipeline) |p| p.release();
+        if (self.gpu_bind_group) |b| b.release();
+        if (self.gpu_uniform_buffer) |u| u.release();
+        self.gpu_pipeline = null;
+        self.gpu_bind_group = null;
+        self.gpu_uniform_buffer = null;
+    }
+
+    if (self.gpu_pipeline != null and self.gpu_bind_group != null and self.gpu_uniform_buffer != null) return true;
     const device = gpu_core.getDevice() orelse return false;
     const bgl = ensureGpuBindGroupLayout(device) orelse return false;
 
@@ -599,6 +633,7 @@ fn ensureGpuPipeline(self: *Instance) bool {
     self.gpu_uniform_buffer = uniform_buf;
     self.gpu_bind_group = effect_bg;
     self.gpu_pipeline = pipeline;
+    self.gpu_shader_hash = new_hash;
     return true;
 }
 
@@ -730,7 +765,13 @@ pub fn update(dt: f32) void {
     g_dt = dt;
     g_frame_effect_pixels = 0;
     g_frame_upload_bytes = 0;
-    g_effect_budget_logged = false;
+    // NOTE: g_effect_budget_logged is intentionally NOT reset here.
+    // The "log once" guards across this file all check this flag, so
+    // resetting it per frame meant the budget warnings spammed the
+    // terminal once per frame whenever the pixel cap was approached.
+    // Letting it stay true means we log only ONCE per session when a
+    // budget is first exhausted — the user only needs to see it once
+    // to know they need to bump MAX_EFFECT_PIXELS.
 
     // Reclaim slots for effects whose host nodes have unmounted. An instance
     // that was painted as recently as last frame still has
@@ -803,7 +844,7 @@ pub fn paintEffect(effect_type: []const u8, x: f32, y: f32, w: f32, h: f32, opac
     const resolved = resolveEffectSize(w, h, remainingCpuEffectPixels()) orelse {
         if (!g_effect_budget_logged) {
             g_effect_budget_logged = true;
-            std.debug.print("[BUDGET] Effect budget exhausted — skipping effect\n", .{});
+            log.print("[BUDGET] Effect budget exhausted — skipping effect\n", .{});
         }
         return false;
     };
@@ -833,6 +874,9 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
     i.screen_x = x;
     i.screen_y = y;
     i.setDisplaySize(w, h);
+    // React may swap the node's shader prop; refresh so ensureGpuPipeline
+    // sees the live WGSL and rebuilds when the source hash changes.
+    i.shader_desc = node.effect_shader;
     const node_name = node.debug_name orelse "?";
     log.info(.render, "custom effect node={s} ptr=0x{x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) gpu_try={} gpu_failed={} shader={} background={}", .{
         node_name, @intFromPtr(node), x, y, w, h, shouldTryGpu(node), i.gpu_failed, node.effect_shader != null, node.effect_background,
@@ -840,13 +884,13 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
 
     if (!g_effect_debug_logged) {
         g_effect_debug_logged = true;
-        std.debug.print("[effect-paint] node={x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) shouldTryGpu={} shader_set={}\n", .{ @intFromPtr(node), x, y, w, h, shouldTryGpu(node), node.effect_shader != null });
+        log.print("[effect-paint] node={x} rect=({d:.0},{d:.0},{d:.0},{d:.0}) shouldTryGpu={} shader_set={}\n", .{ @intFromPtr(node), x, y, w, h, shouldTryGpu(node), node.effect_shader != null });
     }
     if (shouldTryGpu(node) and !i.gpu_failed) {
         const resolved = resolveEffectSize(w, h, remainingEffectPixels()) orelse {
             if (!g_effect_budget_logged) {
                 g_effect_budget_logged = true;
-                std.debug.print("[BUDGET] Effect pixel budget exhausted — skipping effect\n", .{});
+                log.print("[BUDGET] Effect pixel budget exhausted — skipping effect\n", .{});
             }
             return false;
         };
@@ -857,7 +901,7 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
         const render_ok = pipe_ok and renderGpu(i);
         if (!g_effect_gpu_result_logged) {
             g_effect_gpu_result_logged = true;
-            std.debug.print("[effect-gpu] size_ok={} pipe_ok={} render_ok={}\n", .{ size_ok, pipe_ok, render_ok });
+            log.print("[effect-gpu] size_ok={} pipe_ok={} render_ok={}\n", .{ size_ok, pipe_ok, render_ok });
         }
         log.info(.render, "custom effect gpu node={s} size_ok={} pipe_ok={} render_ok={} tex={d}x{d} bind_group={} target={} pipeline={}", .{
             node_name,
@@ -884,7 +928,7 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
     const resolved = resolveEffectSize(w, h, remainingCpuEffectPixels()) orelse {
         if (!g_effect_budget_logged) {
             g_effect_budget_logged = true;
-            std.debug.print("[BUDGET] Effect budget exhausted — skipping effect\n", .{});
+            log.print("[BUDGET] Effect budget exhausted — skipping effect\n", .{});
         }
         return false;
     };
@@ -898,7 +942,7 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
     const cpu_ok = renderCpuNow(i);
     if (!g_effect_cpu_result_logged) {
         g_effect_cpu_result_logged = true;
-        std.debug.print("[effect-cpu] render_ok={} tex={d}x{d} bind_group={} pixel_buf={}\n", .{ cpu_ok, i.width, i.height, i.bind_group != null, i.pixel_buf != null });
+        log.print("[effect-cpu] render_ok={} tex={d}x{d} bind_group={} pixel_buf={}\n", .{ cpu_ok, i.width, i.height, i.bind_group != null, i.pixel_buf != null });
     }
     if (!cpu_ok) {
         return false;
@@ -908,7 +952,7 @@ pub fn paintCustomEffect(node: *const Node, x: f32, y: f32, w: f32, h: f32, opac
     images.queueQuad(x, y, w, h, opacity, bg);
     if (!g_effect_queue_logged) {
         g_effect_queue_logged = true;
-        std.debug.print("[effect-queued] backend={s} tex={d}x{d}\n", .{ @tagName(i.backend), i.width, i.height });
+        log.print("[effect-queued] backend={s} tex={d}x{d}\n", .{ @tagName(i.backend), i.width, i.height });
     }
     return true;
 }
@@ -930,7 +974,7 @@ pub fn paintBackground(effect_type: []const u8, px: f32, py: f32, pw: f32, ph: f
     const resolved = resolveEffectSize(pw, ph, remainingCpuEffectPixels()) orelse {
         if (!g_effect_budget_logged) {
             g_effect_budget_logged = true;
-            std.debug.print("[BUDGET] Effect budget exhausted — skipping background effect\n", .{});
+            log.print("[BUDGET] Effect budget exhausted — skipping background effect\n", .{});
         }
         return false;
     };
@@ -1034,7 +1078,7 @@ pub fn getEffectFill(effect_name: []const u8) ?EffectFillInfo {
         const cx = if (inst.width > 0) inst.width / 2 else 0;
         const cy = if (inst.height > 0) inst.height / 2 else 0;
         const center_a = samplePixelAlpha(buf, inst.width, inst.height, cx, cy);
-        std.debug.print(
+        log.print(
             "[paisley] getEffectFill name={s} size={d}x{d} center_a={d} screen=({d:.1},{d:.1})\n",
             .{ effect_name, inst.width, inst.height, center_a, inst.screen_x, inst.screen_y },
         );
@@ -1069,7 +1113,7 @@ pub fn paintNamedEffect(node: *const Node, effect_name: []const u8, x: f32, y: f
     const resolved = resolveEffectSize(w, h, remainingCpuEffectPixels()) orelse {
         if (!g_effect_budget_logged) {
             g_effect_budget_logged = true;
-            std.debug.print("[BUDGET] Effect budget exhausted — skipping named effect\n", .{});
+            log.print("[BUDGET] Effect budget exhausted — skipping named effect\n", .{});
         }
         return false;
     };
@@ -1085,7 +1129,7 @@ pub fn paintNamedEffect(node: *const Node, effect_name: []const u8, x: f32, y: f
             center_a = samplePixelAlpha(buf, i.width, i.height, i.width / 2, i.height / 2);
             quarter_a = samplePixelAlpha(buf, i.width, i.height, i.width / 4, i.height / 4);
         }
-        std.debug.print(
+        log.print(
             "[paisley] paintNamedEffect name={s} node={x} box=({d:.1},{d:.1},{d:.1},{d:.1}) tex={d}x{d} ok={} center_a={d} quarter_a={d}\n",
             .{ effect_name, @intFromPtr(node), x, y, w, h, i.width, i.height, ok, center_a, quarter_a },
         );

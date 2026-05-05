@@ -8,6 +8,7 @@
 //!   cubicBezier (CSS cubic-bezier with Newton-Raphson solver)
 
 const std = @import("std");
+const log = @import("log.zig");
 const m = @import("math.zig");
 
 /// Easing function signature: normalized time (0–1) → eased value.
@@ -70,6 +71,14 @@ pub fn spring(t: f32) f32 {
     const p: f32 = 0.3;
     const pi2 = std.math.pi * 2.0;
     return std.math.pow(f32, 2.0, -10.0 * t) * @sin((t - p / 4.0) * pi2 / p) + 1.0;
+}
+
+/// Sine wave: full oscillation 0→1→0 over t=[0,1].
+/// Use with loop=cycle for an oscillating animation that traces a
+/// sine wave (height = lerp(from, to, sine(t))). Output range [0, 1].
+/// Math goes through framework/math.zig — single home for primitives.
+pub fn sine(t: f32) f32 {
+    return 0.5 + 0.5 * m.sin(t * m.tauValue() - m.piValue() * 0.5);
 }
 
 /// Bounce: simulates a bouncing ball.
@@ -162,7 +171,7 @@ pub const css_ease_in_out = CubicBezierEasing{ .x1 = 0.42, .y1 = 0.0, .x2 = 0.58
 
 fn expectApprox(expected: f32, actual: f32) !void {
     if (@abs(expected - actual) > 0.01) {
-        std.debug.print("expected {d:.4}, got {d:.4}\n", .{ expected, actual });
+        log.print("expected {d:.4}, got {d:.4}\n", .{ expected, actual });
         return error.TestUnexpectedResult;
     }
 }
