@@ -29,8 +29,106 @@ const worker_contract = @import("worker_contract.zig");
 const claude_sdk = @import("claude_sdk/mod.zig");
 const kimi_wire_sdk = @import("kimi_wire_sdk.zig");
 const local_ai_runtime = @import("local_ai_runtime.zig");
+const codex_sdk = @import("codex_sdk.zig");
 
 const Backend = worker_contract.Backend;
+
+// ── Codex session (threaded) ────────────────────────────────────────────
+//
+// Codex's app-server speaks JSON-RPC over stdio with no non-blocking
+// poll path. To stay friendly to the JS event loop, each CodexSession
+// owns a background thread that runs turn.next() while `__worker_poll`
+// non-blocking-drains the resulting Notifications.
+
+const CodexSession = struct {
+    allocator: std.mem.Allocator,
+    codex: codex_sdk.Codex,
+    thread: codex_sdk.Thread,
+
+    pending: std.ArrayList([]u8) = .{},
+    pending_mutex: std.Thread.Mutex = .{},
+    pending_signal: std.Thread.ResetEvent = .{},
+
+    inbox: std.ArrayList(codex_sdk.Notification) = .{},
+    inbox_mutex: std.Thread.Mutex = .{},
+
+    worker: ?std.Thread = null,
+    stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+
+    pub fn destroy(self: *CodexSession) void {
+        self.stop.store(true, .seq_cst);
+        self.pending_signal.set();
+        if (self.worker) |t| {
+            t.join();
+            self.worker = null;
+        }
+
+        self.pending_mutex.lock();
+        for (self.pending.items) |item| self.allocator.free(item);
+        self.pending.deinit(self.allocator);
+        self.pending_mutex.unlock();
+
+        self.inbox_mutex.lock();
+        for (self.inbox.items) |*notification| notification.deinit();
+        self.inbox.deinit(self.allocator);
+        self.inbox_mutex.unlock();
+
+        self.thread.deinit();
+        self.codex.deinit();
+        const allocator = self.allocator;
+        allocator.destroy(self);
+    }
+
+    pub fn enqueue(self: *CodexSession, text: []const u8) !void {
+        const dup = try self.allocator.dupe(u8, text);
+        errdefer self.allocator.free(dup);
+        self.pending_mutex.lock();
+        defer self.pending_mutex.unlock();
+        try self.pending.append(self.allocator, dup);
+        self.pending_signal.set();
+    }
+
+    pub fn drainInbox(self: *CodexSession) ![]codex_sdk.Notification {
+        self.inbox_mutex.lock();
+        defer self.inbox_mutex.unlock();
+        return self.inbox.toOwnedSlice(self.allocator);
+    }
+
+    fn workerEntry(self: *CodexSession) void {
+        while (!self.stop.load(.seq_cst)) {
+            self.pending_signal.wait();
+            self.pending_signal.reset();
+
+            while (!self.stop.load(.seq_cst)) {
+                self.pending_mutex.lock();
+                const text_opt: ?[]u8 = if (self.pending.items.len > 0)
+                    self.pending.orderedRemove(0)
+                else
+                    null;
+                self.pending_mutex.unlock();
+
+                const text = text_opt orelse break;
+                defer self.allocator.free(text);
+
+                var handle = self.thread.turn(.{ .text = text }, .{}) catch continue;
+                defer handle.deinit();
+
+                while (true) {
+                    const maybe = handle.next() catch break;
+                    var notif = maybe orelse break;
+                    self.inbox_mutex.lock();
+                    self.inbox.append(self.allocator, notif) catch {
+                        notif.deinit();
+                        self.inbox_mutex.unlock();
+                        continue;
+                    };
+                    self.inbox_mutex.unlock();
+                    if (handle.completed) break;
+                }
+            }
+        }
+    }
+};
 
 // ── Per-backend session container ───────────────────────────────────────
 
@@ -45,7 +143,7 @@ const KimiSession = struct {
 
 const BackendSession = union(Backend) {
     claude_code: claude_sdk.Session,
-    codex_app_server: void,
+    codex_app_server: *CodexSession,
     kimi_cli_wire: KimiSession,
     local_ai: *local_ai_runtime.Session,
 
@@ -55,7 +153,7 @@ const BackendSession = union(Backend) {
                 self.claude_code.close() catch {};
                 self.claude_code.deinit();
             },
-            .codex_app_server => {},
+            .codex_app_server => self.codex_app_server.destroy(),
             .kimi_cli_wire => self.kimi_cli_wire.deinit(),
             .local_ai => {
                 self.local_ai.close();
@@ -284,7 +382,33 @@ fn hostWorkerStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
             init_result.deinit();
             break :blk .{ .kimi_cli_wire = .{ .inner = sess } };
         },
-        .codex_app_server => return setReturnString(info, cx.iso, ""),
+        .codex_app_server => blk: {
+            const cs = std.heap.c_allocator.create(CodexSession) catch
+                return setReturnString(info, cx.iso, "");
+            cs.* = .{
+                .allocator = std.heap.c_allocator,
+                .codex = codex_sdk.Codex.init(std.heap.c_allocator, .{ .cwd = cwd_opt }) catch {
+                    std.heap.c_allocator.destroy(cs);
+                    return setReturnString(info, cx.iso, "");
+                },
+                .thread = undefined,
+            };
+            cs.thread = cs.codex.threadStart(.{
+                .cwd = cwd_opt,
+                .model = model,
+            }) catch {
+                cs.codex.deinit();
+                std.heap.c_allocator.destroy(cs);
+                return setReturnString(info, cx.iso, "");
+            };
+            cs.worker = std.Thread.spawn(.{}, CodexSession.workerEntry, .{cs}) catch {
+                cs.thread.deinit();
+                cs.codex.deinit();
+                std.heap.c_allocator.destroy(cs);
+                return setReturnString(info, cx.iso, "");
+            };
+            break :blk .{ .codex_app_server = cs };
+        },
         .local_ai => blk: {
             const model_path = jsonStrField(parsed.value, "model_path") orelse return setReturnString(info, cx.iso, "");
             const n_ctx_raw = jsonIntField(parsed.value, "n_ctx") orelse 2048;
@@ -373,7 +497,9 @@ fn hostWorkerSend(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
         .local_ai => {
             entry.session.local_ai.submit(.{ .text = text }) catch return setReturnBool(info, cx.iso, false);
         },
-        .codex_app_server => return setReturnBool(info, cx.iso, false),
+        .codex_app_server => {
+            entry.session.codex_app_server.enqueue(text) catch return setReturnBool(info, cx.iso, false);
+        },
     }
     setReturnBool(info, cx.iso, true);
 }
@@ -410,7 +536,16 @@ fn hostWorkerPoll(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
                 defer owned.deinit();
                 entry.store.ingestLocalAiEvent(&owned) catch {};
             },
-            .codex_app_server => break,
+            .codex_app_server => {
+                const drained = entry.session.codex_app_server.drainInbox() catch break;
+                defer std.heap.c_allocator.free(drained);
+                if (drained.len == 0) break;
+                for (drained) |notification| {
+                    var n = notification;
+                    entry.store.ingestCodexNotification(&n) catch {};
+                    n.deinit();
+                }
+            },
         }
     }
 

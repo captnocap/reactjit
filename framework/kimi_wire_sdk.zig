@@ -336,6 +336,7 @@ pub const Session = struct {
                     discard.deinit();
                 }
             }
+            if (self.closed) return error.SessionClosed;
             std.Thread.sleep(1 * std.time.ns_per_ms);
         }
     }

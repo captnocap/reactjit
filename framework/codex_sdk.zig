@@ -438,7 +438,11 @@ pub const AppServerClient = struct {
     fn readMessage(self: *AppServerClient) !OwnedJson {
         const child = self.child orelse return error.TransportClosed;
         const stdout = child.stdout orelse return error.TransportClosed;
-        const line = try stdout.reader().readUntilDelimiterOrEofAlloc(
+        // deprecatedReader returns the legacy std.io.GenericReader which still
+        // has readUntilDelimiterOrEofAlloc. The newer File.Reader requires a
+        // pre-allocated buffer and exposes a different API; the codex SDK is
+        // single-line-JSON-RPC and the old reader does the right thing here.
+        const line = try stdout.deprecatedReader().readUntilDelimiterOrEofAlloc(
             self.allocator,
             '\n',
             self.config.max_line_bytes,
@@ -751,10 +755,11 @@ fn parseOwnedJson(allocator: std.mem.Allocator, text: []const u8) !OwnedJson {
 }
 
 fn notificationFromOwnedJson(message: OwnedJson, method: []const u8) !Notification {
-    const root = asObject(message.value) orelse return error.InvalidResponse;
-    const params = root.get("params") orelse std.json.Value{ .object = std.json.ObjectMap.init(message.arena.allocator()) };
+    var owned = message;
+    const root = asObject(owned.value) orelse return error.InvalidResponse;
+    const params = root.get("params") orelse std.json.Value{ .object = std.json.ObjectMap.init(owned.arena.allocator()) };
     return .{
-        .arena = message.arena,
+        .arena = owned.arena,
         .method = method,
         .params = params,
     };
@@ -767,8 +772,12 @@ fn parseInitializeResponse(allocator: std.mem.Allocator, value: std.json.Value) 
 
     if (server_name.len == 0 or server_version.len == 0) {
         const split = splitUserAgent(trimmed_user_agent);
-        if (server_name.len == 0 and split.name) |candidate| server_name = candidate;
-        if (server_version.len == 0 and split.version) |candidate| server_version = candidate;
+        if (server_name.len == 0) {
+            if (split.name) |candidate| server_name = candidate;
+        }
+        if (server_version.len == 0) {
+            if (split.version) |candidate| server_version = candidate;
+        }
     }
 
     if (trimmed_user_agent.len == 0 or server_name.len == 0 or server_version.len == 0) {
