@@ -8,7 +8,7 @@ export const totemStackSection = defineGallerySection({
     defineGalleryStory({
       id: 'totem-stack/default',
       title: 'Totem Stack',
-      source: 'cart/component-gallery/components/controls-specimen/TotemStack.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/TotemStack.tsx',
       status: 'ready',
       summary: 'Stacked vertical status totem for compact mixed-axis state summaries.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

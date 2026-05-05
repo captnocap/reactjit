@@ -19,7 +19,7 @@ export const transcriptFlowSection = defineGallerySection({
     defineGalleryStory({
       id: 'transcript-flow/default',
       title: 'Transcript Flow',
-      source: 'cart/component-gallery/components/generic-chat-card/TranscriptFlow.tsx',
+      source: 'cart/app/gallery/components/generic-chat-card/TranscriptFlow.tsx',
       status: 'ready',
       summary: 'Rail and shell atoms for stacking turns and task steps inside the chat card.',
       tags: ['chat', 'console', 'rail', 'transcript'],
@@ -46,7 +46,7 @@ export const transcriptFlowSection = defineGallerySection({
                     TOOL
                   </Text>
                   <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.mint }}>
-                    rg -n "ConsoleHeader" cart/component-gallery/components/generic-chat-card
+                    rg -n "ConsoleHeader" cart/app/gallery/components/generic-chat-card
                   </Text>
                 </Box>
               </TranscriptTurnShell>
@@ -75,7 +75,7 @@ export const transcriptFlowSection = defineGallerySection({
                     verification command
                   </Text>
                   <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.mint }}>
-                    grep -c "TranscriptTurnShell" cart/component-gallery/components/generic-chat-card/*.tsx
+                    grep -c "TranscriptTurnShell" cart/app/gallery/components/generic-chat-card/*.tsx
                   </Text>
                 </Box>
               </StepCardShell>

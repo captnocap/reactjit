@@ -89,7 +89,7 @@ export function ProcessCircle(props: ProcessCircleProps) {
               <Graph.Path
                 key={`dot-${index}`}
                 d={`M ${segment.dotX - dotRadius} ${segment.dotY} A ${dotRadius} ${dotRadius} 0 1 1 ${segment.dotX + dotRadius} ${segment.dotY} A ${dotRadius} ${dotRadius} 0 1 1 ${segment.dotX - dotRadius} ${segment.dotY}`}
-                fill={index < completed ? segment.color : '#eadfca'}
+                fill={index < completed ? segment.color : 'theme:paperAlt'}
                 stroke={index < completed ? segment.color : PALETTE.slateLight}
                 strokeWidth={1}
               />
@@ -132,10 +132,10 @@ export function ProcessCircle(props: ProcessCircleProps) {
           justifyContent: 'center',
         }}
       >
-        <Text fontSize={22} color="#2a1f14" style={{ fontWeight: 'bold' }}>
+        <Text fontSize={22} color="theme:paperInk" style={{ fontWeight: 'bold' }}>
           {completed}/{stepCount}
         </Text>
-        <Text fontSize={10} color="#6f6253">
+        <Text fontSize={10} color="theme:paperInkDim">
           {steps[activeIndex]?.label ?? props.data?.label ?? 'Step'}
         </Text>
       </Box>

@@ -8,7 +8,7 @@ export const segmentedControlSection = defineGallerySection({
     defineGalleryStory({
       id: 'segmented-control/default',
       title: 'Segmented Control',
-      source: 'cart/component-gallery/components/controls-specimen/SegmentedControl.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/SegmentedControl.tsx',
       status: 'ready',
       summary: 'Segmented selection control for compact mode and range switches.',
       tags: ['controls', 'selection', 'atom'],

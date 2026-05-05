@@ -9,7 +9,7 @@ export const boxplotSection = defineGallerySection({
     defineGalleryStory({
       id: 'boxplot/default',
       title: 'Boxplot',
-      source: 'cart/component-gallery/components/boxplot/Boxplot.tsx',
+      source: 'cart/app/gallery/components/boxplot/Boxplot.tsx',
       status: 'draft',
       variants: [
         {

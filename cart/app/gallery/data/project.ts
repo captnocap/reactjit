@@ -105,14 +105,14 @@ export const projectReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Workspace',
-    targetSource: 'cart/component-gallery/data/workspace.ts',
+    targetSource: 'cart/app/gallery/data/workspace.ts',
     sourceField: 'workspaceId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Environments',
-    targetSource: 'cart/component-gallery/data/environment.ts',
+    targetSource: 'cart/app/gallery/data/environment.ts',
     sourceField: 'id',
     targetField: 'projectId',
     summary: 'Per-project dev / staging / prod separation.',
@@ -120,7 +120,7 @@ export const projectReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Worker sessions (future)',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'id',
     targetField: 'projectId (to wire)',
     summary:
@@ -129,7 +129,7 @@ export const projectReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Task graphs (future)',
-    targetSource: 'cart/component-gallery/data/task-graph.ts',
+    targetSource: 'cart/app/gallery/data/task-graph.ts',
     sourceField: 'id',
     targetField: 'projectId',
     summary: 'Task graphs belong to a project; Phase 3 shape.',

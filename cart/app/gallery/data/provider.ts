@@ -83,7 +83,7 @@ export const providerReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Models',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'id',
     targetField: 'providerId',
     summary: 'Each provider owns a curated set of Model rows. Model.providerId is a FK here.',
@@ -91,7 +91,7 @@ export const providerReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Connections',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'id',
     targetField: 'providerId',
     summary:

@@ -8,7 +8,7 @@ export const unitRailSection = defineGallerySection({
     defineGalleryStory({
       id: 'unit-rail/default',
       title: 'Unit Rail',
-      source: 'cart/component-gallery/components/controls-specimen/UnitRail.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/UnitRail.tsx',
       status: 'ready',
       summary: 'Vertical unit rail paired with a horizontal numeric readout.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

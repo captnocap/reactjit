@@ -8,7 +8,7 @@ export const fileTabCardSection = defineGallerySection({
     defineGalleryStory({
       id: "file-tab-card/default",
       title: "File Tab Card",
-      source: "cart/component-gallery/components/controls-specimen/FileTabCard.tsx",
+      source: "cart/app/gallery/components/controls-specimen/FileTabCard.tsx",
       status: 'ready',
       summary: 'Horizontal card with a protruding vertical file tab label.',
       tags: ['controls', 'file-tab', 'mixed-axis', 'atom'],

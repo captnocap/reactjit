@@ -301,18 +301,18 @@ export const goalSchema: JsonObject = {
 };
 
 export const goalReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Workspace', targetSource: 'cart/component-gallery/data/workspace.ts', sourceField: 'workspaceId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Workspace', targetSource: 'cart/app/gallery/data/workspace.ts', sourceField: 'workspaceId', targetField: 'id' },
   {
     kind: 'references',
     label: 'Project',
-    targetSource: 'cart/component-gallery/data/project.ts',
+    targetSource: 'cart/app/gallery/data/project.ts',
     sourceField: 'projectId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Plans (in service of this goal)',
-    targetSource: 'cart/component-gallery/data/plan.ts',
+    targetSource: 'cart/app/gallery/data/plan.ts',
     sourceField: 'id',
     targetField: 'goalId',
     summary:
@@ -321,7 +321,7 @@ export const goalReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Parent goal (DAG)',
-    targetSource: 'cart/component-gallery/data/goal.ts',
+    targetSource: 'cart/app/gallery/data/goal.ts',
     sourceField: 'parentGoalId',
     targetField: 'id',
     summary:
@@ -330,14 +330,14 @@ export const goalReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Achieved by plan',
-    targetSource: 'cart/component-gallery/data/plan.ts',
+    targetSource: 'cart/app/gallery/data/plan.ts',
     sourceField: 'achievedByPlanId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Reframed-to goal',
-    targetSource: 'cart/component-gallery/data/goal.ts',
+    targetSource: 'cart/app/gallery/data/goal.ts',
     sourceField: 'reframedToGoalId',
     targetField: 'id',
     summary:
@@ -346,7 +346,7 @@ export const goalReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Tasks (denormalized goal pointer)',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'id',
     targetField: 'goalId',
     summary:
@@ -355,7 +355,7 @@ export const goalReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Outcome rubric',
-    targetSource: 'cart/component-gallery/data/outcome-rubric.ts',
+    targetSource: 'cart/app/gallery/data/outcome-rubric.ts',
     sourceField: 'outcomeRubricId',
     targetField: 'id',
     summary:
@@ -364,7 +364,7 @@ export const goalReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Reference artifacts → Interpretation',
-    targetSource: 'cart/component-gallery/data/interpretation.ts',
+    targetSource: 'cart/app/gallery/data/interpretation.ts',
     sourceField: 'referenceArtifacts[].interpretedByInterpretationId',
     targetField: 'id',
     summary:

@@ -8,7 +8,7 @@ export const chronologyTrailSection = defineGallerySection({
     defineGalleryStory({
       id: 'chronology-trail/default',
       title: 'Chronology Trail',
-      source: 'cart/component-gallery/components/controls-specimen/ChronologyTrail.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/ChronologyTrail.tsx',
       status: 'ready',
       summary: 'Timestamped trail with left spine ticks for active and flagged events.',
       tags: ['controls', 'mixed-axis', 'atom'],

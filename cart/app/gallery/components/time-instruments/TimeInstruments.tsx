@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { classifiers as S } from '@reactjit/core';
 import { CTRL } from '../controls-specimen/controlsSpecimenTheme';
+import { useAnimationsDisabled } from '../../lib/useSpring';
 
 type TimeInstrumentProps = {
   now?: Date;
@@ -106,6 +107,7 @@ function percent(value: number): string {
 }
 
 function useClockNow(explicitNow?: Date): Date {
+  const animationsDisabled = useAnimationsDisabled();
   const [liveNow, setLiveNow] = useState(() => explicitNow ?? new Date());
 
   useEffect(() => {
@@ -113,10 +115,11 @@ function useClockNow(explicitNow?: Date): Date {
       setLiveNow(explicitNow);
       return;
     }
+    if (animationsDisabled) return;
 
     const id = setInterval(() => setLiveNow(new Date()), 1000);
     return () => clearInterval(id);
-  }, [explicitNow]);
+  }, [explicitNow, animationsDisabled]);
 
   return explicitNow ?? liveNow;
 }

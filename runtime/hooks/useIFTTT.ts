@@ -25,6 +25,7 @@
  *   'system:hang'            engine hang detected; payload = { count }
  *   'system:ram'             RAM sample;           payload = { used, total, percent }
  *   'system:vram'            VRAM sample;          payload = { used, total, percent }
+ *   'system:resize'          window resized;       payload = { w, h }
  *   'system:claude'          any Claude Code hook event; payload = full entry
  *   'system:claude:<tool>'   filtered by tool name (e.g. 'system:claude:bash')
  *   'system:claude:<phase>'  filtered by phase    (e.g. 'system:claude:pre')
@@ -206,6 +207,9 @@ if (!G.__ifttt_handlers_installed) {
   G.__ifttt_onSystemVram = (used: number, total: number) => {
     const percent = total > 0 ? (used / total) * 100 : 0;
     emit('system:vram', { used, total, percent });
+  };
+  G.__ifttt_onSystemResize = (w: number, h: number) => {
+    emit('system:resize', { w, h });
   };
 }
 

@@ -14,7 +14,7 @@ export const gitDiffPreviewSection = defineGallerySection({
     defineGalleryStory({
       id: "git-diff-preview/default",
       title: "Git Diff Preview",
-      source: "cart/component-gallery/components/git-lanes/GitDiffPreview.tsx",
+      source: "cart/app/gallery/components/git-lanes/GitDiffPreview.tsx",
       status: 'ready',
       summary: 'Diff preview atom with selected commit header, changed files, and hunk/add/remove code lines.',
       tags: ["card", "panel"],

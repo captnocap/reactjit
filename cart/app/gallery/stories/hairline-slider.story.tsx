@@ -8,7 +8,7 @@ export const hairlineSliderSection = defineGallerySection({
     defineGalleryStory({
       id: "hairline-slider/default",
       title: "Hairline Slider",
-      source: "cart/component-gallery/components/controls-specimen/HairlineSlider.tsx",
+      source: "cart/app/gallery/components/controls-specimen/HairlineSlider.tsx",
       status: 'ready',
       summary: 'Single-pixel rail slider with square thumb from the controls specimen.',
       tags: ['controls', 'slider', 'atom'],

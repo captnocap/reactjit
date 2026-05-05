@@ -165,8 +165,8 @@ export const newsFeedPostMockData: NewsFeedPost[] = [
       kind: 'image',
       title: 'Composer audit trail',
       description: 'Three command cards stacked with status rails and inline context.',
-      accentColor: '#d26a2a',
-      backgroundColor: '#201814',
+      accentColor: 'theme:accent',
+      backgroundColor: 'theme:bg2',
       stats: '4 panels, 12 pending actions',
     },
     commentsPreview: [
@@ -215,8 +215,8 @@ export const newsFeedPostMockData: NewsFeedPost[] = [
       kind: 'link',
       title: 'Notification contract notes',
       description: 'Severity, source, lifetime, action set, and optional reply state.',
-      accentColor: '#6aa390',
-      backgroundColor: '#17201a',
+      accentColor: 'theme:ok',
+      backgroundColor: 'theme:bg2',
       stats: '5 fields worth keeping',
     },
     commentsPreview: [
@@ -257,8 +257,8 @@ export const newsFeedPostMockData: NewsFeedPost[] = [
       kind: 'poll',
       title: 'Primary feed action',
       description: 'Which action deserves the strongest hover target?',
-      accentColor: '#8a7fd4',
-      backgroundColor: '#1b1830',
+      accentColor: 'theme:lilac',
+      backgroundColor: 'theme:bg2',
       stats: '58 percent chose comment',
     },
     commentsPreview: [
@@ -286,7 +286,7 @@ export const newsFeedPostReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Author user',
-    targetSource: 'cart/component-gallery/data/user.ts',
+    targetSource: 'cart/app/gallery/data/user.ts',
     sourceField: 'authorUserId',
     targetField: 'id',
     summary: 'Connects a feed post to the account that authored it when the author is a local user.',

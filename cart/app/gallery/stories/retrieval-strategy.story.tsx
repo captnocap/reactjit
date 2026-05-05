@@ -13,7 +13,7 @@ export const retrievalStrategySection = defineGallerySection({
     defineGalleryDataStory({
       id: "retrieval-strategy/catalog",
       title: "Retrieval Strategy",
-      source: "cart/component-gallery/data/retrieval-strategy.ts",
+      source: "cart/app/gallery/data/retrieval-strategy.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

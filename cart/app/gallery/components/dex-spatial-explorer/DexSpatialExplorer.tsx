@@ -6,6 +6,7 @@ import { DexCanvasNode } from '../dex-canvas-node/DexCanvasNode';
 import { DexCanvasRing } from '../dex-canvas-ring/DexCanvasRing';
 import { DEX_COLORS, DexFrame } from '../dex-frame/DexFrame';
 import { DexSearchBar } from '../dex-search-bar/DexSearchBar';
+import { useAnimationsDisabled } from '../../lib/useSpring';
 
 export type DexSpatialExplorerProps = {
   width?: number;
@@ -20,15 +21,17 @@ const spatialNodes = [
 ];
 
 export function DexSpatialExplorer({ width = 468 }: DexSpatialExplorerProps) {
+  const animationsDisabled = useAnimationsDisabled();
   const [phase, setPhase] = useState(0);
   const [selected, setSelected] = useState('routing');
   const graphWidth = Math.max(320, width - 2);
   const graphHeight = 216;
 
   useEffect(() => {
+    if (animationsDisabled) return;
     const id = setInterval(() => setPhase((value) => value + 1), 760);
     return () => clearInterval(id);
-  }, []);
+  }, [animationsDisabled]);
 
   const liveNodes = useMemo(() => {
     const cx = 204;

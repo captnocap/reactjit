@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { classifiers as S } from '@reactjit/core';
 import type { NewsFeedPost } from '../../data/news-feed-post';
+import { useGalleryTheme } from '../../gallery-theme';
 import { SocialImageActions } from './SocialImageActions';
 import { SocialImageAuthor } from './SocialImageAuthor';
 import { SocialImageComments } from './SocialImageComments';
@@ -26,7 +27,8 @@ export function SocialImageGallery({
   images,
   initialIndex = 0,
 }: SocialImageGalleryProps) {
-  const galleryImages = useMemo(() => images || makeSocialImageSet(post), [images, post]);
+  const { activeThemeId } = useGalleryTheme();
+  const galleryImages = useMemo(() => images || makeSocialImageSet(post), [activeThemeId, images, post]);
   const [selectedIndex, setSelectedIndex] = useState(initialIndex);
   const [liked, setLiked] = useState(post.likedByViewer);
   const [reposted, setReposted] = useState(post.repostedByViewer);

@@ -8,7 +8,7 @@ export const meterSliderSection = defineGallerySection({
     defineGalleryStory({
       id: 'meter-slider/default',
       title: 'Meter Slider',
-      source: 'cart/component-gallery/components/controls-specimen/MeterSlider.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/MeterSlider.tsx',
       status: 'ready',
       summary: 'In-bar numeric slider readout with quarter markers and accent or warning fill.',
       tags: ['controls', 'slider', 'atom'],

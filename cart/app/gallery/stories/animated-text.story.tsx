@@ -15,7 +15,7 @@ export const animatedTextSection = defineGallerySection({
     defineGalleryStory({
       id: 'animated-text/default',
       title: 'Animated Text',
-      source: 'cart/component-gallery/components/animated-text/useAnimatedText.ts',
+      source: 'cart/app/gallery/components/animated-text/useAnimatedText.ts',
       status: 'draft',
       tags: ['hooks', 'animation', 'text'],
       variants: [

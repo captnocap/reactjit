@@ -13,7 +13,7 @@ export const planningPhaseSection = defineGallerySection({
     defineGalleryDataStory({
       id: "planning-phase/catalog",
       title: "Planning Phase",
-      source: "cart/component-gallery/data/planning-phase.ts",
+      source: "cart/app/gallery/data/planning-phase.ts",
       format: 'data',
       status: 'draft',
       tags: ["plan", "phase", "lifecycle"],

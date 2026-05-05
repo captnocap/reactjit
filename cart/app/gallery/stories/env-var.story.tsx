@@ -13,7 +13,7 @@ export const envVarSection = defineGallerySection({
     defineGalleryDataStory({
       id: "env-var/catalog",
       title: "Env Var",
-      source: "cart/component-gallery/data/env-var.ts",
+      source: "cart/app/gallery/data/env-var.ts",
       format: 'data',
       status: 'draft',
       tags: ["catalog", "connection", "claude-code"],

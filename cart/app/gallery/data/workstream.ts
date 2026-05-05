@@ -176,21 +176,21 @@ export const workstreamReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Project',
-    targetSource: 'cart/component-gallery/data/project.ts',
+    targetSource: 'cart/app/gallery/data/project.ts',
     sourceField: 'projectId',
     targetField: 'id',
   },
   {
     kind: 'belongs-to',
     label: 'Workspace',
-    targetSource: 'cart/component-gallery/data/workspace.ts',
+    targetSource: 'cart/app/gallery/data/workspace.ts',
     sourceField: 'workspaceId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Parent workstream',
-    targetSource: 'cart/component-gallery/data/workstream.ts',
+    targetSource: 'cart/app/gallery/data/workstream.ts',
     sourceField: 'parentWorkstreamId',
     targetField: 'id',
     summary: 'Fork lineage. A speculation pattern produces sibling forks under one parent.',
@@ -198,7 +198,7 @@ export const workstreamReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Workers',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerIds[]',
     targetField: 'id',
     summary: 'Workers execute tasks within a workstream\'s isolation boundary.',
@@ -206,14 +206,14 @@ export const workstreamReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Task graph',
-    targetSource: 'cart/component-gallery/data/task-graph.ts',
+    targetSource: 'cart/app/gallery/data/task-graph.ts',
     sourceField: 'taskGraphId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Task claims',
-    targetSource: 'cart/component-gallery/data/task-claim.ts',
+    targetSource: 'cart/app/gallery/data/task-claim.ts',
     sourceField: 'id',
     targetField: 'workstreamId',
     summary: 'Workers in a workstream claim tasks scoped to that workstream\'s priority.',
@@ -221,7 +221,7 @@ export const workstreamReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Barriers (waiting on this)',
-    targetSource: 'cart/component-gallery/data/barrier.ts',
+    targetSource: 'cart/app/gallery/data/barrier.ts',
     sourceField: 'id',
     targetField: 'requiredWorkstreamIds[]',
     summary: 'A barrier waiting for this workstream to finish includes its id in its required set.',
@@ -229,7 +229,7 @@ export const workstreamReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Merge proposals',
-    targetSource: 'cart/component-gallery/data/merge-proposal.ts',
+    targetSource: 'cart/app/gallery/data/merge-proposal.ts',
     sourceField: 'id',
     targetField: 'sourceWorkstreamId',
     summary: 'When a workstream finishes, its outputs surface as a MergeProposal pending integration.',

@@ -13,7 +13,7 @@ export const inferencePresetSection = defineGallerySection({
     defineGalleryDataStory({
       id: "inference-preset/catalog",
       title: "Inference Preset",
-      source: "cart/component-gallery/data/inference-preset.ts",
+      source: "cart/app/gallery/data/inference-preset.ts",
       format: 'data',
       status: 'draft',
       tags: ["preset", "inference", "identity"],

@@ -2,21 +2,21 @@ import type { ReactNode } from 'react';
 import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 
 export const DEX_COLORS = {
-  bg: '#0e0b09',
-  bg1: '#14100d',
-  bg2: '#1a1511',
-  ink: '#f2e8dc',
-  inkDim: '#b8a890',
-  inkDimmer: '#7a6e5d',
-  ghost: '#4a4238',
-  rule: '#3a2a1e',
-  ruleBright: '#8a4a20',
-  accent: '#d26a2a',
-  ok: '#6aa390',
-  warn: '#d6a54a',
-  flag: '#e14a2a',
-  blue: '#5a8bd6',
-  lilac: '#8a7fd4',
+  bg: 'theme:bg',
+  bg1: 'theme:bg1',
+  bg2: 'theme:bg2',
+  ink: 'theme:ink',
+  inkDim: 'theme:inkDim',
+  inkDimmer: 'theme:inkDimmer',
+  ghost: 'theme:inkGhost',
+  rule: 'theme:rule',
+  ruleBright: 'theme:ruleBright',
+  accent: 'theme:accent',
+  ok: 'theme:ok',
+  warn: 'theme:warn',
+  flag: 'theme:flag',
+  blue: 'theme:blue',
+  lilac: 'theme:lilac',
 };
 
 export type DexFrameProps = {

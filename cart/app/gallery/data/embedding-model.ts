@@ -90,6 +90,45 @@ export const embeddingModelMockData: EmbeddingModel[] = [
     matryoshkaTruncation: [256, 512, 1024],
     status: 'experimental',
   },
+  {
+    id: 'qwen3-embedding-0_6b',
+    providerId: 'local',
+    displayName: 'Qwen3-Embedding 0.6B (local, llama.cpp GGUF)',
+    dimension: 1024,
+    maxInputTokens: 32_768,
+    supportsBatchEmbed: true,
+    supportsLatePreloading: true,
+    matryoshkaTruncation: [128, 256, 512, 768, 1024],
+    status: 'active',
+    summary:
+      'Smallest Qwen3-Embedding. Fast indexing path — ~5-10 ms per chunk on a modern GPU via llama.cpp. Use for the bulk pass on 1M+ chunk corpora.',
+  },
+  {
+    id: 'qwen3-embedding-4b',
+    providerId: 'local',
+    displayName: 'Qwen3-Embedding 4B (local, llama.cpp GGUF)',
+    dimension: 1024,
+    maxInputTokens: 32_768,
+    supportsBatchEmbed: true,
+    supportsLatePreloading: true,
+    matryoshkaTruncation: [128, 256, 512, 768, 1024],
+    status: 'active',
+    summary:
+      'Sweet-spot Qwen3-Embedding. ~30-60 ms per chunk on local GPU; close to 8B quality at half the cost. Default embedder for the four-corpus index.',
+  },
+  {
+    id: 'qwen3-embedding-8b',
+    providerId: 'local',
+    displayName: 'Qwen3-Embedding 8B (local, llama.cpp GGUF)',
+    dimension: 1024,
+    maxInputTokens: 32_768,
+    supportsBatchEmbed: true,
+    supportsLatePreloading: true,
+    matryoshkaTruncation: [128, 256, 512, 768, 1024],
+    status: 'experimental',
+    summary:
+      'Largest Qwen3-Embedding. Top of MTEB at ~80-150 ms per chunk; cost rarely worth it over 4B + reranker. Carry it as an A/B option, not the default.',
+  },
 ];
 
 export const embeddingModelSchema: JsonObject = {
@@ -131,7 +170,7 @@ export const embeddingModelReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Embedding rows',
-    targetSource: 'cart/component-gallery/data/embedding.ts',
+    targetSource: 'cart/app/gallery/data/embedding.ts',
     sourceField: 'id',
     targetField: 'embeddingModelId',
     summary:
@@ -140,7 +179,7 @@ export const embeddingModelReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Provider (loose)',
-    targetSource: 'cart/component-gallery/data/provider.ts',
+    targetSource: 'cart/app/gallery/data/provider.ts',
     sourceField: 'providerId',
     targetField: 'id (loose link — providers may overlap)',
     summary:

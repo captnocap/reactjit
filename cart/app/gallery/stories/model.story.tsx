@@ -13,7 +13,7 @@ export const modelSection = defineGallerySection({
     defineGalleryDataStory({
       id: "model/catalog",
       title: "Model",
-      source: "cart/component-gallery/data/model.ts",
+      source: "cart/app/gallery/data/model.ts",
       format: 'data',
       status: 'draft',
       tags: ["catalog", "model"],

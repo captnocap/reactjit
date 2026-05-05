@@ -1,6 +1,6 @@
 // NewsFeed — gallery component bound to the `NewsFeedPost` data shape.
 //
-// Source of truth: cart/component-gallery/data/news-feed-post.ts
+// Source of truth: cart/app/gallery/data/news-feed-post.ts
 //
 // Top-level fields on `NewsFeedPost`:
 //   id: string
@@ -56,16 +56,16 @@ const CURRENT_AUTHOR: FeedComposerAuthor = {
 };
 
 const COLORS = {
-  bg: '#0e0b09',
-  panel: '#14100d',
-  panelRaised: '#211915',
-  rule: '#3a2a1e',
-  ruleBright: '#8a4a20',
-  ink: '#f2e8dc',
-  inkDim: '#b8a890',
-  inkFaint: '#7a6e5d',
-  accent: '#d26a2a',
-  success: '#6aa390',
+  bg: 'theme:bg',
+  panel: 'theme:bg1',
+  panelRaised: 'theme:bg2',
+  rule: 'theme:rule',
+  ruleBright: 'theme:ruleBright',
+  ink: 'theme:ink',
+  inkDim: 'theme:inkDim',
+  inkFaint: 'theme:inkDimmer',
+  accent: 'theme:accent',
+  success: 'theme:ok',
 };
 
 const FEED_TABS: Array<{ id: FeedTab; label: string }> = [

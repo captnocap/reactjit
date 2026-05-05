@@ -13,7 +13,7 @@ export const semanticMemorySection = defineGallerySection({
     defineGalleryDataStory({
       id: "semantic-memory/catalog",
       title: "Semantic Memory",
-      source: "cart/component-gallery/data/semantic-memory.ts",
+      source: "cart/app/gallery/data/semantic-memory.ts",
       format: 'data',
       status: 'draft',
       tags: ["memory", "facts", "knowledge"],

@@ -208,7 +208,7 @@ export const modelReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Provider',
-    targetSource: 'cart/component-gallery/data/provider.ts',
+    targetSource: 'cart/app/gallery/data/provider.ts',
     sourceField: 'providerId',
     targetField: 'id',
     summary: 'Every model belongs to exactly one Provider.',
@@ -216,7 +216,7 @@ export const modelReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Connection kinds',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'availableVia[]',
     targetField: 'kind',
     summary:
@@ -225,7 +225,7 @@ export const modelReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Worker sessions (future FK)',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'id',
     targetField: 'model',
     summary:

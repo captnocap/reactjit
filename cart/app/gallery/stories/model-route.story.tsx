@@ -13,7 +13,7 @@ export const modelRouteSection = defineGallerySection({
     defineGalleryDataStory({
       id: "model-route/catalog",
       title: "Model Route",
-      source: "cart/component-gallery/data/model-route.ts",
+      source: "cart/app/gallery/data/model-route.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

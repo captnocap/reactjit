@@ -22,8 +22,8 @@ function chipStyle(active: boolean, color: string) {
     paddingBottom: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: active ? color : '#14100d',
-    backgroundColor: active ? '#0d1b25' : '#09131b',
+    borderColor: active ? color : 'theme:bg1',
+    backgroundColor: active ? 'theme:bg2' : 'theme:bg1',
   } as const;
 }
 
@@ -46,12 +46,12 @@ function GeneChip({ label, value, color }: { label: string; value: string; color
         gap: 2,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: '#14100d',
-        backgroundColor: '#0e0b09',
+        borderColor: 'theme:bg1',
+        backgroundColor: 'theme:bg',
       }}
     >
-      <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>{label}</Text>
-      <Text style={{ fontSize: 11, color: color || '#c8b894', fontFamily: 'monospace' }}>{value}</Text>
+      <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>{label}</Text>
+      <Text style={{ fontSize: 11, color: color || 'theme:inkDim', fontFamily: 'monospace' }}>{value}</Text>
     </Col>
   );
 }
@@ -62,7 +62,7 @@ function fmtNumber(value: number, digits = 2): string {
 }
 
 export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
-  const initialDraftPath = props.initialPath || 'cart/component-gallery/components/ast-quilt/AstQuilt.tsx';
+  const initialDraftPath = props.initialPath || 'cart/app/gallery/components/ast-quilt/AstQuilt.tsx';
   const [samplePaths] = useState<string[]>(() => {
     const available = listFingerprintSamplePaths();
     return available.length > 0 ? available : [initialDraftPath];
@@ -127,19 +127,19 @@ export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
           padding: 16,
           borderRadius: 22,
           borderWidth: 1,
-          borderColor: '#14100d',
-          backgroundColor: '#06121a',
+          borderColor: 'theme:bg1',
+          backgroundColor: 'theme:bg1',
         }}
       >
         <Col style={{ gap: 4 }}>
-          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#b8a890' }}>Random Effect from Fingerprint</Text>
-          <Text style={{ fontSize: 10, color: '#b8a890' }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: 'theme:inkDim' }}>Random Effect from Fingerprint</Text>
+          <Text style={{ fontSize: 10, color: 'theme:inkDim' }}>
             The fingerprint is mined for ~16 genes and a voice array, then dispatched to one of 8 procedural pixel engines. Same file → same effect, deterministically.
           </Text>
         </Col>
 
         <Col style={{ gap: 6 }}>
-          <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>FILE PATH</Text>
+          <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>FILE PATH</Text>
           <Row style={{ width: '100%', gap: 8, alignItems: 'center' }}>
             <TextInput
               value={draftPath}
@@ -156,28 +156,28 @@ export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
                 paddingRight: 10,
                 borderRadius: 10,
                 borderWidth: 1,
-                borderColor: '#14100d',
-                backgroundColor: '#0e0b09',
-                color: '#b8a890',
+                borderColor: 'theme:bg1',
+                backgroundColor: 'theme:bg',
+                color: 'theme:inkDim',
                 fontSize: 10,
                 fontFamily: 'monospace',
               }}
             />
-            <Pressable onPress={() => beginLoad()} style={chipStyle(true, '#8aca6a')}>
-              <Text style={{ fontSize: 10, color: '#d9ffe2', fontWeight: 'bold' }}>{pending ? 'Loading…' : 'Generate'}</Text>
+            <Pressable onPress={() => beginLoad()} style={chipStyle(true, 'theme:pin')}>
+              <Text style={{ fontSize: 10, color: 'theme:ink', fontWeight: 'bold' }}>{pending ? 'Loading…' : 'Generate'}</Text>
             </Pressable>
           </Row>
         </Col>
 
         <Col style={{ gap: 6 }}>
-          <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>QUICK FILES</Text>
+          <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>QUICK FILES</Text>
           <Row style={{ width: '100%', gap: 8, flexWrap: 'wrap' }}>
             {samplePaths.map((path) => (
-              <Pressable key={path} onPress={() => beginLoad(path)} style={chipStyle(activePath === path, '#5a8bd6')}>
+              <Pressable key={path} onPress={() => beginLoad(path)} style={chipStyle(activePath === path, 'theme:blue')}>
                 <Text
                   style={{
                     fontSize: 9,
-                    color: activePath === path ? '#d7f5ff' : '#9ec2d4',
+                    color: activePath === path ? 'theme:ink' : 'theme:tool',
                     fontFamily: 'monospace',
                   }}
                 >
@@ -189,7 +189,7 @@ export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
         </Col>
 
         <Row style={{ width: '100%', gap: 8, flexWrap: 'wrap' }}>
-          <GeneChip label="engine" value={genes ? genes.engineName : 'idle'} color="#9ee6a8" />
+          <GeneChip label="engine" value={genes ? genes.engineName : 'idle'} color="theme:pin" />
           <GeneChip label="seed" value={genes ? genes.seed.toString(16).padStart(8, '0').slice(0, 8) : '—'} />
           <GeneChip label="hue" value={genes ? Math.round(genes.hueBase * 360) + '°' : '—'} />
           <GeneChip label="span" value={genes ? Math.round(genes.hueSpan * 100) + '%' : '—'} />
@@ -209,15 +209,15 @@ export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
             padding: 12,
             borderRadius: 14,
             borderWidth: 1,
-            borderColor: '#14100d',
-            backgroundColor: '#0e0b09',
+            borderColor: 'theme:bg1',
+            backgroundColor: 'theme:bg',
           }}
         >
-          <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>STATUS</Text>
+          <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>STATUS</Text>
           <Text
             style={{
               fontSize: 10,
-              color: pending ? '#d6a54a' : error ? '#e4b0c4' : '#b8a890',
+              color: pending ? 'theme:warn' : error ? 'theme:paper' : 'theme:inkDim',
               fontFamily: 'monospace',
             }}
           >
@@ -229,10 +229,10 @@ export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
                   ? `engine=${genes.engineName}  seed=${genes.seed.toString(16).slice(0, 10)}  voices=${genes.voices.length}`
                   : 'idle'}
           </Text>
-          <Text style={{ fontSize: 10, color: '#8ea8ba' }}>
+          <Text style={{ fontSize: 10, color: 'theme:lilac' }}>
             Engines: plasma · voronoi · mandala · waves · lattice · streams · spiral · reaction. Each pulls hue/density/symmetry/twist/warp/detail/voices from the fingerprint.
           </Text>
-          <Text style={{ fontSize: 9, color: '#64839a', fontFamily: 'monospace' }}>{activePath || draftPath || 'no path selected'}</Text>
+          <Text style={{ fontSize: 9, color: 'theme:ok', fontFamily: 'monospace' }}>{activePath || draftPath || 'no path selected'}</Text>
         </Col>
       </Col>
 
@@ -245,8 +245,8 @@ export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
             justifyContent: 'center',
             borderRadius: 30,
             borderWidth: 1,
-            borderColor: '#14100d',
-            backgroundColor: '#040b11',
+            borderColor: 'theme:bg1',
+            backgroundColor: 'theme:bg',
           }}
         >
           {genes ? (
@@ -257,10 +257,10 @@ export function FingerprintEffectWorkbench(props: { initialPath?: string }) {
               />
             </Box>
           ) : (
-            <Text style={{ fontSize: 11, color: '#b8a890' }}>{pending ? 'rendering…' : 'no file loaded'}</Text>
+            <Text style={{ fontSize: 11, color: 'theme:inkDim' }}>{pending ? 'rendering…' : 'no file loaded'}</Text>
           )}
         </Box>
-        <Text style={{ width: PREVIEW_SIZE, fontSize: 10, color: '#b8a890', textAlign: 'center' }}>
+        <Text style={{ width: PREVIEW_SIZE, fontSize: 10, color: 'theme:inkDim', textAlign: 'center' }}>
           Pick another file to swap engines, palette, density, motion — all derived from the fingerprint.
         </Text>
       </Col>

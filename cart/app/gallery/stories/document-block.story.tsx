@@ -10,7 +10,7 @@ export const documentBlockSection = defineGallerySection({
     defineGalleryStory({
       id: 'document-block/default',
       title: 'Document Block',
-      source: 'cart/component-gallery/components/document-viewer/DocumentBlock.tsx',
+      source: 'cart/app/gallery/components/document-viewer/DocumentBlock.tsx',
       status: 'draft',
       summary: 'Renders one document block: heading, paragraph, list, quote, code, or divider.',
       tags: ['panel'],
@@ -19,7 +19,7 @@ export const documentBlockSection = defineGallerySection({
           id: 'comfortable',
           name: 'Comfortable',
           render: () => (
-            <Box style={{ width: 460 }}>
+            <Box style={{ width: 460, height: 520 }}>
               <S.DocPage>
                 <S.DocPageContent>
                   <DocumentBlock
@@ -55,7 +55,7 @@ export const documentBlockSection = defineGallerySection({
           id: 'compact',
           name: 'Compact',
           render: () => (
-            <Box style={{ width: 280 }}>
+            <Box style={{ width: 280, height: 360 }}>
               <S.DocPage>
                 <S.DocPageContent>
                   <DocumentBlock

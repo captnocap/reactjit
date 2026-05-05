@@ -1,5 +1,5 @@
 import { Box, Col, Row } from '@reactjit/runtime/primitives';
-import { Icon, type IconData } from '../../../sweatshop/components/icons';
+import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import { Body, Divider, InlinePill, Mono } from '../controls-specimen/controlsSpecimenParts';
 import { CTRL, toneColor, toneSoftBackground, type ControlTone } from '../controls-specimen/controlsSpecimenTheme';
 

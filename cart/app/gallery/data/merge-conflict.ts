@@ -62,12 +62,12 @@ export const mergeConflictMockData: MergeConflict[] = [
     sides: [
       {
         workstreamId: 'ws_speculate_kimi_adapter_a',
-        artifactRef: 'cart/component-gallery/data/kimi-raw-event.ts',
+        artifactRef: 'cart/app/gallery/data/kimi-raw-event.ts',
         contentExcerpt: 'New file mirroring codex-raw-event.ts — clean, larger surface area.',
       },
       {
         workstreamId: 'ws_speculate_kimi_adapter_b',
-        artifactRef: 'cart/component-gallery/data/codex-raw-event.ts (patch)',
+        artifactRef: 'cart/app/gallery/data/codex-raw-event.ts (patch)',
         contentExcerpt: 'Extends codex-raw-event with provider-tagged frame variant blocks.',
       },
     ],
@@ -79,16 +79,16 @@ export const mergeConflictMockData: MergeConflict[] = [
     id: 'conflict_resolved_example',
     proposalId: 'merge_phase2_memory_tiers_imaginary',
     kind: 'text-region',
-    subject: 'cart/component-gallery/data/agent-memory.ts:references',
+    subject: 'cart/app/gallery/data/agent-memory.ts:references',
     sides: [
       {
         workstreamId: 'ws_consolidate_memory',
-        artifactRef: 'cart/component-gallery/data/agent-memory.ts:120-145',
+        artifactRef: 'cart/app/gallery/data/agent-memory.ts:120-145',
         contentExcerpt: 'Added a "Alternative shape — semantic-memory" reference block.',
       },
       {
         workstreamId: 'ws_doc_pass',
-        artifactRef: 'cart/component-gallery/data/agent-memory.ts:120-145',
+        artifactRef: 'cart/app/gallery/data/agent-memory.ts:120-145',
         contentExcerpt: 'Rewrote the same reference block with a different summary line.',
       },
     ],
@@ -156,21 +156,21 @@ export const mergeConflictReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Merge proposal',
-    targetSource: 'cart/component-gallery/data/merge-proposal.ts',
+    targetSource: 'cart/app/gallery/data/merge-proposal.ts',
     sourceField: 'proposalId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Conflict sides — workstreams',
-    targetSource: 'cart/component-gallery/data/workstream.ts',
+    targetSource: 'cart/app/gallery/data/workstream.ts',
     sourceField: 'sides[].workstreamId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Winning side',
-    targetSource: 'cart/component-gallery/data/workstream.ts',
+    targetSource: 'cart/app/gallery/data/workstream.ts',
     sourceField: 'resolution.winningSideWorkstreamId',
     targetField: 'id',
     summary: 'Null when a hand-merged third option won — see resolution.manualResultRef.',

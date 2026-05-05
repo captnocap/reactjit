@@ -13,7 +13,7 @@ export const genericCardHeaderSection = defineGallerySection({
     defineGalleryStory({
       id: "generic-card-header/default",
       title: "Generic Card Header",
-      source: "cart/component-gallery/components/generic-card/GenericCardHeader.tsx",
+      source: "cart/app/gallery/components/generic-card/GenericCardHeader.tsx",
       status: 'ready',
       summary: 'Eyebrow metadata row with a trailing score readout.',
       tags: ['card', 'header', 'atom'],

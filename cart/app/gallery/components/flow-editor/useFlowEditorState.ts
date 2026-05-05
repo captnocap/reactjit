@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import type { FlowEdge, FlowNode, FlowPendingWire } from './types';
+import type { FlowEdge, FlowNode, FlowPendingWire, FlowPortKind, FlowPortSide } from './types';
 
 // Headless state machine for the FlowEditor. Embed this hook directly when
 // you want to drive your own UI; the <FlowEditor /> component is just a
@@ -27,15 +27,15 @@ export type FlowEditorState = {
   addNode: (label?: string, data?: unknown) => string;
   moveNode: (id: string, x: number, y: number) => void;
   removeNode: (id: string) => void;
-  tryAddEdge: (fromId: string, toId: string) => void;
-  onPortClick: (nodeId: string, side: 'in' | 'out') => void;
+  tryAddEdge: (fromId: string, toId: string, fromPort?: string, toPort?: string, kind?: FlowPortKind) => void;
+  onPortClick: (nodeId: string, side: FlowPortSide, portId?: string) => void;
   onTileClick: (id: string) => void;
   clearAll: () => void;
 };
 
 export function useFlowEditorState(options: UseFlowEditorStateOptions = {}): FlowEditorState {
-  const padX = options.spawnPadX ?? 200;
-  const padY = options.spawnPadY ?? 96;
+  const padX = options.spawnPadX ?? 280;
+  const padY = options.spawnPadY ?? 190;
   const [nodes, setNodes] = useState<FlowNode[]>(options.initialNodes ?? []);
   const [edges, setEdges] = useState<FlowEdge[]>(options.initialEdges ?? []);
   const [pending, setPending] = useState<FlowPendingWire>(null);
@@ -76,24 +76,29 @@ export function useFlowEditorState(options: UseFlowEditorStateOptions = {}): Flo
     setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, x, y } : n)));
   }, []);
 
-  const tryAddEdge = useCallback((fromId: string, toId: string) => {
+  const tryAddEdge = useCallback((fromId: string, toId: string, fromPort?: string, toPort?: string, kind?: FlowPortKind) => {
     if (fromId === toId) return;
     edgeCounterRef.current += 1;
     const id = `e${edgeCounterRef.current}_${Date.now().toString(36)}`;
     setEdges((prev) =>
-      prev.some((e) => e.from === fromId && e.to === toId)
+      prev.some((e) => (
+        e.from === fromId
+        && e.to === toId
+        && (e.fromPort ?? '') === (fromPort ?? '')
+        && (e.toPort ?? '') === (toPort ?? '')
+      ))
         ? prev
-        : [...prev, { id, from: fromId, to: toId }],
+        : [...prev, { id, from: fromId, to: toId, fromPort, toPort, kind }],
     );
   }, []);
 
-  const onPortClick = useCallback((nodeId: string, side: 'in' | 'out') => {
+  const onPortClick = useCallback((nodeId: string, side: FlowPortSide, portId?: string) => {
     const cur = pendingRef.current;
-    if (!cur) { setPending({ nodeId, side }); return; }
+    if (!cur) { setPending({ nodeId, side, portId }); return; }
     if (cur.nodeId === nodeId) { setPending(null); return; }
-    if (cur.side === side) { setPending({ nodeId, side }); return; }
-    if (cur.side === 'out') tryAddEdge(cur.nodeId, nodeId);
-    else tryAddEdge(nodeId, cur.nodeId);
+    if (cur.side === side) { setPending({ nodeId, side, portId }); return; }
+    if (cur.side === 'out') tryAddEdge(cur.nodeId, nodeId, cur.portId, portId);
+    else tryAddEdge(nodeId, cur.nodeId, portId, cur.portId);
     setPending(null);
   }, [tryAddEdge]);
 
@@ -101,8 +106,8 @@ export function useFlowEditorState(options: UseFlowEditorStateOptions = {}): Flo
     const cur = pendingRef.current;
     if (cur) {
       if (cur.nodeId !== id) {
-        if (cur.side === 'out') tryAddEdge(cur.nodeId, id);
-        else tryAddEdge(id, cur.nodeId);
+        if (cur.side === 'out') tryAddEdge(cur.nodeId, id, cur.portId);
+        else tryAddEdge(id, cur.nodeId, undefined, cur.portId);
       }
       setPending(null);
       return;

@@ -8,7 +8,7 @@ export const bracketBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'bracket-badge/default',
       title: 'Bracket Badge',
-      source: 'cart/component-gallery/components/controls-specimen/BracketBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/BracketBadge.tsx',
       status: 'ready',
       summary: 'Typographic inline badge framed by configurable bracket characters.',
       tags: ['controls', 'badge', 'atom'],

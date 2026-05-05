@@ -168,11 +168,18 @@ export const Pressable: any = (props: any) => h('Pressable', props, props.childr
 //
 // scroll_y lives on the Zig Node, so a fresh tree after a reload starts at
 // 0 even though every useState atom survives via useHotState. This wrapper
-// keys scroll on React.useId() (stable per call-site), seeds the primitive
+// keys scroll on (currentRoutePath + React.useId()), seeds the primitive
 // with initialScrollY on render from __hot_get, and writes every onScroll
 // tick back through __hot_set. v8_app applies initialScrollY once on CREATE
 // (UPDATE paths skip it), so re-reading the hot value per-render is safe —
 // it only affects the very first CREATE command after a reload.
+//
+// useId alone is keyed off fiber position, which collides across route
+// navigations: the first ScrollView on a fresh page lands in the same slot
+// the previous page's first ScrollView occupied, inheriting its saved
+// scrollY and mounting "already-scrolled" against shorter content. Scoping
+// the key by route path keeps dev hot-reload restoration intact (same path
+// = same key) while isolating per-route ScrollViews from each other.
 //
 // We deliberately DON'T use React.useState for the read: the auto-patched
 // useState caches its first value under its own useId, so it would freeze
@@ -180,8 +187,10 @@ export const Pressable: any = (props: any) => h('Pressable', props, props.childr
 export const ScrollView: any = (props: any) => {
   const React = require('react');
   const hotId: string = React.useId();
-  const hotKey = 'scroll:' + hotId;
   const host: any = globalThis as any;
+  const routePath: string =
+    typeof host.__routerCurrentPath === 'function' ? (host.__routerCurrentPath() ?? '') : '';
+  const hotKey = 'scroll:' + routePath + ':' + hotId;
 
   let initialY = 0;
   if (typeof host.__hot_get === 'function') {
@@ -403,12 +412,22 @@ Scene3DBase.Camera = ({ position, target, fov, ...rest }: any) => {
     scene3dFov: fov ?? 60,
   });
 };
-Scene3DBase.Mesh = ({ geometry, material, color, position, rotation, scale, radius, tubeRadius, sizeX, sizeY, sizeZ, ...rest }: any) => {
+Scene3DBase.Mesh = ({ geometry, material, color, position, rotation, scale, radius, tubeRadius, sizeX, sizeY, sizeZ, texture, ...rest }: any) => {
   const matColor = typeof material === 'string' ? material : (material?.color ?? color);
   const [r, g, b] = _hexToRgb(matColor, [0.8, 0.8, 0.8]);
   const [px, py, pz] = _vec3(position, 0, 0, 0);
   const [rx, ry, rz] = _vec3(rotation, 0, 0, 0);
   const [sx, sy, sz] = _scaleVec3(scale);
+  // Texture: { width, height, hex } where hex is a continuous RRGGBBAA
+  // string with 8 chars per pixel (length must equal 8*width*height).
+  // The host parses the hex into a raw RGBA buffer and uploads once,
+  // caching by content hash so identical textures across meshes/renders
+  // share one GPU texture. Without `texture`, the mesh samples the global
+  // 1×1 white default and the fragment shader collapses to plain color.
+  const tex = texture && typeof texture === 'object' ? texture : null;
+  const texW = tex && Number.isFinite(tex.width) ? Math.max(0, tex.width | 0) : 0;
+  const texH = tex && Number.isFinite(tex.height) ? Math.max(0, tex.height | 0) : 0;
+  const texHex = tex && typeof tex.hex === 'string' ? tex.hex : '';
   return h('View', {
     ...rest,
     scene3dMesh: true,
@@ -422,6 +441,9 @@ Scene3DBase.Mesh = ({ geometry, material, color, position, rotation, scale, radi
     scene3dSizeX: sizeX ?? geometry?.width ?? 1,
     scene3dSizeY: sizeY ?? geometry?.height ?? 1,
     scene3dSizeZ: sizeZ ?? geometry?.depth ?? 1,
+    scene3dTexW: texW,
+    scene3dTexH: texH,
+    scene3dTexData: texHex && texW > 0 && texH > 0 && texHex.length === texW * texH * 8 ? texHex : '',
   });
 };
 Scene3DBase.AmbientLight = ({ color, intensity, ...rest }: any) => {

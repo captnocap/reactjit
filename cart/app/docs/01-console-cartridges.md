@@ -9,8 +9,7 @@ routes between them with `<Route>` blocks.
 cart/app/
   index.tsx          shell — Chrome + ROUTES + ShellBody + morph timelines
   page.tsx           "/"   — home
-  about/             "/about" — also hosts the Isolated Tests panel
-  settings/          "/settings"
+  settings/          "/settings" — includes the Isolated Tests panel under settings/routes/tests.tsx
   character/         "/character"
   sweatshop/         "/activity/sweatshop" (composer + start/run/trace pages)
   gallery/           the storybook of typed shapes (still wired in as a
@@ -57,7 +56,7 @@ its module-level side effects, its installed shims, and any stale
 globals stay in their own scope and do not smear into the app shell.
 
 This is exactly the right shape for the Isolated Tests panel
-(`cart/app/about/tests.tsx`):
+(`cart/app/settings/routes/tests.tsx`):
 
 - 18 surfaces under `cart/app/isolated_tests/`, each pre-bundled by
   `scripts/build-isolated-tests` into `.cache/isolated_tests/<id>.cart.js`.
@@ -82,7 +81,7 @@ bytes evict on the next file mtime change.
    `cart/app/isolated_tests/<name>/index.tsx` for multi-file).
 2. Run `scripts/build-isolated-tests`.
 3. Append `{ id: '<name>', label: '<Label>' }` to the `TESTS` array in
-   `cart/app/about/tests.tsx`.
+   `cart/app/settings/routes/tests.tsx`.
 
 ## Cross-references
 

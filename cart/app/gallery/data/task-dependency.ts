@@ -104,18 +104,18 @@ export const taskDependencySchema: JsonObject = {
 };
 
 export const taskDependencyReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Task graph', targetSource: 'cart/component-gallery/data/task-graph.ts', sourceField: 'taskGraphId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Task graph', targetSource: 'cart/app/gallery/data/task-graph.ts', sourceField: 'taskGraphId', targetField: 'id' },
   {
     kind: 'references',
     label: 'Upstream task',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'upstreamTaskId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Downstream task',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'downstreamTaskId',
     targetField: 'id',
   },

@@ -11,16 +11,16 @@ export const documentViewerSection = defineGallerySection({
   },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/document-viewer/DocumentPage.tsx',
-    'cart/component-gallery/components/document-viewer/DocumentToolbar.tsx',
-    'cart/component-gallery/components/document-viewer/DocumentOutline.tsx',
-    'cart/component-gallery/components/document-viewer/DocumentBlock.tsx',
+    'cart/app/gallery/components/document-viewer/DocumentPage.tsx',
+    'cart/app/gallery/components/document-viewer/DocumentToolbar.tsx',
+    'cart/app/gallery/components/document-viewer/DocumentOutline.tsx',
+    'cart/app/gallery/components/document-viewer/DocumentBlock.tsx',
   ],
   stories: [
     defineGalleryStory({
       id: 'document-viewer/default',
       title: 'Document Viewer',
-      source: 'cart/component-gallery/components/document-viewer/DocumentViewer.tsx',
+      source: 'cart/app/gallery/components/document-viewer/DocumentViewer.tsx',
       status: 'draft',
       variants: [
         {

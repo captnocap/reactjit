@@ -14,7 +14,7 @@ export const presetCardSection = defineGallerySection({
     defineGalleryStory({
       id: "preset-card/default",
       title: "Preset Card",
-      source: "cart/component-gallery/components/preset-card/PresetCard.tsx",
+      source: "cart/app/gallery/components/preset-card/PresetCard.tsx",
       status: 'draft',
       tags: ["card"],
       variants: [

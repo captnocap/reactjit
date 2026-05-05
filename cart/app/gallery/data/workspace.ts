@@ -102,14 +102,14 @@ export const workspaceReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'User',
-    targetSource: 'cart/component-gallery/data/user.ts',
+    targetSource: 'cart/app/gallery/data/user.ts',
     sourceField: 'userId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Projects',
-    targetSource: 'cart/component-gallery/data/project.ts',
+    targetSource: 'cart/app/gallery/data/project.ts',
     sourceField: 'id',
     targetField: 'workspaceId',
     summary:
@@ -118,7 +118,7 @@ export const workspaceReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Role assignments (workspace scope)',
-    targetSource: 'cart/component-gallery/data/role-assignment.ts',
+    targetSource: 'cart/app/gallery/data/role-assignment.ts',
     sourceField: 'id',
     targetField: 'scopeTargetId (when scope=workspace)',
     summary:
@@ -127,7 +127,7 @@ export const workspaceReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Worker sessions',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'id',
     targetField: 'workspaceId (to wire)',
     summary:

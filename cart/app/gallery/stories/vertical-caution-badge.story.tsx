@@ -8,7 +8,7 @@ export const verticalCautionBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'vertical-caution-badge/default',
       title: 'Vertical Caution Badge',
-      source: 'cart/component-gallery/components/controls-specimen/VerticalCautionBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/VerticalCautionBadge.tsx',
       status: 'ready',
       summary: 'Rotated hazard stripe badge for narrow mixed-axis warning states.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

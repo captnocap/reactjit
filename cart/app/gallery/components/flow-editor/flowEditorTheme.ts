@@ -1,6 +1,5 @@
-// Theme tokens for the FlowEditor component. Hex/rgba literals are pinned
-// here so consumers reference them via the `theme` prop instead of pasting
-// colors into call sites. Override any field at the call site to re-skin.
+// Theme tokens for the FlowEditor component. Keep colors token-backed so the
+// component-gallery theme switch can reshape the editor without source edits.
 
 export type FlowEditorTheme = {
   bg: string;
@@ -9,10 +8,38 @@ export type FlowEditorTheme = {
   tileBorder: string;
   tileBorderSelected: string;
   tilePending: string;
+  frameColor: string;
+  frameColorStrong: string;
+  selectedRing: string;
+  headerBg: string;
+  bodyBg: string;
+  footBg: string;
+  codeBg: string;
+  rowBg: string;
+  roleBg: string;
+  roleText: string;
+  accentHot: string;
   edgeColor: string;
   edgeStrokeWidth: number;
+  wirePacketSize: number;
+  wirePacketSpeed: number;
+  wirePacketGap: number;
+  wirePacketOpacity: number;
   portIn: string;
   portOut: string;
+  flowColor: string;
+  dataColor: string;
+  toolColor: string;
+  condTrueColor: string;
+  condFalseColor: string;
+  errorColor: string;
+  ctxColor: string;
+  loopColor: string;
+  stateIdle: string;
+  stateRun: string;
+  stateOk: string;
+  stateErr: string;
+  stateWait: string;
   portRadius: number;
   gridColor: string;
   gridMajorColor: string;
@@ -24,28 +51,58 @@ export type FlowEditorTheme = {
   radiusMd: number;
   tileWidth: number;
   tileHeight: number;
+  hairlineWidth: number;
 };
 
 export const FLOW_EDITOR_DEFAULT_THEME: FlowEditorTheme = {
-  bg: '#090d13',
-  tileBg: '#101824',
-  tileBgSelected: '#1a2738',
-  tileBorder: '#18202b',
-  tileBorderSelected: '#5db4ff',
-  tilePending: '#f5c95b',
-  edgeColor: '#5db4ff',
-  edgeStrokeWidth: 2,
-  portIn: '#243446',
-  portOut: '#5db4ff',
-  portRadius: 7,
-  gridColor: '#161d27',
-  gridMajorColor: '#1f2a37',
+  bg: 'theme:bg',
+  tileBg: 'theme:bg2',
+  tileBgSelected: 'theme:paperInk',
+  tileBorder: 'theme:bg2',
+  tileBorderSelected: 'theme:tool',
+  tilePending: 'theme:warn',
+  frameColor: 'theme:paperRule',
+  frameColorStrong: 'theme:inkGhost',
+  selectedRing: 'theme:tool',
+  headerBg: 'theme:bg1',
+  bodyBg: 'theme:bg2',
+  footBg: 'theme:bg1',
+  codeBg: 'theme:bg',
+  rowBg: 'theme:paperInk',
+  roleBg: 'theme:bg',
+  roleText: 'theme:ink',
+  accentHot: 'theme:warn',
+  edgeColor: 'theme:tool',
+  edgeStrokeWidth: 1.25,
+  wirePacketSize: 8,
+  wirePacketSpeed: 82,
+  wirePacketGap: 42,
+  wirePacketOpacity: 0.92,
+  portIn: 'theme:inkGhost',
+  portOut: 'theme:tool',
+  flowColor: 'theme:warn',
+  dataColor: 'theme:tool',
+  toolColor: 'theme:accent',
+  condTrueColor: 'theme:ok',
+  condFalseColor: 'theme:flag',
+  errorColor: 'theme:danger',
+  ctxColor: 'theme:paperAlt',
+  loopColor: 'theme:paperInkDim',
+  stateIdle: 'theme:inkGhost',
+  stateRun: 'theme:warn',
+  stateOk: 'theme:ok',
+  stateErr: 'theme:danger',
+  stateWait: 'theme:paperInkDim',
+  portRadius: 3,
+  gridColor: 'theme:bg2',
+  gridMajorColor: 'theme:paperRule',
   gridStep: 40,
   gridMajorEvery: 5,
-  textBright: '#eef2f8',
-  textDim: '#7d8a9a',
-  deleteBg: '#0a0f17',
+  textBright: 'theme:ink',
+  textDim: 'theme:ok',
+  deleteBg: 'theme:bg1',
   radiusMd: 8,
-  tileWidth: 160,
-  tileHeight: 64,
+  tileWidth: 226,
+  tileHeight: 148,
+  hairlineWidth: 1.25,
 };

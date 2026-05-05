@@ -10,7 +10,7 @@ export const documentPageSection = defineGallerySection({
     defineGalleryStory({
       id: 'document-page/default',
       title: 'Document Page',
-      source: 'cart/component-gallery/components/document-viewer/DocumentPage.tsx',
+      source: 'cart/app/gallery/components/document-viewer/DocumentPage.tsx',
       status: 'draft',
       summary: 'Cream paper surface that hosts heading/paragraph/list/quote/code blocks.',
       tags: ['panel', 'card'],

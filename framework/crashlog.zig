@@ -121,6 +121,23 @@ fn atexitHandler() callconv(.c) void {
     _ = std.posix.write(stderr, "[CRASH] Check stderr output above for the actual error.\n\n") catch {};
 }
 
+/// Install a normal (non-SA_SIGINFO) signal handler. Use for SIGINT/SIGTERM
+/// where we want graceful shutdown — the handler should set a flag the main
+/// loop polls so deferred cleanup (SDL_Quit, geometry.save, etc.) runs.
+pub fn installQuitHandler(sig: c_int, handler: *const fn (c_int) callconv(.c) void) void {
+    if (is_linux) {
+        var sa = Sigaction{
+            .handler = .{ .sa_handler = handler },
+        };
+        @memset(&sa.sa_mask, 0);
+        _ = sigaction(sig, &sa, null);
+    } else {
+        var sa: Sigaction = std.mem.zeroes(Sigaction);
+        sa.__sigaction_u = .{ .__sa_handler = handler };
+        _ = sigaction(sig, &sa, null);
+    }
+}
+
 pub fn ignoreSignal(sig: c_int) void {
     // SIG_IGN = (void (*)(int))1 — an intentionally misaligned sentinel value.
     // Use our own Sigaction struct + C extern to avoid Zig std lib type mismatches.

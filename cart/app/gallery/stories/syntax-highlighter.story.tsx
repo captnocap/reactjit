@@ -14,7 +14,7 @@ export const syntaxHighlighterSection = defineGallerySection({
     defineGalleryStory({
       id: "syntax-highlighter/default",
       title: "Syntax Highlighter",
-      source: "cart/component-gallery/components/syntax-highlighter/SyntaxHighlighter.tsx",
+      source: "cart/app/gallery/components/syntax-highlighter/SyntaxHighlighter.tsx",
       status: 'ready',
       summary: 'Reusable token renderer mapped to the active gallery theme tokens.',
       tags: ["panel", "data"],

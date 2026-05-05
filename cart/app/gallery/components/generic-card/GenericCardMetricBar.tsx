@@ -18,7 +18,7 @@ export function GenericCardMetricBar({
 
   return (
     <S.InlineX5Between>
-      <Text style={{ width: 78, fontFamily: 'monospace', fontSize: 10, color: '#b8a890' }}>{metric.label}</Text>
+      <Text style={{ width: 78, fontFamily: 'monospace', fontSize: 10, color: 'theme:inkDim' }}>{metric.label}</Text>
       <Box
         style={{
           width: GENERIC_CARD.trackWidth,

@@ -13,12 +13,14 @@ const claude_types = @import("claude_sdk/types.zig");
 const codex_sdk = @import("codex_sdk.zig");
 const kimi_wire_sdk = @import("kimi_wire_sdk.zig");
 const local_ai_runtime = @import("local_ai_runtime.zig");
+const openai_compat_sdk = @import("openai_compat_sdk.zig");
 
 pub const Backend = enum {
     claude_code,
     codex_app_server,
     kimi_cli_wire,
     local_ai,
+    openai_compat,
 };
 
 pub const WorkerStatus = enum {
@@ -893,6 +895,51 @@ pub const WorkerStore = struct {
                     .text = name,
                     .payload_json = payload,
                     .external_session_id = session.external_session_id,
+                });
+            },
+        }
+    }
+
+    pub fn ingestOpenAiEvent(self: *WorkerStore, event: *const openai_compat_sdk.Event) !void {
+        const session = try self.ensureActiveSession(.openai_compat);
+        switch (event.kind) {
+            .delta => {
+                self.status = .streaming;
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .openai_compat,
+                    .kind = .assistant_message,
+                    .role = .assistant,
+                    .model = session.model,
+                    .phase = "delta",
+                    .text = event.text,
+                    .external_session_id = session.external_session_id,
+                });
+            },
+            .completion => {
+                self.status = .active;
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .openai_compat,
+                    .kind = .completion,
+                    .role = .internal,
+                    .model = session.model,
+                    .text = event.text,
+                    .external_session_id = session.external_session_id,
+                    .status_text = "success",
+                });
+            },
+            .error_ => {
+                self.status = .error_;
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .openai_compat,
+                    .kind = .error_,
+                    .role = .internal,
+                    .model = session.model,
+                    .text = event.text,
+                    .external_session_id = session.external_session_id,
+                    .status_text = "error",
                 });
             },
         }

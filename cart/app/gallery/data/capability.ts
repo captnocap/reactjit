@@ -212,7 +212,7 @@ export const capabilityReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Connection capabilities (provider)',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'id (when providedBy includes connection)',
     targetField: 'capabilities.*',
     summary:
@@ -221,7 +221,7 @@ export const capabilityReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Model capabilities (provider)',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'id (when providedBy includes model)',
     targetField: 'capabilities.*',
     summary: 'Same pattern — Model.capabilities booleans map to these ids.',
@@ -229,7 +229,7 @@ export const capabilityReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Privacy (restrictor)',
-    targetSource: 'cart/component-gallery/data/privacy.ts',
+    targetSource: 'cart/app/gallery/data/privacy.ts',
     sourceField: 'id (when providedBy includes privacy)',
     targetField: 'tools / filesystem / telemetry',
     summary:
@@ -238,7 +238,7 @@ export const capabilityReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Skill requirements',
-    targetSource: 'cart/component-gallery/data/skill.ts',
+    targetSource: 'cart/app/gallery/data/skill.ts',
     sourceField: 'id',
     targetField: 'requiredCapabilities[]',
     summary: 'Skills declare the capability ids they need to operate.',
@@ -246,7 +246,7 @@ export const capabilityReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Role requirements',
-    targetSource: 'cart/component-gallery/data/role.ts',
+    targetSource: 'cart/app/gallery/data/role.ts',
     sourceField: 'id',
     targetField: 'requiredCapabilities[]',
     summary: 'Roles aggregate skill requirements + their own baseline.',

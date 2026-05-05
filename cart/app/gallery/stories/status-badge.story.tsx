@@ -8,7 +8,7 @@ export const statusBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: "status-badge/default",
       title: "Status Badge",
-      source: "cart/component-gallery/components/controls-specimen/StatusBadge.tsx",
+      source: "cart/app/gallery/components/controls-specimen/StatusBadge.tsx",
       status: 'ready',
       summary: 'Design-system badge atom with outline, solid, LED, pill, and dot treatments.',
       tags: ['controls', 'badge', 'status', 'atom'],

@@ -13,7 +13,7 @@ export const settingsSection = defineGallerySection({
     defineGalleryDataStory({
       id: "settings/catalog",
       title: "Settings",
-      source: "cart/component-gallery/data/settings.ts",
+      source: "cart/app/gallery/data/settings.ts",
       format: 'data',
       status: 'draft',
       tags: ["configuration", "profile", "identity"],

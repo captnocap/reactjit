@@ -8,7 +8,7 @@ export const populationPyramidSection = defineGallerySection({
     defineGalleryStory({
       id: 'population-pyramid/default',
       title: 'Population Pyramid',
-      source: 'cart/component-gallery/components/population-pyramid/PopulationPyramid.tsx',
+      source: 'cart/app/gallery/components/population-pyramid/PopulationPyramid.tsx',
       status: 'draft',
       variants: [
         {

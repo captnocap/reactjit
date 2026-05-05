@@ -29,6 +29,35 @@ var cursor_initialized: bool = false;
 // ── Window focus ────────────────────────────────────────────────────────
 var last_focused: i8 = -1; // -1 = unknown; 0 = blurred; 1 = focused
 
+// ── Viewport size ──────────────────────────────────────────────────────
+// Source of truth for the JS side. Engine fires notifyResize() from the
+// SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED handler in engine.zig. JS subscribers
+// pick it up via __ifttt_onSystemResize(w, h); the matching getters
+// (getViewportWidth/Height) let JS-side modules read the current size on
+// import without waiting for an event.
+//
+// Tier-gated dispatch: SDL fires PIXEL_SIZE_CHANGED on every pixel of an
+// active drag (60+/sec). Each JS fire evals into V8 and re-renders the
+// classifier tree, which froze the engine on resize before this gate
+// landed. notifyResize now only invokes the JS handler when the breakpoint
+// tier crosses (sm/md/lg/xl). The latest width/height are still stashed in
+// last_w/last_h so getViewportWidth() returns the live value.
+var last_w: f32 = 1280;
+var last_h: f32 = 800;
+var last_bp_tier: u8 = 2; // 0=sm 1=md 2=lg 3=xl — matches breakpoint.zig
+
+// Thresholds match runtime/theme.tsx + framework/breakpoint.zig defaults.
+const BP_THRESHOLD_MD: f32 = 640;
+const BP_THRESHOLD_LG: f32 = 1024;
+const BP_THRESHOLD_XL: f32 = 1440;
+
+fn classifyBpTier(w: f32) u8 {
+    if (w >= BP_THRESHOLD_XL) return 3;
+    if (w >= BP_THRESHOLD_LG) return 2;
+    if (w >= BP_THRESHOLD_MD) return 1;
+    return 0;
+}
+
 // ── File drop (path stash for JS-side pull) ─────────────────────────────
 var drop_path_buf: [4096]u8 = undefined;
 var drop_path_len: usize = 0;
@@ -54,6 +83,9 @@ pub fn init() void {
     consecutive_slow = 0;
     hang_announced = false;
     perf_accum_ms = 0;
+    last_w = 1280;
+    last_h = 800;
+    last_bp_tier = classifyBpTier(last_w);
 }
 
 // ── Public API: notifications from engine event handlers ───────────────
@@ -72,6 +104,34 @@ pub fn notifyDrop(path: []const u8) void {
     @memcpy(drop_path_buf[0..n], path[0..n]);
     drop_path_len = n;
     fire("__ifttt_onSystemDrop()");
+}
+
+pub fn notifyResize(w: f32, h: f32) void {
+    last_w = w;
+    last_h = h;
+    // Tier-gated: SDL fires PIXEL_SIZE_CHANGED on every pixel of an active
+    // drag. Each fire() into V8 re-renders the classifier tree; without
+    // this gate, dragging the window edge locked the engine. Only fire
+    // when the breakpoint tier crosses (sm/md/lg/xl) — the JS side of
+    // setViewportWidth would early-return on intra-tier updates anyway,
+    // so coalescing here just avoids the V8 round-trip cost.
+    const new_tier = classifyBpTier(w);
+    if (new_tier == last_bp_tier) return;
+    last_bp_tier = new_tier;
+    var buf: [128]u8 = undefined;
+    const sentinel = std.fmt.bufPrintZ(&buf, "__ifttt_onSystemResize({d:.0},{d:.0})", .{ w, h }) catch return;
+    fire(sentinel);
+}
+
+// JS getters — let cart modules read the current viewport size on import
+// without having to wait for a resize event. Bind via host fns in
+// v8_bindings_core.zig.
+pub fn getViewportWidth() f32 {
+    return last_w;
+}
+
+pub fn getViewportHeight() f32 {
+    return last_h;
 }
 
 // JS getter — returns the last drop path. Bind via system_signals.getDropPath
@@ -120,7 +180,7 @@ pub fn tickPostPaint(dt_sec: f32) void {
     if (ms < SLOW_FRAME_MS) {
         consecutive_slow = 0;
         if (hang_announced) {
-            // Recovered — announce end of hang as count=0.
+            // Recovered — announce end of hang as count=0. Edge-only fire.
             hang_announced = false;
             fire("__ifttt_onSystemHang(0)");
         }

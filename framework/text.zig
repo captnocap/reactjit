@@ -216,6 +216,16 @@ pub const TextEngine = struct {
         return gpu_text.getCharAdvance(codepoint, size_px);
     }
 
+    /// How far this glyph's ink sticks out past its advance, on the right.
+    /// Always 0 for chars with right-side bearing >= 0; positive only for
+    /// glyphs whose ink overshoots their pen box. Add this for the LAST
+    /// glyph in a line so layout reports the visible right-edge instead of
+    /// the pen-end (otherwise auto-sized boxes paint with the last glyph
+    /// touching or crossing the right border).
+    fn cpRightOverhang(_: *TextEngine, codepoint: u32, size_px: u16) f32 {
+        return gpu_text.getCharRightOverhang(codepoint, size_px);
+    }
+
     fn drawLineWrapped(self: *TextEngine, text: []const u8, x: f32, y: f32, size_px: u16, max_width: f32, color: layout.Color, text_align: layout.TextAlign, letter_spacing: f32, line_height_override: f32, max_lines: u16) void {
         if (max_width <= 0) {
             self.drawText(text, x, y, size_px, color);
@@ -394,7 +404,14 @@ pub const TextEngine = struct {
             const separator_w = if (need_space) space_w + letter_spacing * 2 else @as(f32, 0);
             const with_word = line_width + separator_w + word_width;
 
-            if (max_width > 0 and word_width > max_width + WRAP_EPSILON) {
+            // Char-fallback only triggers when the word genuinely doesn't
+            // fit — overflow of >= ~one character. Sub-pixel drift between
+            // the layout pass that sized the parent and the paint pass that
+            // re-runs wordWrap inside it routinely produces 0.1–2px overflow
+            // on words that visually fit fine; splitting those at char level
+            // creates ugly single-char orphans (e.g. "enter" → "ente" + "r").
+            const CHAR_SPLIT_MIN_OVERFLOW: f32 = @as(f32, @floatFromInt(size_px)) * 0.6;
+            if (max_width > 0 and word_width > max_width + CHAR_SPLIT_MIN_OVERFLOW) {
                 // Single word too wide for the line — fall back to char-level
                 // wrap (mirrors framework/gpu/text.zig:drawSelectionRects so
                 // the selection rect and the painted text agree).
@@ -461,10 +478,15 @@ pub const TextEngine = struct {
 
     // ── Measurement ─────────────────────────────────────────────────────
 
-    /// Measure a line's width accounting for letter spacing.
+    /// Measure a line's visible width, accounting for letter spacing AND
+    /// the last glyph's right-side ink overhang. Reporting pure pen-end
+    /// (sum of advances) under-measures any string ending in a glyph whose
+    /// ink overshoots its advance (e.g. 'r' in some fonts), which is what
+    /// auto-sizes a chip too narrow and lets paint touch its right border.
     fn measureLineWidth(self: *TextEngine, text: []const u8, size_px: u16, letter_spacing: f32) f32 {
         var width: f32 = 0;
         var char_count: usize = 0;
+        var last_overhang: f32 = 0;
         var i: usize = 0;
         while (i < text.len) {
             // Inline glyph sentinel — occupies fontSize×fontSize square
@@ -472,11 +494,13 @@ pub const TextEngine = struct {
             if (sentinel_len > 0) {
                 width += @floatFromInt(size_px);
                 char_count += 1;
+                last_overhang = 0;
                 i += sentinel_len;
                 continue;
             }
             const ch = decodeUtf8(text[i..]);
             width += self.cpAdvance(ch.codepoint, size_px);
+            last_overhang = self.cpRightOverhang(ch.codepoint, size_px);
             char_count += 1;
             i += ch.len;
         }
@@ -484,7 +508,7 @@ pub const TextEngine = struct {
         if (letter_spacing != 0 and char_count > 1) {
             width += letter_spacing * @as(f32, @floatFromInt(char_count - 1));
         }
-        return width;
+        return width + last_overhang;
     }
 
     /// Measure a string's width and height at the given font size.

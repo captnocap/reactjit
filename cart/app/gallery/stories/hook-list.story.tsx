@@ -14,7 +14,7 @@ export const hookListSection = defineGallerySection({
     defineGalleryStory({
       id: "hook-list/default",
       title: "Hook List",
-      source: "cart/component-gallery/components/hook-list/HookList.tsx",
+      source: "cart/app/gallery/components/hook-list/HookList.tsx",
       status: 'draft',
       tags: ["card", "table"],
       variants: [

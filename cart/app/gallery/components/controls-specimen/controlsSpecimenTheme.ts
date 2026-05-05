@@ -36,27 +36,27 @@ type ControlThemeState = {
 const DEFAULT_CTRL: ControlThemeState = {
   pageWidth: 860,
   pagePadding: 24,
-  bg: '#0e0b09',
-  bg1: '#14100d',
-  bg2: '#1a1511',
-  bg3: '#1a1511',
-  ink: '#f2e8dc',
-  inkDim: '#b8a890',
-  inkDimmer: '#7a6e5d',
-  inkGhost: '#4a4238',
-  rule: '#3a2a1e',
-  ruleBright: '#8a4a20',
-  accent: '#d26a2a',
-  accentHot: '#e8501c',
-  ok: '#6aa390',
-  warn: '#d6a54a',
-  flag: '#e14a2a',
-  lilac: '#8a7fd4',
-  blue: '#5a8bd6',
-  shadow: 'rgba(210, 106, 42, 0.24)',
-  softAccent: 'rgba(210, 106, 42, 0.09)',
-  softOk: 'rgba(106, 163, 144, 0.09)',
-  softFlag: 'rgba(225, 74, 42, 0.09)',
+  bg: 'theme:bg',
+  bg1: 'theme:bg1',
+  bg2: 'theme:bg2',
+  bg3: 'theme:bg2',
+  ink: 'theme:ink',
+  inkDim: 'theme:inkDim',
+  inkDimmer: 'theme:inkDimmer',
+  inkGhost: 'theme:inkGhost',
+  rule: 'theme:rule',
+  ruleBright: 'theme:ruleBright',
+  accent: 'theme:accent',
+  accentHot: 'theme:accentHot',
+  ok: 'theme:ok',
+  warn: 'theme:warn',
+  flag: 'theme:flag',
+  lilac: 'theme:lilac',
+  blue: 'theme:blue',
+  shadow: 'theme:accent',
+  softAccent: 'theme:bg2',
+  softOk: 'theme:bg2',
+  softFlag: 'theme:bg2',
   mono: 'monospace',
   sans: 'sans-serif',
   cardTallMinHeight: 184,
@@ -86,23 +86,6 @@ function firstNumber(paths: string[], fallback: number): number {
     }
   }
   return fallback;
-}
-
-function hexToRgba(value: string, alpha: number, fallback: string): string {
-  const match = value.trim().match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
-  if (!match) return fallback;
-
-  const hex = match[1].length === 3
-    ? match[1]
-        .split('')
-        .map((part) => `${part}${part}`)
-        .join('')
-    : match[1];
-
-  const red = parseInt(hex.slice(0, 2), 16);
-  const green = parseInt(hex.slice(2, 4), 16);
-  const blue = parseInt(hex.slice(4, 6), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function syncControlTheme(): void {
@@ -135,10 +118,10 @@ function syncControlTheme(): void {
     flag,
     lilac,
     blue,
-    shadow: firstString(['decorative.shadow'], hexToRgba(accent, 0.24, DEFAULT_CTRL.shadow)),
-    softAccent: firstString(['decorative.softAccent'], hexToRgba(accent, 0.09, DEFAULT_CTRL.softAccent)),
-    softOk: firstString(['decorative.softOk'], hexToRgba(ok, 0.09, DEFAULT_CTRL.softOk)),
-    softFlag: firstString(['decorative.softFlag'], hexToRgba(flag, 0.09, DEFAULT_CTRL.softFlag)),
+    shadow: firstString(['decorative.shadow'], DEFAULT_CTRL.shadow),
+    softAccent: firstString(['decorative.softAccent', 'surfaces.bg2', 'surfaces.panel'], DEFAULT_CTRL.softAccent),
+    softOk: firstString(['decorative.softOk', 'surfaces.bg2', 'surfaces.panel'], DEFAULT_CTRL.softOk),
+    softFlag: firstString(['decorative.softFlag', 'surfaces.bg2', 'surfaces.panel'], DEFAULT_CTRL.softFlag),
     mono: firstString(['typography.fontMono'], DEFAULT_CTRL.mono),
     sans: firstString(['typography.fontSans'], DEFAULT_CTRL.sans),
   });
@@ -190,13 +173,13 @@ export function toneSoftBackground(tone: ControlTone = 'default'): string {
     case 'flag':
       return CTRL.softFlag;
     case 'warn':
-      return hexToRgba(CTRL.warn, 0.1, 'rgba(214, 165, 74, 0.1)');
+      return CTRL.bg2;
     case 'blue':
-      return hexToRgba(CTRL.blue, 0.1, 'rgba(90, 139, 214, 0.1)');
+      return CTRL.bg2;
     case 'lilac':
-      return hexToRgba(CTRL.lilac, 0.1, 'rgba(138, 127, 212, 0.1)');
+      return CTRL.bg2;
     case 'ink':
-      return hexToRgba(CTRL.ink, 0.08, 'rgba(242, 232, 220, 0.08)');
+      return CTRL.bg2;
     default:
       return CTRL.bg2;
   }

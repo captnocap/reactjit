@@ -8,7 +8,7 @@ export const verticalNotchFaderSection = defineGallerySection({
     defineGalleryStory({
       id: 'vertical-notch-fader/default',
       title: 'Vertical Notch Fader',
-      source: 'cart/component-gallery/components/controls-specimen/VerticalNotchFader.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/VerticalNotchFader.tsx',
       status: 'ready',
       summary: 'Discrete vertical fader made from stacked notch cells with optional peak caps.',
       tags: ['controls', 'fader', 'atom'],

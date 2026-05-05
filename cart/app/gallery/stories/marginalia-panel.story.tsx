@@ -8,7 +8,7 @@ export const marginaliaPanelSection = defineGallerySection({
     defineGalleryStory({
       id: "marginalia-panel/default",
       title: "Marginalia Panel",
-      source: "cart/component-gallery/components/controls-specimen/MarginaliaPanel.tsx",
+      source: "cart/app/gallery/components/controls-specimen/MarginaliaPanel.tsx",
       status: 'ready',
       summary: 'Mixed-orientation panel with vertical spine and horizontal body copy.',
       tags: ['controls', 'marginalia', 'mixed-axis', 'atom'],

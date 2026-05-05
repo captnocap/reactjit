@@ -239,7 +239,7 @@ export const userReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'id',
     targetField: 'userId',
     summary:
@@ -248,7 +248,7 @@ export const userReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Active settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'activeSettingsId',
     targetField: 'id',
     summary: 'Points at the currently-active profile. Swapping this is how profile switching happens.',
@@ -256,7 +256,7 @@ export const userReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Agent memories',
-    targetSource: 'cart/component-gallery/data/agent-memory.ts',
+    targetSource: 'cart/app/gallery/data/agent-memory.ts',
     sourceField: 'id',
     targetField: 'userId',
     summary:
@@ -265,7 +265,7 @@ export const userReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Bio + accommodations feed system messages',
-    targetSource: 'cart/component-gallery/data/system-message.ts',
+    targetSource: 'cart/app/gallery/data/system-message.ts',
     sourceField: 'bio + preferences.accommodations[]',
     targetField: 'body (interpolated)',
     summary:

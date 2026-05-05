@@ -66,15 +66,15 @@ export type SpreadsheetWorkbook = {
 };
 
 export const defaultSpreadsheetTheme: SpreadsheetGridTheme = {
-  bg: '#0f172a',
-  bgAlt: '#111827',
-  surface: '#1f2937',
-  border: '#334155',
-  text: '#e5e7eb',
-  textDim: '#94a3b8',
-  accent: '#22d3ee',
-  accentSoft: '#164e63',
-  error: '#ef4444',
+  bg: 'theme:bg2',
+  bgAlt: 'theme:bg2',
+  surface: 'theme:paperRule',
+  border: 'theme:inkGhost',
+  text: 'theme:ink',
+  textDim: 'theme:lilac',
+  accent: 'theme:tool',
+  accentSoft: 'theme:inkGhost',
+  error: 'theme:flag',
 };
 
 export const emptySpreadsheetNativeState: SpreadsheetNativeState = {

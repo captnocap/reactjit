@@ -8,7 +8,7 @@ export const stepSliderSection = defineGallerySection({
     defineGalleryStory({
       id: 'step-slider/default',
       title: 'Step Slider',
-      source: 'cart/component-gallery/components/controls-specimen/StepSlider.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/StepSlider.tsx',
       status: 'ready',
       summary: 'Named discrete slider with stop markers and active label highlighting.',
       tags: ['controls', 'slider', 'atom'],

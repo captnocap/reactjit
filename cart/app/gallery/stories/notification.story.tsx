@@ -20,14 +20,14 @@ export const notificationSection = defineGallerySection({
   },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/controls-specimen/StatusBadge.tsx',
-    'cart/component-gallery/components/controls-specimen/KeyValueBadge.tsx',
+    'cart/app/gallery/components/controls-specimen/StatusBadge.tsx',
+    'cart/app/gallery/components/controls-specimen/KeyValueBadge.tsx',
   ],
   stories: [
     defineGalleryStory({
       id: 'notification/default',
       title: 'Notification',
-      source: 'cart/component-gallery/components/notification/Notification.tsx',
+      source: 'cart/app/gallery/components/notification/Notification.tsx',
       status: 'draft',
       summary: 'One notification surface for inline, corner, overlay, and system notification approaches.',
       tags: ['panel', 'data', 'notification'],

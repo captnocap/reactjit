@@ -8,7 +8,7 @@ export const processCircleSection = defineGallerySection({
     defineGalleryStory({
       id: 'process-circle/default',
       title: 'Process Circle',
-      source: 'cart/component-gallery/components/process-circle/ProcessCircle.tsx',
+      source: 'cart/app/gallery/components/process-circle/ProcessCircle.tsx',
       status: 'draft',
       variants: [
         {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Col, Notification as HostNotification, Pressable, Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { AlertTriangle, BellRing, CheckCircle, CircleAlert, Clock, Info, MessageSquareText, Monitor, Pin, Send, X } from '@reactjit/runtime/icons/icons';
-import { Icon, type IconData } from '../../../sweatshop/components/icons';
+import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import { Body, Divider, Mono } from '../controls-specimen/controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor, toneSoftBackground } from '../controls-specimen/controlsSpecimenTheme';
 import { StatusBadge } from '../controls-specimen/StatusBadge';
@@ -176,7 +176,7 @@ function NotificationSurface({
         borderColor: color,
         backgroundColor: CTRL.bg2,
         shadowBlur: overlay ? 18 : 8,
-        shadowColor: '#000000',
+        shadowColor: 'theme:bg',
       }}
     >
       <Row style={{ width: '100%', gap: 11, alignItems: 'flex-start' }}>
@@ -272,10 +272,10 @@ function OverlayNotification(props: Omit<Parameters<typeof NotificationSurface>[
         height: 320,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#0c0a08',
+        backgroundColor: 'theme:bg',
       }}
     >
-      <Box style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#000000', opacity: 0.36 }} />
+      <Box style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'theme:bg', opacity: 0.36 }} />
       <NotificationSurface {...props} />
     </Box>
   );

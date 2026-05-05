@@ -7,11 +7,11 @@ import { classifiers as S } from '@reactjit/core';
 const PREVIEW_SIZE = 360;
 
 const STRATEGY_TONES: Record<string, string> = {
-  json: '#5a8bd6',
-  text: '#d6a54a',
-  binary: '#e4b0c4',
-  metadata: '#c4b5fd',
-  contract: '#8aca6a',
+  json: 'theme:blue',
+  text: 'theme:warn',
+  binary: 'theme:paper',
+  metadata: 'theme:ink',
+  contract: 'theme:pin',
 };
 
 function chipStyle(active: boolean, color: string) {
@@ -22,8 +22,8 @@ function chipStyle(active: boolean, color: string) {
     paddingBottom: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: active ? color : '#14100d',
-    backgroundColor: active ? '#0d1b25' : '#09131b',
+    borderColor: active ? color : 'theme:bg1',
+    backgroundColor: active ? 'theme:bg2' : 'theme:bg1',
   } as const;
 }
 
@@ -46,12 +46,12 @@ function MetricChip(props: { label: string; value: string; color?: string }) {
         gap: 2,
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: '#14100d',
-        backgroundColor: '#0e0b09',
+        borderColor: 'theme:bg1',
+        backgroundColor: 'theme:bg',
       }}
     >
-      <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>{props.label}</Text>
-      <Text style={{ fontSize: 11, color: props.color || '#b8a890', fontFamily: 'monospace' }}>{props.value}</Text>
+      <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>{props.label}</Text>
+      <Text style={{ fontSize: 11, color: props.color || 'theme:inkDim', fontFamily: 'monospace' }}>{props.value}</Text>
     </Col>
   );
 }
@@ -67,18 +67,18 @@ function EmptyPreview(props: { title: string; detail: string }) {
         gap: 8,
         borderRadius: 30,
         borderWidth: 1,
-        borderColor: '#14100d',
-        backgroundColor: '#040b11',
+        borderColor: 'theme:bg1',
+        backgroundColor: 'theme:bg',
       }}
     >
-      <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#b8a890' }}>{props.title}</Text>
-      <Text style={{ width: 240, fontSize: 10, color: '#b8a890', textAlign: 'center' }}>{props.detail}</Text>
+      <Text style={{ fontSize: 14, fontWeight: 'bold', color: 'theme:inkDim' }}>{props.title}</Text>
+      <Text style={{ width: 240, fontSize: 10, color: 'theme:inkDim', textAlign: 'center' }}>{props.detail}</Text>
     </Col>
   );
 }
 
 export function FileFingerprintWorkbench(props: { initialPath?: string; previewMode?: AstFingerprintRenderMode }) {
-  const initialDraftPath = props.initialPath || 'cart/component-gallery/components/ast-quilt/AstQuilt.tsx';
+  const initialDraftPath = props.initialPath || 'cart/app/gallery/components/ast-quilt/AstQuilt.tsx';
   const previewMode = props.previewMode || 'treemap';
   const [samplePaths] = useState<string[]>(() => {
     const available = listFingerprintSamplePaths();
@@ -130,7 +130,7 @@ export function FileFingerprintWorkbench(props: { initialPath?: string; previewM
     if (initial) beginLoad(initial);
   }, []);
 
-  const tone = result ? STRATEGY_TONES[result.strategy] || '#8aca6a' : '#8aca6a';
+  const tone = result ? STRATEGY_TONES[result.strategy] || 'theme:pin' : 'theme:pin';
 
   return (
     <Row style={{ width: '100%', flexWrap: 'wrap', gap: 18, alignItems: 'flex-start', padding: 14 }}>
@@ -143,19 +143,19 @@ export function FileFingerprintWorkbench(props: { initialPath?: string; previewM
           padding: 16,
           borderRadius: 22,
           borderWidth: 1,
-          borderColor: '#14100d',
-          backgroundColor: '#06121a',
+          borderColor: 'theme:bg1',
+          backgroundColor: 'theme:bg1',
         }}
       >
         <S.StackX2>
-          <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#b8a890' }}>Runtime Fingerprint</Text>
-          <Text style={{ fontSize: 10, color: '#b8a890' }}>
+          <Text style={{ fontSize: 15, fontWeight: 'bold', color: 'theme:inkDim' }}>Runtime Fingerprint</Text>
+          <Text style={{ fontSize: 10, color: 'theme:inkDim' }}>
             Point it at any local file path. The loader turns the file into a hierarchical object and paints the result on the spot.
           </Text>
         </S.StackX2>
 
         <S.StackX4>
-          <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>FILE PATH</Text>
+          <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>FILE PATH</Text>
           <Row style={{ width: '100%', gap: 8, alignItems: 'center' }}>
             <TextInput
               value={draftPath}
@@ -172,29 +172,29 @@ export function FileFingerprintWorkbench(props: { initialPath?: string; previewM
                 paddingRight: 10,
                 borderRadius: 10,
                 borderWidth: 1,
-                borderColor: '#14100d',
-                backgroundColor: '#0e0b09',
-                color: '#b8a890',
+                borderColor: 'theme:bg1',
+                backgroundColor: 'theme:bg',
+                color: 'theme:inkDim',
                 fontSize: 10,
                 fontFamily: 'monospace',
               }}
             />
-            <Pressable onPress={() => beginLoad()} style={chipStyle(true, '#8aca6a')}>
-              <Text style={{ fontSize: 10, color: '#d9ffe2', fontWeight: 'bold' }}>{pending ? 'Generating…' : 'Generate'}</Text>
+            <Pressable onPress={() => beginLoad()} style={chipStyle(true, 'theme:pin')}>
+              <Text style={{ fontSize: 10, color: 'theme:ink', fontWeight: 'bold' }}>{pending ? 'Generating…' : 'Generate'}</Text>
             </Pressable>
           </Row>
         </S.StackX4>
 
         <S.StackX4>
-          <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>QUICK FILES</Text>
+          <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>QUICK FILES</Text>
           <Row style={{ width: '100%', gap: 8, flexWrap: 'wrap' }}>
             {samplePaths.map((path) => (
               <Pressable
                 key={path}
                 onPress={() => beginLoad(path)}
-                style={chipStyle(activePath === path, '#5a8bd6')}
+                style={chipStyle(activePath === path, 'theme:blue')}
               >
-                <Text style={{ fontSize: 9, color: activePath === path ? '#d7f5ff' : '#9ec2d4', fontFamily: 'monospace' }}>
+                <Text style={{ fontSize: 9, color: activePath === path ? 'theme:ink' : 'theme:tool', fontFamily: 'monospace' }}>
                   {shortLabel(path)}
                 </Text>
               </Pressable>
@@ -218,12 +218,12 @@ export function FileFingerprintWorkbench(props: { initialPath?: string; previewM
             padding: 12,
             borderRadius: 14,
             borderWidth: 1,
-            borderColor: '#14100d',
-            backgroundColor: '#0e0b09',
+            borderColor: 'theme:bg1',
+            backgroundColor: 'theme:bg',
           }}
         >
-          <Text style={{ fontSize: 9, color: '#b8a890', fontWeight: 'bold' }}>STATUS</Text>
-          <Text style={{ fontSize: 10, color: pending ? '#d6a54a' : error ? '#e4b0c4' : '#b8a890', fontFamily: 'monospace' }}>
+          <Text style={{ fontSize: 9, color: 'theme:inkDim', fontWeight: 'bold' }}>STATUS</Text>
+          <Text style={{ fontSize: 10, color: pending ? 'theme:warn' : error ? 'theme:paper' : 'theme:inkDim', fontFamily: 'monospace' }}>
             {pending
               ? `generating ${activePath || draftPath}`
               : error
@@ -232,13 +232,13 @@ export function FileFingerprintWorkbench(props: { initialPath?: string; previewM
                   ? `ready ${result.strategy} ${result.file.count} nodes`
                   : 'idle'}
           </Text>
-          <Text style={{ fontSize: 10, color: '#8ea8ba' }}>
+          <Text style={{ fontSize: 10, color: 'theme:lilac' }}>
             {result?.note ||
               (previewMode === 'binary-squares'
                 ? 'Binary preview maps each AST line span against the file average, then paints 1x1 through 9x9 bit squares.'
                 : 'JSON files become object trees, text/code becomes line-and-token structure, binary files fall back to sampled byte windows.')}
           </Text>
-          <Text style={{ fontSize: 9, color: '#64839a', fontFamily: 'monospace' }}>{activePath || draftPath || 'no path selected'}</Text>
+          <Text style={{ fontSize: 9, color: 'theme:ok', fontFamily: 'monospace' }}>{activePath || draftPath || 'no path selected'}</Text>
         </Col>
       </Col>
 
@@ -252,7 +252,7 @@ export function FileFingerprintWorkbench(props: { initialPath?: string; previewM
         ) : (
           <EmptyPreview title="No File Loaded" detail="Pick a quick file or enter a path and generate a live fingerprint tile." />
         )}
-        <Text style={{ width: PREVIEW_SIZE, fontSize: 10, color: '#b8a890', textAlign: 'center' }}>
+        <Text style={{ width: PREVIEW_SIZE, fontSize: 10, color: 'theme:inkDim', textAlign: 'center' }}>
           {previewMode === 'binary-squares'
             ? 'Square side length is driven only by that span length versus the file average.'
             : 'The tile uses the same renderer as the gallery art pieces; only the file-to-tree adapter changes.'}

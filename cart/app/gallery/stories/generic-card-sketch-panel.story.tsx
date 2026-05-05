@@ -13,7 +13,7 @@ export const genericCardSketchPanelSection = defineGallerySection({
     defineGalleryStory({
       id: "generic-card-sketch-panel/default",
       title: "Generic Card Sketch Panel",
-      source: "cart/component-gallery/components/generic-card/GenericCardSketchPanel.tsx",
+      source: "cart/app/gallery/components/generic-card/GenericCardSketchPanel.tsx",
       status: 'ready',
       summary: 'Monospace schematic panel used as the visual center block of the card.',
       tags: ['card', 'diagram', 'atom'],

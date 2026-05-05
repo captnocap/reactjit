@@ -10,17 +10,17 @@ export const dexTreeExplorerSection = defineGallerySection({
   },
   kind: "top-level",
   composedOf: [
-    "cart/component-gallery/components/dex-frame/DexFrame.tsx",
-    "cart/component-gallery/components/dex-search-bar/DexSearchBar.tsx",
-    "cart/component-gallery/components/dex-breadcrumbs/DexBreadcrumbs.tsx",
-    "cart/component-gallery/components/dex-tree-row/DexTreeRow.tsx",
-    "cart/component-gallery/components/dex-type-badge/DexTypeBadge.tsx",
+    "cart/app/gallery/components/dex-frame/DexFrame.tsx",
+    "cart/app/gallery/components/dex-search-bar/DexSearchBar.tsx",
+    "cart/app/gallery/components/dex-breadcrumbs/DexBreadcrumbs.tsx",
+    "cart/app/gallery/components/dex-tree-row/DexTreeRow.tsx",
+    "cart/app/gallery/components/dex-type-badge/DexTypeBadge.tsx",
   ],
   stories: [
     defineGalleryStory({
       id: "dex-tree-explorer/default",
       title: "Dex Tree Explorer",
-      source: "cart/component-gallery/components/dex-tree-explorer/DexTreeExplorer.tsx",
+      source: "cart/app/gallery/components/dex-tree-explorer/DexTreeExplorer.tsx",
       status: 'ready',
       summary: 'Tree data explorer composed from the shared explorer frame, search strip, breadcrumbs, hierarchical rows, and type badges.',
       tags: ["data-explorer", "tree", "composition"],

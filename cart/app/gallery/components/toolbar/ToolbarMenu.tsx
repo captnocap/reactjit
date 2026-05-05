@@ -1,5 +1,5 @@
 import { Box, Col, Pressable, Row } from '@reactjit/runtime/primitives';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { Body, Divider, Mono } from '../controls-specimen/controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor, toneSoftBackground } from '../controls-specimen/controlsSpecimenTheme';
 import type { ToolbarMenuItem } from '../../data/toolbar';
@@ -102,7 +102,7 @@ export function ToolbarMenu({
         borderColor: CTRL.ruleBright,
         backgroundColor: CTRL.bg2,
         shadowBlur: 8,
-        shadowColor: '#000000',
+        shadowColor: 'theme:bg',
       }}
     >
       {items.map((item, index) => (

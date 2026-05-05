@@ -13,7 +13,7 @@ export const episodicMemorySection = defineGallerySection({
     defineGalleryDataStory({
       id: "episodic-memory/catalog",
       title: "Episodic Memory",
-      source: "cart/component-gallery/data/episodic-memory.ts",
+      source: "cart/app/gallery/data/episodic-memory.ts",
       format: 'data',
       status: 'draft',
       tags: ["memory", "session", "history"],

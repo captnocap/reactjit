@@ -129,7 +129,7 @@ export const systemMessageReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary: 'System messages are profile-scoped — a work profile can carry confidentiality clauses that the personal profile does not.',
@@ -137,7 +137,7 @@ export const systemMessageReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Presets (linkage)',
-    targetSource: 'cart/component-gallery/data/inference-preset.ts',
+    targetSource: 'cart/app/gallery/data/inference-preset.ts',
     sourceField: 'id',
     targetField: 'systemMessageId',
     summary: 'Presets may reference a SystemMessage instead of carrying an inline body.',
@@ -145,7 +145,7 @@ export const systemMessageReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Skills (linkage)',
-    targetSource: 'cart/component-gallery/data/skill.ts',
+    targetSource: 'cart/app/gallery/data/skill.ts',
     sourceField: 'id',
     targetField: 'systemMessageId',
     summary: 'Skills attach a system message that frames their operation.',
@@ -153,7 +153,7 @@ export const systemMessageReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Roles (linkage)',
-    targetSource: 'cart/component-gallery/data/role.ts',
+    targetSource: 'cart/app/gallery/data/role.ts',
     sourceField: 'id',
     targetField: 'baseSystemMessageId',
     summary: 'Roles attach a base system message applied to every turn in that persona.',

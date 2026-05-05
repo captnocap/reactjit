@@ -9,14 +9,19 @@
 // If the hash differs, the old row is replaced — embeddings are
 // derived state, not authored state.
 //
-// Storage: sqlite-table with a BLOB column for the vector. Native
-// SQLite has no ANN index — for small N (<10k), in-app cosine
-// similarity is fine. For larger sets, the sqlite-vec extension adds
-// vector indexes inside the same SQLite file.
+// Storage: column-store table with a FLOAT[<dimension>] column and an
+// HNSW index on the vector column. The embedded-local path is DuckDB
+// with the VSS extension; service-backed deployments use Postgres with
+// pgvector. For small N (<10k), brute-force cosine over the column is
+// fine; HNSW pays off above that. The vector field on this row is the
+// portable JSON projection (base64-packed float32). Storage layers may
+// keep the on-disk vector as a native typed column; the row shape here
+// is the wire shape, not the storage shape.
 
 import type { GalleryDataReference, JsonObject } from '../types';
 
 export type EmbeddingEntityKind =
+  // curated tiers
   | 'semantic-memory'
   | 'episodic-memory'
   | 'procedural-memory'
@@ -26,7 +31,11 @@ export type EmbeddingEntityKind =
   | 'skill'
   | 'research-finding'
   | 'plan'
-  | 'task';
+  | 'task'
+  // raw-chunk tier (the four corpora that get indexed wholesale)
+  | 'chat-log-chunk'
+  | 'code-chunk'
+  | 'document-chunk';
 
 export type Embedding = {
   id: string;
@@ -131,6 +140,42 @@ export const embeddingMockData: Embedding[] = [
     tokenCount: 92,
     createdAt: '2026-04-22T15:11:00Z',
   },
+  {
+    id: 'emb_clc_sess_claude_01_0019_qwen3_4b',
+    entityKind: 'chat-log-chunk',
+    entityId: 'clc_sess_claude_01_0019',
+    fieldPath: 'displayText',
+    embeddingModelId: 'qwen3-embedding-4b',
+    dimension: 1024,
+    vector: STUB_VECTOR_1024,
+    contentHash: 'sha256:1a2b3c4d5e6f70819a0b1c2d3e4f5061',
+    tokenCount: 142,
+    createdAt: '2026-04-22T14:42:10Z',
+  },
+  {
+    id: 'emb_cc_runtime_useHotState_0_qwen3_4b',
+    entityKind: 'code-chunk',
+    entityId: 'cc_runtime_useHotState_0_200',
+    fieldPath: 'displayText',
+    embeddingModelId: 'qwen3-embedding-4b',
+    dimension: 1024,
+    vector: STUB_VECTOR_1024,
+    contentHash: 'sha256:c3d4e5f60718293a4b5c6d7e8f9001122',
+    tokenCount: 1480,
+    createdAt: '2026-04-24T08:00:30Z',
+  },
+  {
+    id: 'emb_doc_claude_md_0_qwen3_4b',
+    entityKind: 'document-chunk',
+    entityId: 'doc_claude_md_root_0',
+    fieldPath: 'displayText',
+    embeddingModelId: 'qwen3-embedding-4b',
+    dimension: 1024,
+    vector: STUB_VECTOR_1024,
+    contentHash: 'sha256:0a1b2c3d4e5f60718293a4b5c6d7e8f9',
+    tokenCount: 132,
+    createdAt: '2026-04-25T09:00:30Z',
+  },
 ];
 
 export const embeddingSchema: JsonObject = {
@@ -168,6 +213,9 @@ export const embeddingSchema: JsonObject = {
           'research-finding',
           'plan',
           'task',
+          'chat-log-chunk',
+          'code-chunk',
+          'document-chunk',
         ],
       },
       entityId: { type: 'string' },
@@ -186,7 +234,7 @@ export const embeddingReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Embedding model',
-    targetSource: 'cart/component-gallery/data/embedding-model.ts',
+    targetSource: 'cart/app/gallery/data/embedding-model.ts',
     sourceField: 'embeddingModelId',
     targetField: 'id',
     summary:
@@ -195,7 +243,7 @@ export const embeddingReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Source entity (polymorphic)',
-    targetSource: 'cart/component-gallery/data/(varies by entityKind)',
+    targetSource: 'cart/app/gallery/data/(varies by entityKind)',
     sourceField: '(entityKind, entityId)',
     targetField: 'id',
     summary:
@@ -204,7 +252,7 @@ export const embeddingReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Retrieval queries (matched against)',
-    targetSource: 'cart/component-gallery/data/retrieval-query.ts',
+    targetSource: 'cart/app/gallery/data/retrieval-query.ts',
     sourceField: 'id',
     targetField: 'results[].embeddingId',
     summary: 'Retrieval results record which embedding row scored against the query.',

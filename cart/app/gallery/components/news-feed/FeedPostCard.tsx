@@ -27,18 +27,18 @@ export type FeedPostCardProps = {
 };
 
 const COLORS = {
-  card: '#18120e',
-  cardRaised: '#211915',
-  cardSubtle: '#100c09',
-  rule: '#3a2a1e',
-  ruleBright: '#8a4a20',
-  ink: '#f2e8dc',
-  inkDim: '#b8a890',
-  inkFaint: '#7a6e5d',
-  accent: '#d26a2a',
-  repost: '#6aa390',
-  comment: '#5a8bd6',
-  share: '#8a7fd4',
+  card: 'theme:bg1',
+  cardRaised: 'theme:bg2',
+  cardSubtle: 'theme:bg',
+  rule: 'theme:rule',
+  ruleBright: 'theme:ruleBright',
+  ink: 'theme:ink',
+  inkDim: 'theme:inkDim',
+  inkFaint: 'theme:inkDimmer',
+  accent: 'theme:accent',
+  repost: 'theme:ok',
+  comment: 'theme:blue',
+  share: 'theme:lilac',
 };
 
 function formatRelativeTime(iso: string): string {
@@ -87,10 +87,10 @@ function VisibilityBadge({ value }: { value: NewsFeedPost['visibility'] }) {
         borderRadius: 5,
         backgroundColor: COLORS.cardRaised,
         borderWidth: 1,
-        borderColor: value === 'public' ? '#6aa390' : COLORS.rule,
+        borderColor: value === 'public' ? 'theme:ok' : COLORS.rule,
       }}
     >
-      <Text style={{ fontSize: 10, fontWeight: 'bold', color: value === 'public' ? '#8ecfa7' : COLORS.inkDim }}>
+      <Text style={{ fontSize: 10, fontWeight: 'bold', color: value === 'public' ? 'theme:tool' : COLORS.inkDim }}>
         {label}
       </Text>
     </Box>
@@ -132,8 +132,8 @@ function AttachmentPreview({ attachment }: { attachment: NewsFeedAttachment }) {
         </Col>
         <Row style={{ gap: 5, alignItems: 'center' }}>
           <Box style={{ width: 34, height: 4, borderRadius: 2, backgroundColor: attachment.accentColor }} />
-          <Box style={{ width: 64, height: 4, borderRadius: 2, backgroundColor: '#4a4238' }} />
-          <Box style={{ width: 22, height: 4, borderRadius: 2, backgroundColor: '#4a4238' }} />
+          <Box style={{ width: 64, height: 4, borderRadius: 2, backgroundColor: 'theme:inkGhost' }} />
+          <Box style={{ width: 22, height: 4, borderRadius: 2, backgroundColor: 'theme:inkGhost' }} />
         </Row>
       </Col>
     </Row>
@@ -269,7 +269,7 @@ export function FeedPostCard({
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: 6,
-              backgroundColor: post.bookmarkedByViewer ? '#241b2d' : 'transparent',
+              backgroundColor: post.bookmarkedByViewer ? 'theme:paperInk' : 'theme:transparent',
             }}
           >
             <Icon icon={Bookmark} size={16} color={post.bookmarkedByViewer ? COLORS.share : COLORS.inkFaint} strokeWidth={2.15} />

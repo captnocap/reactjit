@@ -315,21 +315,21 @@ export const researchReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Project',
-    targetSource: 'cart/component-gallery/data/project.ts',
+    targetSource: 'cart/app/gallery/data/project.ts',
     sourceField: 'projectId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Planning phase',
-    targetSource: 'cart/component-gallery/data/planning-phase.ts',
+    targetSource: 'cart/app/gallery/data/planning-phase.ts',
     sourceField: 'planPhaseId',
     targetField: 'id',
     summary: 'Discovery-kind phases typically carry one or more Research rows.',
@@ -337,7 +337,7 @@ export const researchReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Task',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'taskId',
     targetField: 'id',
     summary: 'Tasks with kind=research attach back to their Research row.',
@@ -345,7 +345,7 @@ export const researchReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Promoted findings → Semantic memory',
-    targetSource: 'cart/component-gallery/data/semantic-memory.ts',
+    targetSource: 'cart/app/gallery/data/semantic-memory.ts',
     sourceField: 'findings[].promotedToSemanticMemoryId',
     targetField: 'id',
     summary: 'When a finding crosses confidence + reinforcement thresholds it promotes to a SemanticMemory entry.',

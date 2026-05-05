@@ -2,7 +2,7 @@ import { Col, Row, Text } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { Latex } from '../components/latex/Latex';
 
-const SURFACE = '#171b31';
+const SURFACE = 'theme:bg2';
 const LATEX_SMOKE_TEST = String.raw`\frac{\sqrt{x_1^2 + x_2^2}}{\sum_{i=1}^{3} i} = \begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}`;
 
 function Stage({ children }: { children: any }) {
@@ -13,7 +13,7 @@ function Stage({ children }: { children: any }) {
         gap: 14,
         backgroundColor: SURFACE,
         borderWidth: 1,
-        borderColor: '#4d5372',
+        borderColor: 'theme:paperInkDim',
         borderRadius: 6,
         minWidth: 360,
       }}
@@ -25,7 +25,7 @@ function Stage({ children }: { children: any }) {
 
 function Caption({ children }: { children: any }) {
   return (
-    <Text style={{ fontFamily: 'monospace', fontSize: 10, color: '#8f98b8' }}>{children}</Text>
+    <Text style={{ fontFamily: 'monospace', fontSize: 10, color: 'theme:lilac' }}>{children}</Text>
   );
 }
 
@@ -41,7 +41,7 @@ export const latexSection = defineGallerySection({
     defineGalleryStory({
       id: 'latex/default',
       title: 'LaTeX',
-      source: 'cart/component-gallery/components/latex/Latex.tsx',
+      source: 'cart/app/gallery/components/latex/Latex.tsx',
       status: 'draft',
       tags: ['math', 'latex', 'text'],
       variants: [
@@ -72,11 +72,11 @@ export const latexSection = defineGallerySection({
             <Stage>
               <Caption>inline inside a text flow</Caption>
               <Row style={{ alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <Text style={{ color: '#dfe6ff', fontSize: 14 }}>Given</Text>
+                <Text style={{ color: 'theme:ink', fontSize: 14 }}>Given</Text>
                 <Latex source="a^2 + b^2 = c^2" inline />
-                <Text style={{ color: '#dfe6ff', fontSize: 14 }}>, the hypotenuse is</Text>
+                <Text style={{ color: 'theme:ink', fontSize: 14 }}>, the hypotenuse is</Text>
                 <Latex source="\sqrt{a^2 + b^2}" inline />
-                <Text style={{ color: '#dfe6ff', fontSize: 14 }}>.</Text>
+                <Text style={{ color: 'theme:ink', fontSize: 14 }}>.</Text>
               </Row>
             </Stage>
           ),

@@ -8,7 +8,7 @@ export const choiceListSection = defineGallerySection({
     defineGalleryStory({
       id: "choice-list/default",
       title: "Choice List",
-      source: "cart/component-gallery/components/controls-specimen/ChoiceList.tsx",
+      source: "cart/app/gallery/components/controls-specimen/ChoiceList.tsx",
       status: 'ready',
       summary: 'Selectable list rows with square, round, or bracketed markers.',
       tags: ['controls', 'selection', 'radio', 'atom'],

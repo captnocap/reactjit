@@ -9,7 +9,7 @@ export const documentToolbarSection = defineGallerySection({
     defineGalleryStory({
       id: 'document-toolbar/default',
       title: 'Document Toolbar',
-      source: 'cart/component-gallery/components/document-viewer/DocumentToolbar.tsx',
+      source: 'cart/app/gallery/components/document-viewer/DocumentToolbar.tsx',
       status: 'draft',
       summary: 'Top strip with title, active section, outline toggle and zoom controls.',
       tags: ['header', 'panel'],

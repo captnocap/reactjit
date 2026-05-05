@@ -13,7 +13,7 @@ export const genericCardTitleBlockSection = defineGallerySection({
     defineGalleryStory({
       id: "generic-card-title-block/default",
       title: "Generic Card Title Block",
-      source: "cart/component-gallery/components/generic-card/GenericCardTitleBlock.tsx",
+      source: "cart/app/gallery/components/generic-card/GenericCardTitleBlock.tsx",
       status: 'ready',
       summary: 'Primary headline plus supporting subtitle block.',
       tags: ['card', 'title', 'atom'],

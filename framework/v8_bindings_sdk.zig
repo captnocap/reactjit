@@ -16,8 +16,24 @@ const HTTP_MAX_HEADERS: usize = 16;
 
 var g_http_init_done: bool = false;
 var g_page_fetch_init_done: bool = false;
-const HttpPending = struct { rid: []u8, stream: bool, download: bool = false };
+
+/// Zig-side stream consumer for net_http. Lets in-process callers (e.g.
+/// openai_compat_sdk) hook the same poll/dispatch loop the JS-facing
+/// __http_stream_open path uses, without re-implementing curl wrangling.
+pub const HttpZigCallbacks = struct {
+    onChunk: *const fn (ctx: *anyopaque, data: []const u8) void,
+    onEnd: *const fn (ctx: *anyopaque, status: u16, err: ?[]const u8) void,
+    ctx: *anyopaque,
+};
+
+const HttpPending = struct {
+    rid: []u8,
+    stream: bool,
+    download: bool = false,
+    zig: ?HttpZigCallbacks = null,
+};
 var g_http_pending: ?std.AutoHashMap(u32, HttpPending) = null;
+var g_http_zig_next_id: u32 = 0xF000_0000;
 var g_page_pending: ?std.AutoHashMap(u32, []u8) = null;
 
 var g_browse_init_done: bool = false;
@@ -1032,6 +1048,43 @@ fn emitChannelPayload(channel: []const u8, payload: []const u8) void {
     v8rt.callGlobal2Str("__ffiEmit", chan_z, payload_z);
 }
 
+/// Register a Zig-side streaming HTTP consumer. The request runs through
+/// net_http's worker pool; chunks land in the shared response_queue and
+/// get dispatched by tickDrain. When tickDrain sees a response whose id
+/// has zig callbacks attached, it calls the callbacks instead of emitting
+/// to JS via __ffiEmit.
+///
+/// Returns the assigned id on success, null on failure. Caller doesn't
+/// need to retain the id — it's used only for routing the response.
+/// Callbacks fire on the main thread (during tickDrain).
+pub fn httpStartZigStream(
+    opts: net_http.RequestOpts,
+    callbacks: HttpZigCallbacks,
+) ?u32 {
+    if (!g_http_init_done) {
+        net_http.init();
+        g_http_init_done = true;
+    }
+    g_http_zig_next_id +%= 1;
+    if (g_http_zig_next_id < 0xF000_0000) g_http_zig_next_id = 0xF000_0000;
+    const id = g_http_zig_next_id;
+    const alloc = std.heap.page_allocator;
+    const rid_copy = alloc.dupe(u8, "") catch return null;
+    httpPending().put(id, .{
+        .rid = rid_copy,
+        .stream = true,
+        .zig = callbacks,
+    }) catch {
+        alloc.free(rid_copy);
+        return null;
+    };
+    if (!net_http.request(id, opts)) {
+        if (httpPending().fetchRemove(id)) |entry| alloc.free(entry.value.rid);
+        return null;
+    }
+    return id;
+}
+
 // Call this from the V8 app's main loop per tick.
 pub fn tickDrain() void {
     if (g_http_init_done) {
@@ -1041,6 +1094,22 @@ pub fn tickDrain() void {
         for (buf[0..n]) |resp| {
             const pending = httpPending().get(resp.id) orelse continue;
             var ch_buf: [256]u8 = undefined;
+
+            if (pending.zig) |zcb| {
+                switch (resp.response_type) {
+                    .chunk => zcb.onChunk(zcb.ctx, resp.bodySlice()),
+                    .complete => {
+                        zcb.onEnd(zcb.ctx, resp.status, null);
+                        if (httpPending().fetchRemove(resp.id)) |entry| alloc.free(entry.value.rid);
+                    },
+                    .err => {
+                        zcb.onEnd(zcb.ctx, 0, resp.errorSlice());
+                        if (httpPending().fetchRemove(resp.id)) |entry| alloc.free(entry.value.rid);
+                    },
+                    .progress => {},
+                }
+                continue;
+            }
 
             if (pending.download) {
                 // Download mode: progress chunks ride

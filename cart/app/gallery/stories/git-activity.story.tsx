@@ -13,7 +13,7 @@ export const gitActivitySection = defineGallerySection({
     defineGalleryDataStory({
       id: "git-activity/catalog",
       title: "Git Activity",
-      source: "cart/component-gallery/data/git-activity.ts",
+      source: "cart/app/gallery/data/git-activity.ts",
       format: 'data',
       status: 'ready',
       tags: ["data"],

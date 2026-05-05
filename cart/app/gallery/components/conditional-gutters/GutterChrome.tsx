@@ -14,18 +14,18 @@ import {
 } from '@reactjit/runtime/icons/icons';
 
 const SHELL = {
-  bg: '#0c0b09',
-  panel: '#13100d',
-  panel2: '#1c1712',
-  rule: '#2d271f',
-  ruleBright: '#5a4b3a',
-  ink: '#f2e8dc',
-  muted: '#9a8c78',
-  faint: '#665c50',
-  amber: '#f2b35d',
-  green: '#79d891',
-  teal: '#6bd6d1',
-  pink: '#d98cac',
+  bg: 'theme:bg',
+  panel: 'theme:bg1',
+  panel2: 'theme:bg2',
+  rule: 'theme:paperRule',
+  ruleBright: 'theme:inkGhost',
+  ink: 'theme:ink',
+  muted: 'theme:inkDim',
+  faint: 'theme:paperInkDim',
+  amber: 'theme:warn',
+  green: 'theme:pin',
+  teal: 'theme:tool',
+  pink: 'theme:atch',
 };
 
 function Mono({
@@ -67,7 +67,7 @@ function CloseButton({ onPress }: { onPress: () => void }) {
           borderRadius: 6,
           borderWidth: 1,
           borderColor: SHELL.rule,
-          backgroundColor: '#17130f',
+          backgroundColor: 'theme:bg2',
         }}
       >
         <Icon icon={X} size={13} color={SHELL.muted} strokeWidth={2.2} />
@@ -141,7 +141,7 @@ function NavItem({ icon, label, active, color }: { icon: IconData; label: string
         borderRadius: 6,
         borderWidth: 1,
         borderColor: active ? color : SHELL.rule,
-        backgroundColor: active ? '#201a12' : '#100e0b',
+        backgroundColor: active ? 'theme:bg2' : 'theme:bg',
       }}
     >
       <Icon icon={icon} size={13} color={active ? color : SHELL.faint} strokeWidth={2.2} />
@@ -163,7 +163,7 @@ function MetricRail({ label, value, color }: { label: string; value: string; col
         paddingBottom: 7,
         borderWidth: 1,
         borderColor: SHELL.rule,
-        backgroundColor: '#0f0d0a',
+        backgroundColor: 'theme:bg',
       }}
     >
       <Mono color={SHELL.muted} size={9}>{label}</Mono>
@@ -245,7 +245,7 @@ export function CommandGutter({ onClose }: { onClose: () => void }) {
           borderRadius: 7,
           borderWidth: 1,
           borderColor: SHELL.ruleBright,
-          backgroundColor: '#0f0d0a',
+          backgroundColor: 'theme:bg',
         }}
       >
         <Mono color={SHELL.ink} size={11}>Command palette / quick switcher</Mono>
@@ -307,7 +307,7 @@ export function EditorMock() {
           minHeight: 0,
           borderWidth: 1,
           borderColor: SHELL.rule,
-          backgroundColor: '#090806',
+          backgroundColor: 'theme:bg',
           padding: 12,
           gap: 7,
         }}

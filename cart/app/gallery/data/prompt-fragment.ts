@@ -307,14 +307,14 @@ export const promptFragmentReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Compositions (slot fragments)',
-    targetSource: 'cart/component-gallery/data/composition.ts',
+    targetSource: 'cart/app/gallery/data/composition.ts',
     sourceField: 'id',
     targetField: 'slots[].sources[].ref (when kind=src_prompt-fragment)',
     summary:
@@ -323,7 +323,7 @@ export const promptFragmentReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Source kind registry',
-    targetSource: 'cart/component-gallery/data/composition-source-kind.ts',
+    targetSource: 'cart/app/gallery/data/composition-source-kind.ts',
     sourceField: '(registered as src_prompt-fragment)',
     targetField: 'id',
     summary:

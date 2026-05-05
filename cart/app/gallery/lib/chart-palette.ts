@@ -1,36 +1,36 @@
 // Chart palette mirrored against the Cockpit theme token contract.
-// See cart/component-gallery/themes/cockpit/theme-classifier.ts.
+// See cart/app/gallery/themes/cockpit/theme-classifier.ts.
 // Keys are chart-idiomatic (pink/cyan/blue…); values are cockpit tokens so
 // swapping themes only requires re-mapping here.
 export const PALETTE = {
   // Category tones (cockpit data channels)
-  pink: '#d48aa7',       // theme: atch
-  cyan: '#6ac3d6',       // theme: tool
-  blue: '#5a8bd6',       // theme: sys
-  indigo: '#8a7fd4',
-  purple: '#8a7fd4',     // theme: ctx / lilac
-  teal: '#6aa390',       // theme: usr / ok
-  orange: '#d26a2a',     // theme: ast / accent
-  orangeHot: '#e8501c',  // theme: accentHot
-  red: '#e14a2a',        // theme: flag / wnd
-  green: '#8aca6a',      // theme: pin
-  amber: '#d6a54a',      // theme: warn
+  pink: 'theme:atch',       // theme: atch
+  cyan: 'theme:tool',       // theme: tool
+  blue: 'theme:blue',       // theme: sys
+  indigo: 'theme:lilac',
+  purple: 'theme:lilac',     // theme: ctx / lilac
+  teal: 'theme:ok',       // theme: usr / ok
+  orange: 'theme:accent',     // theme: ast / accent
+  orangeHot: 'theme:accentHot',  // theme: accentHot
+  red: 'theme:flag',        // theme: flag / wnd
+  green: 'theme:pin',      // theme: pin
+  amber: 'theme:warn',      // theme: warn
 
   // Tonal variants (darken / lighten of the core category tones)
-  pinkLight: '#d48aa7',
-  pinkDark: '#d48aa7',
-  cyanLight: '#6ac3d6',
-  cyanDark: '#6ac3d6',
-  blueLight: '#5a8bd6',
-  blueDark: '#5a8bd6',
+  pinkLight: 'theme:atch',
+  pinkDark: 'theme:atch',
+  cyanLight: 'theme:tool',
+  cyanDark: 'theme:tool',
+  blueLight: 'theme:blue',
+  blueDark: 'theme:blue',
 
   // Ink ladder (cockpit text)
-  slate: '#7a6e5d',      // theme: inkDimmer
-  slateLight: '#b8a890', // theme: inkDim
-  white: '#f2e8dc',      // theme: ink
+  slate: 'theme:inkDimmer',      // theme: inkDimmer
+  slateLight: 'theme:inkDim', // theme: inkDim
+  white: 'theme:ink',      // theme: ink
 
   // Surface
-  bg: '#0e0b09',         // theme: bg
+  bg: 'theme:bg',         // theme: bg
 };
 
 // Ordered soft → hot. Single-series charts default to index 0 (pink/atch),

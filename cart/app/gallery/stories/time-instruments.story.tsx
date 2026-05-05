@@ -14,7 +14,7 @@ export const timeInstrumentsSection = defineGallerySection({
     defineGalleryStory({
       id: 'time-instruments/default',
       title: 'Time Instruments',
-      source: 'cart/component-gallery/components/time-instruments/TimeInstruments.tsx',
+      source: 'cart/app/gallery/components/time-instruments/TimeInstruments.tsx',
       status: 'ready',
       summary: 'Live clock atoms composed from the gallery classifier vocabulary.',
       tags: ['time', 'clock', 'binary', 'motion', 'atom'],

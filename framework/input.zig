@@ -51,7 +51,7 @@ pub const InputState = struct {
     editable: bool = true,
     secure: bool = false,
     max_length: u32 = 0, // 0 = unlimited
-    submit_on_enter: bool = false, // multiline only
+    submit_on_enter: bool = true, // multiline only — Enter submits, Shift+Enter inserts newline (chat-composer default; code editors that want raw Enter-newline opt out via setSubmitOnEnter(id, false))
 };
 
 var inputs: [MAX_INPUTS]InputState = [_]InputState{.{}} ** MAX_INPUTS;

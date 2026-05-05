@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { math } from '@reactjit/runtime/hooks';
 import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
+import { useAnimationsDisabled } from '../../lib/useSpring';
 
 // TAU is resolved at module load by calling into framework/math.zig. Keeps the
 // constant's source-of-truth in zig; also exercises the JS→Zig bridge once
@@ -73,16 +74,16 @@ const SPECIMENS: {
 ];
 
 const MODE_COLORS: Record<GraphMode, string> = {
-  sine: '#6aa390',
-  ripple: '#d48aa7',
-  noise: '#8a7fd4',
-  lissajous: '#d26a2a',
+  sine: 'theme:ok',
+  ripple: 'theme:atch',
+  noise: 'theme:lilac',
+  lissajous: 'theme:accent',
 };
 
 const BADGE_COLORS: Record<SizeBadge, { bg: string; text: string; border: string }> = {
-  small: { bg: '#eadfca', text: '#6aa390', border: '#6aa390' },
-  medium: { bg: '#f2e8dc', text: '#5a8bd6', border: '#5a8bd6' },
-  large: { bg: '#f2e8dc', text: '#8a4a20', border: '#d6a54a' },
+  small: { bg: 'theme:paperAlt', text: 'theme:ok', border: 'theme:ok' },
+  medium: { bg: 'theme:ink', text: 'theme:blue', border: 'theme:blue' },
+  large: { bg: 'theme:ink', text: 'theme:ruleBright', border: 'theme:warn' },
 };
 
 // Mode functions now route trig + noise through framework/math.zig via the
@@ -271,9 +272,9 @@ function GraphSpecimen({
         padding: 12,
         gap: 8,
         borderRadius: 8,
-        backgroundColor: '#eadfca',
+        backgroundColor: 'theme:paperAlt',
         borderWidth: 1,
-        borderColor: '#3a2a1e',
+        borderColor: 'theme:rule',
       }}
     >
       <Row
@@ -298,9 +299,9 @@ function GraphSpecimen({
           justifyContent: 'center',
           padding: PLOT_PADDING,
           borderRadius: 6,
-          backgroundColor: '#0e0b09',
+          backgroundColor: 'theme:bg',
           borderWidth: PLOT_BORDER,
-          borderColor: '#14100d',
+          borderColor: 'theme:bg1',
         }}
       >
         <Col style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -330,9 +331,11 @@ export function BrailleGraph(props: BrailleGraphProps) {
   const mode: GraphMode = props?.data?.mode ?? 'sine';
   const specimen = SPECIMENS.find((s) => s.key === mode) ?? SPECIMENS[0];
 
+  const animationsDisabled = useAnimationsDisabled();
   const [t, setT] = useState(0);
 
   useEffect(() => {
+    if (animationsDisabled) return;
     const host = globalThis as any;
     const raf = typeof host.requestAnimationFrame === 'function' ? host.requestAnimationFrame.bind(host) : null;
     let id: any = 0;
@@ -349,7 +352,7 @@ export function BrailleGraph(props: BrailleGraphProps) {
       if (raf && typeof host.cancelAnimationFrame === 'function') host.cancelAnimationFrame(id);
       if (!raf) clearTimeout(id);
     };
-  }, []);
+  }, [animationsDisabled]);
 
   return <GraphSpecimen specimen={specimen} t={t} />;
 }

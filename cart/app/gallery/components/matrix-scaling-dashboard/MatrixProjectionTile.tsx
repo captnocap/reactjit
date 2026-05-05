@@ -34,17 +34,17 @@ export function MatrixProjectionTile(props: {
               paddingTop: 4,
               paddingBottom: 4,
               borderRadius: 6,
-              backgroundColor: isNative ? '#113f32' : '#0a2130',
+              backgroundColor: isNative ? 'theme:paperRule' : 'theme:bg2',
               borderWidth: 1,
-              borderColor: isNative ? '#6aa390' : '#173d53',
+              borderColor: isNative ? 'theme:ok' : 'theme:inkGhost',
             }}
           >
-            <Text style={{ fontSize: 10, fontWeight: 'bold', color: isNative ? '#b2ffde' : '#68d9ff', fontFamily: 'monospace' }}>
+            <Text style={{ fontSize: 10, fontWeight: 'bold', color: isNative ? 'theme:paperAlt' : 'theme:tool', fontFamily: 'monospace' }}>
               {`${props.size}×${props.size}`}
             </Text>
           </Box>
 
-          <Text style={{ fontSize: 10, color: '#537282', fontFamily: 'monospace', textTransform: 'uppercase' }}>
+          <Text style={{ fontSize: 10, color: 'theme:paperInkDim', fontFamily: 'monospace', textTransform: 'uppercase' }}>
             {deviceLabel(props.size)}
           </Text>
         </Row>
@@ -56,9 +56,9 @@ export function MatrixProjectionTile(props: {
           height: props.size + 12,
           padding: 5,
           borderRadius: 12,
-          backgroundColor: '#02060c',
+          backgroundColor: 'theme:bg',
           borderWidth: 1,
-          borderColor: isNative ? '#6aa390' : '#29495b',
+          borderColor: isNative ? 'theme:ok' : 'theme:inkGhost',
         }}
       >
         <Effect
@@ -68,7 +68,7 @@ export function MatrixProjectionTile(props: {
       </Box>
 
       {props.showLabel ? (
-        <Text style={{ fontSize: 9, color: '#6f8798', fontFamily: 'monospace', textTransform: 'uppercase' }}>
+        <Text style={{ fontSize: 9, color: 'theme:ok', fontFamily: 'monospace', textTransform: 'uppercase' }}>
           {projectionLabel(props.size)}
         </Text>
       ) : null}

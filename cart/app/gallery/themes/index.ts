@@ -14,7 +14,7 @@ export const galleryThemeSystems: RegisteredGalleryThemeSystem[] = [
   {
     id: 'cockpit',
     title: 'Cockpit',
-    source: 'cart/component-gallery/themes/cockpit/CockpitThemeSystem.ts',
+    source: 'cart/app/gallery/themes/cockpit/CockpitThemeSystem.ts',
     system: cockpitThemeSystem,
   },
   // component-gallery:theme-systems

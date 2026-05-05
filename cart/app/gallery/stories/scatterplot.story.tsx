@@ -15,7 +15,7 @@ export const scatterplotSection = defineGallerySection({
     defineGalleryStory({
       id: 'scatterplot/default',
       title: 'Scatterplot',
-      source: 'cart/component-gallery/components/scatterplot/Scatterplot.tsx',
+      source: 'cart/app/gallery/components/scatterplot/Scatterplot.tsx',
       status: 'draft',
       variants: [
         {

@@ -13,7 +13,7 @@ export const codeSnippetSection = defineGallerySection({
     defineGalleryDataStory({
       id: "code-snippet/catalog",
       title: "Code Snippet",
-      source: "cart/component-gallery/data/code-snippet.ts",
+      source: "cart/app/gallery/data/code-snippet.ts",
       format: 'data',
       status: 'ready',
       tags: ["data"],

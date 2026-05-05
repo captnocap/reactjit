@@ -13,7 +13,7 @@ export const outcomeRubricSection = defineGallerySection({
     defineGalleryDataStory({
       id: "outcome-rubric/catalog",
       title: "Outcome Rubric",
-      source: "cart/component-gallery/data/outcome-rubric.ts",
+      source: "cart/app/gallery/data/outcome-rubric.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

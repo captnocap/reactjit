@@ -112,9 +112,9 @@ React's reconciler emits CREATE/APPEND/UPDATE mutation commands; the Zig framewo
 
 ```bash
 ./scripts/ship <cart-name>          # cart/<name>.tsx → zig-out/bin/<name> (self-extracting)
-./scripts/ship <cart-name> -d       # debug build, raw ELF
-./scripts/ship <cart-name> --raw    # release, raw ELF
 ```
+
+There are no debug or raw-ELF flags. `-d` and `--raw` were removed on 2026-05-04 — `-d` produced a binary that crashed on launch, and `--raw` was never wired up.
 
 What happens: esbuild bundles TSX → `bundle.js`, Zig compiles the cart host with the bundle embedded via `@embedFile`, Linux packaging bundles all `.so` deps into a self-extracting shell wrapper, macOS produces a `.app` bundle.
 

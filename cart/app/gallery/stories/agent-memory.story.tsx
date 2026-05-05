@@ -13,7 +13,7 @@ export const agentMemorySection = defineGallerySection({
     defineGalleryDataStory({
       id: "agent-memory/catalog",
       title: "Agent Memory",
-      source: "cart/component-gallery/data/agent-memory.ts",
+      source: "cart/app/gallery/data/agent-memory.ts",
       format: 'data',
       status: 'draft',
       tags: ["memory", "identity"],

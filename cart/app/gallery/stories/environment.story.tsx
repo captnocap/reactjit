@@ -13,7 +13,7 @@ export const environmentSection = defineGallerySection({
     defineGalleryDataStory({
       id: "environment/catalog",
       title: "Environment",
-      source: "cart/component-gallery/data/environment.ts",
+      source: "cart/app/gallery/data/environment.ts",
       format: 'data',
       status: 'draft',
       tags: ["environment", "project", "runtime"],

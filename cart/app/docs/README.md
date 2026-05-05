@@ -56,6 +56,10 @@ Each is a `.so`. The cartridge ABI is the fence between them.
 - [07-supervision-vocabulary.md](07-supervision-vocabulary.md) —
   plan/task schemas, blindness, retirement policy, hook layer, M3A
   memory layers.
+- [12-the-three-roles.md](12-the-three-roles.md) — assistant +
+  supervisor + worker, three time horizons, three memories,
+  advisory-only signaling between them, memory partitioning across
+  roles.
 - [08-recipes.md](08-recipes.md) — recipe file shape (graph + arming),
   Strict Supervisor recipe, Goal review socket default.
 - [09-the-four-principles.md](09-the-four-principles.md) — design

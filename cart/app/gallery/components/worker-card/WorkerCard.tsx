@@ -1,9 +1,12 @@
 // WorkerCard — gallery component bound to the `Worker` data shape.
 //
-// Source of truth: cart/component-gallery/data/worker.ts
+// Source of truth: cart/app/gallery/data/worker.ts
 //
 // Top-level fields on `Worker`:
 //   id: string
+//   supervisorId: string
+//   crewSlotId?: string
+//   crewMode: WorkerCrewMode
 //   userId: string
 //   workspaceId: string
 //   projectId?: string
@@ -49,8 +52,8 @@ export type WorkerCardProps = {
 export function WorkerCard({ row }: WorkerCardProps) {
   return (
     <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>Worker Card</Text>
-      <Text style={{ fontSize: 12, color: '#657185' }}>Worker: {String((row as { id?: unknown }).id ?? '—')}</Text>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'theme:bg2' }}>Worker Card</Text>
+      <Text style={{ fontSize: 12, color: 'theme:paperInkDim' }}>Worker: {String((row as { id?: unknown }).id ?? '—')}</Text>
     </Col>
   );
 }

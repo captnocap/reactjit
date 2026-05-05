@@ -25,10 +25,11 @@ export function Heatmap(props: HeatmapProps) {
   const [hovered, setHovered] = useState<{ r: number; c: number } | null>(null);
 
   function heatColor(t: number): string {
-    const r = Math.round(26 + t * (240 - 26));
-    const g = Math.round(26 + t * (98 - 26));
-    const b = Math.round(46 + t * (146 - 46));
-    return `rgb(${r},${g},${b})`;
+    if (t >= 0.82) return 'theme:accentHot';
+    if (t >= 0.62) return 'theme:accent';
+    if (t >= 0.42) return 'theme:warn';
+    if (t >= 0.22) return 'theme:blue';
+    return 'theme:bg2';
   }
 
   return (

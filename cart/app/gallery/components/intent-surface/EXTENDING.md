@@ -31,10 +31,10 @@ The vocabulary spans four places. To add or change a tag you touch all four.
 | Concern             | File                                                                     |
 |---------------------|--------------------------------------------------------------------------|
 | Parser allowlist    | `runtime/intent/parser.ts` — `NodeKind`, `ALLOWED`, `normalizeName()`    |
-| Component (visual)  | `cart/component-gallery/components/intent-surface/Intent<Tag>.tsx`        |
-| AST → component     | `cart/component-gallery/components/intent-surface/IntentSurface.tsx`      |
-| Vocabulary contract | `cart/component-gallery/components/intent-surface/types.ts` — `IntentTag` |
-| Gallery story       | `cart/component-gallery/stories/intent-surface.story.tsx`                 |
+| Component (visual)  | `cart/app/gallery/components/intent-surface/Intent<Tag>.tsx`        |
+| AST → component     | `cart/app/gallery/components/intent-surface/IntentSurface.tsx`      |
+| Vocabulary contract | `cart/app/gallery/components/intent-surface/types.ts` — `IntentTag` |
+| Gallery story       | `cart/app/gallery/stories/intent-surface.story.tsx`                 |
 | Model instructions  | `cart/chat-loom.tsx` — `SYSTEM_PROMPT`                                    |
 
 The runtime entry `runtime/intent/render.tsx` is a thin re-export of
@@ -49,7 +49,7 @@ chip.
 
 ### 1. Write the component
 
-`cart/component-gallery/components/intent-surface/IntentPill.tsx`:
+`cart/app/gallery/components/intent-surface/IntentPill.tsx`:
 
 ```tsx
 import { Box, Text } from '@reactjit/runtime/primitives';
@@ -102,7 +102,7 @@ fail soft instead of crashing.
 
 ### 3. Hook it up in the dispatcher
 
-`cart/component-gallery/components/intent-surface/IntentSurface.tsx`:
+`cart/app/gallery/components/intent-surface/IntentSurface.tsx`:
 
 ```ts
 import { IntentPill } from './IntentPill';
@@ -120,7 +120,7 @@ collapse children to a string when the tag is leaf-shaped.
 
 ### 4. Update the contract
 
-`cart/component-gallery/components/intent-surface/types.ts`:
+`cart/app/gallery/components/intent-surface/types.ts`:
 
 ```ts
 export type IntentTag =
@@ -134,7 +134,7 @@ This is the source-of-truth list. If a tag isn't here, it isn't supported.
 
 ### 5. Add a gallery variant
 
-`cart/component-gallery/stories/intent-surface.story.tsx`, in the `atoms` story
+`cart/app/gallery/stories/intent-surface.story.tsx`, in the `atoms` story
 variants:
 
 ```tsx
@@ -204,10 +204,10 @@ The gallery already has well-shaped atoms for visual idioms we'll reuse. When
 adding a tag, see if a gallery component already does what you want before
 inventing a new visual:
 
-- `cart/component-gallery/components/basic-tooltip/` — hover affordance
-- `cart/component-gallery/components/controls-specimen/StatusBadge.tsx` — pill/badge precedent
-- `cart/component-gallery/components/grid-spinners/` — loading affordance
-- `cart/component-gallery/components/area-chart/`, `bar-chart/`, etc. — when
+- `cart/app/gallery/components/basic-tooltip/` — hover affordance
+- `cart/app/gallery/components/controls-specimen/StatusBadge.tsx` — pill/badge precedent
+- `cart/app/gallery/components/grid-spinners/` — loading affordance
+- `cart/app/gallery/components/area-chart/`, `bar-chart/`, etc. — when
   adding `<Chart kind=... data=...>`, these are the implementations to wrap
 
 ---

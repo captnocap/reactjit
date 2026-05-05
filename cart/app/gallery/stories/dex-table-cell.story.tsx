@@ -13,7 +13,7 @@ export const dexTableCellSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-table-cell/default",
       title: "Dex Table Cell",
-      source: "cart/component-gallery/components/dex-table-cell/DexTableCell.tsx",
+      source: "cart/app/gallery/components/dex-table-cell/DexTableCell.tsx",
       status: 'ready',
       summary: 'Fixed-width editable-table cell visual with selected and semantic tone states.',
       tags: ["data-explorer", "atom"],

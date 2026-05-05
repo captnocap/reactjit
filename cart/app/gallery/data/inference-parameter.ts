@@ -109,7 +109,12 @@ export const inferenceParameterMockData: InferenceParameter[] = [
     role: 'budget',
     type: 'integer',
     range: { min: 1024, max: 64_000 },
-    applicableKinds: ['anthropic-api-key'],
+    // claude-code-cli reaches the same Anthropic API via OAuth, so the
+    // thinking surface applies identically. Earlier revisions of this
+    // catalog entry omitted claude-code-cli, which made the Settings
+    // probe-driven UI hide reasoning controls for that kind despite
+    // them working at the API level.
+    applicableKinds: ['anthropic-api-key', 'claude-code-cli'],
     applicableFamilies: ['claude-4'],
     excludedModelIds: ['claude-haiku-4-5'],
     summary:
@@ -157,7 +162,10 @@ export const inferenceParameterMockData: InferenceParameter[] = [
     type: 'enum',
     enum: ['enabled', 'disabled'],
     default: 'disabled',
-    applicableKinds: ['anthropic-api-key'],
+    // Same applicability as thinking.budget_tokens — Anthropic API
+    // surface, reachable via either an API key or the claude-code CLI's
+    // OAuth path.
+    applicableKinds: ['anthropic-api-key', 'claude-code-cli'],
     applicableFamilies: ['claude-4'],
     summary: 'Extended-thinking toggle. Paired with thinking.budget_tokens.',
   },
@@ -271,7 +279,7 @@ export const inferenceParameterReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Connection kinds',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'applicableKinds[]',
     targetField: 'kind',
     summary:
@@ -280,7 +288,7 @@ export const inferenceParameterReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Models',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'applicableModelIds[] / excludedModelIds[] / applicableFamilies[]',
     targetField: 'id / family',
     summary:
@@ -289,7 +297,7 @@ export const inferenceParameterReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Preset values',
-    targetSource: 'cart/component-gallery/data/inference-preset.ts',
+    targetSource: 'cart/app/gallery/data/inference-preset.ts',
     sourceField: 'name',
     targetField: 'values[].parameter',
     summary:

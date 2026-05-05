@@ -15,7 +15,7 @@ export const dexSpatialRingSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-spatial-ring/default",
       title: "Dex Spatial Ring",
-      source: "cart/component-gallery/components/dex-spatial-ring/DexSpatialRing.tsx",
+      source: "cart/app/gallery/components/dex-spatial-ring/DexSpatialRing.tsx",
       status: 'ready',
       summary: 'Graph primitive ring atom for radial spatial data maps.',
       tags: ["data-explorer", "spatial", "atom"],
@@ -24,7 +24,7 @@ export const dexSpatialRingSection = defineGallerySection({
           id: 'default',
           name: 'Default',
           render: () => (
-            <Box style={{ width: 220, height: 150, backgroundColor: '#0e0b09' }}>
+            <Box style={{ width: 220, height: 150, backgroundColor: 'theme:bg' }}>
               <S.BareGraph>
                 <DexSpatialRing x={110} y={76} r={58} />
                 <DexSpatialRing x={110} y={76} r={28} hot dashed />

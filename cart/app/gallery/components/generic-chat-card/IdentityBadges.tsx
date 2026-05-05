@@ -10,7 +10,7 @@ export function PathologyBadge({ label }: { label: string }) {
         paddingRight: 6,
         paddingTop: 2,
         paddingBottom: 2,
-        backgroundColor: '#3a2a1e',
+        backgroundColor: 'theme:rule',
         borderWidth: 1,
         borderColor: CHAT_CARD.pink,
         borderRadius: 3,
@@ -29,9 +29,9 @@ export function AchievementBadge({ label }: { label: string }) {
         paddingRight: 6,
         paddingTop: 2,
         paddingBottom: 2,
-        backgroundColor: '#3a2a1e',
+        backgroundColor: 'theme:rule',
         borderWidth: 1,
-        borderColor: '#8a4a20',
+        borderColor: 'theme:ruleBright',
         borderRadius: 3,
       }}
     >

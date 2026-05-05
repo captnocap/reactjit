@@ -8,7 +8,7 @@ export const verticalStripFaderSection = defineGallerySection({
     defineGalleryStory({
       id: 'vertical-strip-fader/default',
       title: 'Vertical Strip Fader',
-      source: 'cart/component-gallery/components/controls-specimen/VerticalStripFader.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/VerticalStripFader.tsx',
       status: 'ready',
       summary: 'Channel-strip style vertical fader with interior slot ticks and framed thumb.',
       tags: ['controls', 'fader', 'atom'],

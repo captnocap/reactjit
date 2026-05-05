@@ -35,7 +35,7 @@ export function DexTreeRow({
         gap: 7,
         paddingLeft: 8,
         paddingRight: 8,
-        backgroundColor: selected ? '#14100d' : 'transparent',
+        backgroundColor: selected ? 'theme:bg1' : 'theme:transparent',
         borderLeftWidth: selected ? 2 : 0,
         borderColor: DEX_COLORS.accent,
       }}

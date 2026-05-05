@@ -18,6 +18,12 @@ tools/zig/zig
 tools/zig/lib/
 tools/zig/cache/
 
+# ── Staged postgres bundle ────────────────────────────────
+# Run scripts/stage-pg-bundle to populate from the system postgres.
+# Binaries from `scripts/ship` already embed this — only repo
+# contributors need it on disk for dev mode.
+.pg-bundle/
+
 # Compiled benchmark binaries (rebuilt from .zig source)
 tsz/bench_lua_stress
 tsz/bench_lua_worker
@@ -267,3 +273,4 @@ deps/zig-v8/v8-build/
 # Test screenshots (local artifacts)
 tests/
 
+$HOME

@@ -10,9 +10,9 @@ export function KillSwitch() {
         height: 18,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#14100d',
+        backgroundColor: 'theme:bg1',
         borderWidth: 1,
-        borderColor: '#4a4238',
+        borderColor: 'theme:inkGhost',
         borderRadius: 4,
       }}
     >

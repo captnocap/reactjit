@@ -264,7 +264,7 @@ export const workerEventReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Worker Session',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'session_id',
     targetField: 'id',
     summary:

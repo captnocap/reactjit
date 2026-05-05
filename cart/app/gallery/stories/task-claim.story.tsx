@@ -13,7 +13,7 @@ export const taskClaimSection = defineGallerySection({
     defineGalleryDataStory({
       id: "task-claim/catalog",
       title: "Task Claim",
-      source: "cart/component-gallery/data/task-claim.ts",
+      source: "cart/app/gallery/data/task-claim.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

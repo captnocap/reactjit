@@ -270,7 +270,7 @@ export const interpretationReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Source (polymorphic)',
-    targetSource: 'cart/component-gallery/data/(varies by sourceRefKind)',
+    targetSource: 'cart/app/gallery/data/(varies by sourceRefKind)',
     sourceField: '(sourceRefKind, sourceRef)',
     targetField: 'id',
     summary: 'The user input being interpreted. Polymorphic across user-message, reference-artifact, etc.',
@@ -278,14 +278,14 @@ export const interpretationReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Interpreting model',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'interpretedByModelId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Superseded interpretation',
-    targetSource: 'cart/component-gallery/data/interpretation.ts',
+    targetSource: 'cart/app/gallery/data/interpretation.ts',
     sourceField: 'supersedesInterpretationId',
     targetField: 'id',
     summary:
@@ -294,7 +294,7 @@ export const interpretationReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Output rows (polymorphic)',
-    targetSource: 'cart/component-gallery/data/(varies by output.targetEntityKind)',
+    targetSource: 'cart/app/gallery/data/(varies by output.targetEntityKind)',
     sourceField: 'outputs[].targetEntityId',
     targetField: 'id',
     summary:

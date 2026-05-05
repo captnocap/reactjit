@@ -8,7 +8,7 @@ export const progressSection = defineGallerySection({
     defineGalleryStory({
       id: 'progress/default',
       title: 'Progress',
-      source: 'cart/component-gallery/components/progress/Progress.tsx',
+      source: 'cart/app/gallery/components/progress/Progress.tsx',
       status: 'draft',
       variants: [
         {

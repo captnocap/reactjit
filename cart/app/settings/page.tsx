@@ -1,7 +1,8 @@
-// settings/page.tsx — 7-route settings shell.
+// settings/page.tsx — multi-section settings shell.
 //
 // Routes (in nav order):
 //   user       — identity, preferences, accommodations
+//   customize  — runtime theme token reassignment
 //   providers  — credentials only (api keys, urls, local model folder)
 //   models     — unified registry across all providers + modalities
 //   actions    — role → model bindings (assistant, embed, title-gen, …)
@@ -18,8 +19,9 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { Box, ScrollView } from '@reactjit/runtime/primitives';
+import { useNavigate, useRoute } from '@reactjit/runtime/router';
 import { classifiers as S } from '@reactjit/core';
-import { useHudInsets, useSettingsSection } from '../shell';
+import { setSettingsSection, useHudInsets, useSettingsSection } from '../shell';
 
 import {
   USER_ID, SETTINGS_ID, PRIVACY_ID,
@@ -27,21 +29,25 @@ import {
 } from './shared';
 
 import UserRoute      from './routes/user';
+import CustomizeRoute from './routes/customize';
 import ProvidersRoute from './routes/providers';
 import ModelsRoute    from './routes/models';
 import ActionsRoute   from './routes/actions';
 import DataRoute      from './routes/data';
 import PrivacyRoute   from './routes/privacy';
 import AboutRoute     from './routes/about';
+import TestsRoute     from './routes/tests';
 
 export const NAV_ITEMS = [
   { id: 'user',      label: 'User' },
+  { id: 'customize', label: 'Customize' },
   { id: 'providers', label: 'Providers' },
   { id: 'models',    label: 'Models' },
   { id: 'actions',   label: 'Actions' },
   { id: 'data',      label: 'Data' },
   { id: 'privacy',   label: 'Privacy' },
   { id: 'about',     label: 'About' },
+  { id: 'tests',     label: 'Tests' },
 ];
 
 export type SettingsCtx = {
@@ -74,6 +80,7 @@ export default function SettingsPage() {
   const modelStore      = useModelStore();
 
   const [active] = useSettingsSection();
+  const route = useRoute();
   const [user, setUser]               = useState<any | null>(null);
   const [settings, setSettings]       = useState<any | null>(null);
   const [privacy, setPrivacy]         = useState<any | null>(null);
@@ -99,6 +106,12 @@ export default function SettingsPage() {
     })();
     return () => { cancelled = true; };
   }, [reloadKey]);
+
+  useEffect(() => {
+    if (route.path === '/settings/customize') {
+      setSettingsSection('customize');
+    }
+  }, [route.path]);
 
   const ctx: SettingsCtx = {
     user, settings, privacy, connections, models,
@@ -126,12 +139,14 @@ export default function SettingsPage() {
               flexDirection: 'column', gap: 20,
             }}>
               {active === 'user'      && <UserRoute />}
+              {active === 'customize' && <CustomizeRoute />}
               {active === 'providers' && <ProvidersRoute />}
               {active === 'models'    && <ModelsRoute />}
               {active === 'actions'   && <ActionsRoute />}
               {active === 'data'      && <DataRoute />}
               {active === 'privacy'   && <PrivacyRoute />}
               {active === 'about'     && <AboutRoute />}
+              {active === 'tests'     && <TestsRoute />}
             </Box>
           </Box>
         </ScrollView>
@@ -142,6 +157,7 @@ export default function SettingsPage() {
 
 export function SettingsNav({ maxHeight }: { maxHeight?: number }) {
   const [active, setActive] = useSettingsSection();
+  const navigate = useNavigate();
   return (
     <Box style={{
       width: '100%',
@@ -162,8 +178,12 @@ export function SettingsNav({ maxHeight }: { maxHeight?: number }) {
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === active;
         const Pill = isActive ? S.NavPillActive : S.NavPill;
+        const onPress = () => {
+          setActive(item.id);
+          navigate.push(item.id === 'customize' ? '/settings/customize' : '/settings');
+        };
         return (
-          <Pill key={item.id} onPress={() => setActive(item.id)}>
+          <Pill key={item.id} onPress={onPress}>
             <S.Body>{item.label}</S.Body>
           </Pill>
         );

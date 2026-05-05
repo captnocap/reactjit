@@ -8,7 +8,7 @@ export const pyramidChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'pyramid-chart/default',
       title: 'Pyramid Chart',
-      source: 'cart/component-gallery/components/pyramid-chart/PyramidChart.tsx',
+      source: 'cart/app/gallery/components/pyramid-chart/PyramidChart.tsx',
       status: 'draft',
       variants: [
         {

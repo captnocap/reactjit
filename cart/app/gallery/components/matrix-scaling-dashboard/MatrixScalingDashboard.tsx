@@ -1,6 +1,8 @@
 import { useRef } from 'react';
 import { Box, Col, Effect, Row, Text } from '@reactjit/runtime/primitives';
 import { classifiers as S } from '@reactjit/core';
+import { galleryColorToRgb } from '../../theme-color';
+import { useGalleryTheme } from '../../gallery-theme';
 
 export type MatrixScalingDashboardProps = {
   theme?: Partial<MatrixScalingTheme>;
@@ -15,7 +17,7 @@ const INJECTION_SIZE = 10;
 const INITIAL_SEED = 0x51f15eed;
 
 type PanelSize = (typeof PANEL_SIZES)[number];
-type MatrixColorStop = readonly [number, readonly [number, number, number]];
+type MatrixColorStop = readonly [number, string];
 
 type Simulation = {
   current: Uint8Array;
@@ -62,40 +64,40 @@ export type MatrixScalingTheme = {
 };
 
 export const DEFAULT_MATRIX_SCALING_THEME: MatrixScalingTheme = {
-  pageBackground: '#02060d',
-  pageBorder: '#163041',
-  glowPrimary: '#073c43',
-  glowSecondary: '#1d0f35',
-  headerRule: '#102330',
-  titleText: '#f4f8fb',
-  subtitleText: '#4fb5d4',
-  bodyText: '#75889a',
-  chipBackground: '#091826',
-  chipBorder: '#17354b',
-  chipText: '#85a4ba',
-  glyphOn: '#31d3a0',
-  glyphOff: '#0f5676',
-  glyphBorder: '#143746',
-  labelBackground: '#08283b',
-  labelBackgroundNative: '#103d33',
-  labelBorder: '#154861',
-  labelBorderNative: '#6aa390',
-  labelText: '#63dcff',
-  labelTextNative: '#b2ffdf',
-  deviceText: '#4a6675',
-  panelBackground: '#020409',
-  panelBorder: '#33495a',
-  panelBorderNative: '#6aa390',
-  footerText: '#6b8294',
-  scanlineColor: '#f2e8dc',
+  pageBackground: 'theme:bg',
+  pageBorder: 'theme:paperRule',
+  glowPrimary: 'theme:paperInk',
+  glowSecondary: 'theme:bg2',
+  headerRule: 'theme:bg2',
+  titleText: 'theme:ink',
+  subtitleText: 'theme:tool',
+  bodyText: 'theme:ok',
+  chipBackground: 'theme:bg2',
+  chipBorder: 'theme:inkGhost',
+  chipText: 'theme:lilac',
+  glyphOn: 'theme:ok',
+  glyphOff: 'theme:inkGhost',
+  glyphBorder: 'theme:paperRule',
+  labelBackground: 'theme:bg2',
+  labelBackgroundNative: 'theme:paperInk',
+  labelBorder: 'theme:inkGhost',
+  labelBorderNative: 'theme:ok',
+  labelText: 'theme:tool',
+  labelTextNative: 'theme:paperAlt',
+  deviceText: 'theme:paperInkDim',
+  panelBackground: 'theme:bg',
+  panelBorder: 'theme:inkGhost',
+  panelBorderNative: 'theme:ok',
+  footerText: 'theme:ok',
+  scanlineColor: 'theme:ink',
   scanlineOpacity: 0.08,
   scanlineShade: 0.92,
   heatStops: [
-    [0.0, [5, 10, 21]],
-    [0.333, [14, 165, 233]],
-    [0.666, [192, 38, 211]],
-    [0.999, [52, 211, 153]],
-    [1.0, [255, 255, 255]],
+    [0.0, 'theme:bg'],
+    [0.333, 'theme:blue'],
+    [0.666, 'theme:lilac'],
+    [0.999, 'theme:ok'],
+    [1.0, 'theme:ink'],
   ],
 };
 
@@ -110,7 +112,7 @@ export function resolveMatrixScalingTheme(overrides?: Partial<MatrixScalingTheme
 
 function themeSignature(theme: MatrixScalingTheme): string {
   const stops = theme.heatStops
-    .map((stop) => `${stop[0]}:${stop[1][0]}-${stop[1][1]}-${stop[1][2]}`)
+    .map((stop) => `${stop[0]}:${galleryColorToRgb(stop[1]).join('-')}`)
     .join('|');
 
   return [
@@ -189,16 +191,17 @@ function lerpByte(a: number, b: number, t: number): number {
 }
 
 function createColorMap(heatStops: readonly MatrixColorStop[]): Uint8Array {
+  const resolvedStops = heatStops.map((stop) => [stop[0], galleryColorToRgb(stop[1])] as const);
   const map = new Uint8Array(256 * 4);
   for (let i = 0; i < 256; i++) {
     const t = i / 255;
-    let start = heatStops[0];
-    let end = heatStops[heatStops.length - 1];
+    let start = resolvedStops[0];
+    let end = resolvedStops[resolvedStops.length - 1];
 
-    for (let index = 0; index < heatStops.length - 1; index++) {
-      if (t >= heatStops[index][0] && t <= heatStops[index + 1][0]) {
-        start = heatStops[index];
-        end = heatStops[index + 1];
+    for (let index = 0; index < resolvedStops.length - 1; index++) {
+      if (t >= resolvedStops[index][0] && t <= resolvedStops[index + 1][0]) {
+        start = resolvedStops[index];
+        end = resolvedStops[index + 1];
         break;
       }
     }
@@ -488,9 +491,12 @@ function MatrixViewport(props: {
 }
 
 function useMatrixSimulation(theme: MatrixScalingTheme): Simulation {
+  const { activeThemeId } = useGalleryTheme();
+  const signature = `${activeThemeId}::${themeSignature(theme)}`;
   const simulationRef = useRef<Simulation | null>(null);
-  if (!simulationRef.current || simulationRef.current.themeSignature !== themeSignature(theme)) {
+  if (!simulationRef.current || simulationRef.current.themeSignature !== signature) {
     simulationRef.current = createSimulation(theme);
+    simulationRef.current.themeSignature = signature;
   }
   return simulationRef.current;
 }

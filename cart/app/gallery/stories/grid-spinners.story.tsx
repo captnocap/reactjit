@@ -8,7 +8,7 @@ export const gridSpinnersSection = defineGallerySection({
     defineGalleryStory({
       id: 'grid-spinners/default',
       title: 'Grid Spinners',
-      source: 'cart/component-gallery/components/grid-spinners/GridSpinners.tsx',
+      source: 'cart/app/gallery/components/grid-spinners/GridSpinners.tsx',
       status: 'draft',
       tags: ['animation'],
       variants: [

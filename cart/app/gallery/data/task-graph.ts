@@ -102,11 +102,11 @@ export const taskGraphSchema: JsonObject = {
 };
 
 export const taskGraphReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Project', targetSource: 'cart/component-gallery/data/project.ts', sourceField: 'projectId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Project', targetSource: 'cart/app/gallery/data/project.ts', sourceField: 'projectId', targetField: 'id' },
   {
     kind: 'references',
     label: 'Planning phase',
-    targetSource: 'cart/component-gallery/data/planning-phase.ts',
+    targetSource: 'cart/app/gallery/data/planning-phase.ts',
     sourceField: 'planPhaseId',
     targetField: 'id',
     summary: 'Optional — lightweight ad-hoc graphs skip phases entirely.',
@@ -114,21 +114,21 @@ export const taskGraphReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Tasks',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'taskIds[]',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Dependencies',
-    targetSource: 'cart/component-gallery/data/task-dependency.ts',
+    targetSource: 'cart/app/gallery/data/task-dependency.ts',
     sourceField: 'dependencyIds[]',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Assigned workers',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'assignedWorkerIds[]',
     targetField: 'id',
     summary: 'Denormalized for fast lookup: which workers have claimed tasks from this graph.',

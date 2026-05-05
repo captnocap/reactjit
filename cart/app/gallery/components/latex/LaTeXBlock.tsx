@@ -14,7 +14,7 @@ export type LaTeXBlockProps = {
 export function LaTeXBlock({
   source,
   fontSize = 18,
-  color = '#f2e8dc',
+  color = 'theme:ink',
   numbered = false,
   equationNumber,
   style,
@@ -27,7 +27,7 @@ export function LaTeXBlock({
           {renderMathTree(nodes, { fontSize, color, inline: false })}
         </Col>
         {numbered ? (
-          <Text style={{ color: '#7a6e5d', fontSize: Math.max(11, Math.round(fontSize * 0.8)), paddingLeft: 8 }}>
+          <Text style={{ color: 'theme:inkDimmer', fontSize: Math.max(11, Math.round(fontSize * 0.8)), paddingLeft: 8 }}>
             {equationNumber == null ? '' : `(${equationNumber})`}
           </Text>
         ) : null}

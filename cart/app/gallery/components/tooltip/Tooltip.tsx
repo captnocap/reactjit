@@ -8,7 +8,7 @@ import type { ControlTone } from '../controls-specimen/controlsSpecimenTheme';
 import { TooltipDataRow } from '../tooltip-data-row/TooltipDataRow';
 import { TooltipFrame } from '../tooltip-frame/TooltipFrame';
 import { TooltipHeader } from '../tooltip-header/TooltipHeader';
-import type { IconData } from '../../../sweatshop/components/icons';
+import type { IconData } from '@reactjit/runtime/icons/Icon';
 
 export type TooltipType = 'basic' | 'rich';
 export type BasicTooltipMethod = 'command' | 'field' | 'status' | 'reference';

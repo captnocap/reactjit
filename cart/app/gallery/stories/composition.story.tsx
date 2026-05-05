@@ -13,7 +13,7 @@ export const compositionSection = defineGallerySection({
     defineGalleryDataStory({
       id: "composition/catalog",
       title: "Composition",
-      source: "cart/component-gallery/data/composition.ts",
+      source: "cart/app/gallery/data/composition.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

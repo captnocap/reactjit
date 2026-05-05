@@ -15,7 +15,7 @@ export const dexGraphNodeSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-graph-node/default",
       title: "Dex Graph Node",
-      source: "cart/component-gallery/components/dex-graph-node/DexGraphNode.tsx",
+      source: "cart/app/gallery/components/dex-graph-node/DexGraphNode.tsx",
       status: 'ready',
       summary: 'Graph primitive node atom rendered as a path circle.',
       tags: ["data-explorer", "graph", "atom"],
@@ -24,10 +24,10 @@ export const dexGraphNodeSection = defineGallerySection({
           id: 'default',
           name: 'Default',
           render: () => (
-            <Box style={{ width: 180, height: 110, backgroundColor: '#0e0b09' }}>
+            <Box style={{ width: 180, height: 110, backgroundColor: 'theme:bg' }}>
               <S.BareGraph>
                 <DexGraphNode x={68} y={54} r={16} selected />
-                <DexGraphNode x={118} y={54} r={12} color="#6aa390" />
+                <DexGraphNode x={118} y={54} r={12} color="theme:ok" />
               </S.BareGraph>
             </Box>
           ),

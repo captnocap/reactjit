@@ -13,7 +13,7 @@ export const mergeConflictSection = defineGallerySection({
     defineGalleryDataStory({
       id: "merge-conflict/catalog",
       title: "Merge Conflict",
-      source: "cart/component-gallery/data/merge-conflict.ts",
+      source: "cart/app/gallery/data/merge-conflict.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

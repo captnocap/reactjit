@@ -13,7 +13,7 @@ export const dexSearchBarSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-search-bar/default",
       title: "Dex Search Bar",
-      source: "cart/component-gallery/components/dex-search-bar/DexSearchBar.tsx",
+      source: "cart/app/gallery/components/dex-search-bar/DexSearchBar.tsx",
       status: 'ready',
       summary: 'Explorer search strip with count and keyboard hint.',
       tags: ["data-explorer", "atom"],

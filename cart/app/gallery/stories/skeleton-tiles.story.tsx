@@ -8,7 +8,7 @@ export const skeletonTilesSection = defineGallerySection({
     defineGalleryStory({
       id: 'skeleton-tiles/default',
       title: 'Skeleton Tiles',
-      source: 'cart/component-gallery/components/skeleton-tiles/SkeletonTiles.tsx',
+      source: 'cart/app/gallery/components/skeleton-tiles/SkeletonTiles.tsx',
       status: 'ready',
       variants: [
         {

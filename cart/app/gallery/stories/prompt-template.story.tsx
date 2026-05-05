@@ -13,7 +13,7 @@ export const promptTemplateSection = defineGallerySection({
     defineGalleryDataStory({
       id: "prompt-template/catalog",
       title: "Prompt Template",
-      source: "cart/component-gallery/data/prompt-template.ts",
+      source: "cart/app/gallery/data/prompt-template.ts",
       format: 'data',
       status: 'draft',
       tags: ["prompt", "settings"],

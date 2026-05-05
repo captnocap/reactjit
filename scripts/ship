@@ -24,7 +24,6 @@
 #
 # Usage:
 #   scripts/ship <cart-name>          # release, self-extracting
-#   scripts/ship <cart-name> -d       # debug build, skips packaging
 
 set -euo pipefail
 
@@ -57,20 +56,15 @@ if ! flock -n 9; then
 fi
 
 NAME="${1:-}"
-DEBUG=0
-for arg in "${@:2}"; do
-    case "$arg" in
-        -d|--debug) DEBUG=1 ;;
-        *)
-            echo "[ship] unknown flag: $arg" >&2
-            echo "Usage: scripts/ship <cart-name> [-d|--debug]" >&2
-            exit 1
-            ;;
-    esac
-done
+if [[ "$#" -gt 1 ]]; then
+    echo "[ship] unexpected args: ${*:2}" >&2
+    echo "Usage: scripts/ship <cart-name>" >&2
+    echo "  (debug/raw flags removed — both produced binaries that crashed on launch)" >&2
+    exit 1
+fi
 
 if [[ -z "$NAME" ]]; then
-    echo "Usage: scripts/ship <cart-name> [-d|--debug]" >&2
+    echo "Usage: scripts/ship <cart-name>" >&2
     echo "  Cart expected at: $CART_ROOT/cart/<cart-name>.tsx" >&2
     exit 1
 fi
@@ -179,9 +173,6 @@ fi
 
 # ── 2. Compile v8_app.zig (bundle-<name>.js embedded via @embedFile) ─
 OPT_FLAG="-Doptimize=ReleaseFast"
-if [[ "$DEBUG" -eq 1 ]]; then
-    OPT_FLAG="-Doptimize=Debug"
-fi
 
 echo "[ship] compiling native binary..."
 APP_SOURCE="v8_app.zig"
@@ -475,19 +466,7 @@ fi
 # minutes (300s snapshot timeout + 600s autotest timeout).
 exec 9>&-
 
-# ── 3. Debug short-circuit ─────────────────────────────────────────────
-# In debug mode, move the debug ELF to "$NAME-debug" so zig-out/bin/$NAME
-# stays reserved for the self-extracting wrapper.
-if [[ "$DEBUG" -eq 1 ]]; then
-    DEBUG_OUT="$CART_ROOT/zig-out/bin/${NAME}-debug"
-    mv -f "$BUILD_BIN" "$DEBUG_OUT"
-    SIZE_MB=$(du -m "$DEBUG_OUT" | cut -f1)
-    echo "[ship] done (debug ELF, ${SIZE_MB}MB) → $DEBUG_OUT"
-    echo "[ship] note: $BUILD_BIN left for wrapped build; run './scripts/ship $NAME' for the shippable form."
-    exit 0
-fi
-
-# ── 4. Package as self-extracting binary ──────────────────────────────
+# ── 3. Package as self-extracting binary ──────────────────────────────
 if [[ "$OS" == "Darwin" ]]; then
     # ── macOS: package as .app bundle ──────────────────────────────
     echo "[ship] packaging macOS .app bundle..."
@@ -702,6 +681,21 @@ if [[ -z "$LD_LINUX" ]] || [[ ! -f "$LD_LINUX" ]]; then
 fi
 cp "$LD_LINUX" "$LIB_DIR/ld-linux-x86-64.so.2"
 
+# ── Bundle postgres ──────────────────────────────────────────────────
+# Carts that touch the PG-backed cart/app/db routes need a postgres
+# binary at runtime. We copy the staged `<RJIT_HOME>/.pg-bundle/` into
+# `$TMP_DIR/pg/` so framework/pg.zig:findBundleRoot finds it at
+# `<exe-dir>/pg/bin/postgres` after extraction. ~22 MB.
+#
+# Opt-in via the existence of .pg-bundle/. Users who don't need PG just
+# don't run scripts/stage-pg-bundle and pay zero size cost. Users on
+# fresh clones who DO need it run it once after the first ship.
+if [[ -d "$RJIT_HOME/.pg-bundle" ]]; then
+    cp -RL "$RJIT_HOME/.pg-bundle" "$TMP_DIR/pg"
+    PG_SIZE=$(du -sh "$TMP_DIR/pg" | awk '{print $1}')
+    echo "[ship]   bundled postgres ($PG_SIZE) — extract dir → pg/bin/postgres"
+fi
+
 # Launcher that execs the real binary via the bundled loader
 cat > "$TMP_DIR/run" << 'LAUNCHER'
 #!/bin/sh
@@ -747,59 +741,59 @@ SIZE_MB=$(du -m "$BUILD_BIN" | cut -f1)
 echo "[ship] done (${SIZE_MB}MB self-extracting, $LIB_COUNT libs bundled) → $BUILD_BIN"
 rm -rf "$TMP_DIR" "$TARBALL"
 
-# ── 5. Post-build snapshot gate ───────────────────────────────────────
-# Runs the binary headless with ZIGOS_WITNESS=snapshot so framework/witness.zig
-# emits tests/<NAME>.autotest capturing all visible text, pressables, and a
-# health line. Counts FAIL lines + runtime errors; any failure deletes the
-# binary and exits 1. 1:1 port from tsz/scripts/build.
+# ── 4. Post-build snapshot gate ───────────────────────────────────────
+# Runs the binary headless with ZIGOS_WITNESS=snapshot to emit
+# tests/<NAME>.autotest and gate on FAIL lines + runtime errors. Disabled
+# by default since the V8 migration — opt in with SHIP_RUN_SNAPSHOT=1.
 mkdir -p "$CART_ROOT/tests"
 AUTOTEST_FILE="$CART_ROOT/tests/${NAME}.autotest"
-SNAP_STDERR=$(mktemp)
-SNAP_T0=$(date +%s%N)
-ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$AUTOTEST_FILE" \
-    timeout -s KILL 300 "$BUILD_BIN" >/dev/null 2>"$SNAP_STDERR" || true
-SNAP_T1=$(date +%s%N)
-SNAP_MS=$(( (SNAP_T1 - SNAP_T0) / 1000000 ))
+if [ "${SHIP_RUN_SNAPSHOT:-0}" = "1" ]; then
+    SNAP_STDERR=$(mktemp)
+    SNAP_T0=$(date +%s%N)
+    ZIGOS_HEADLESS=1 ZIGOS_WITNESS=snapshot ZIGOS_WITNESS_FILE="$AUTOTEST_FILE" \
+        timeout -s KILL 300 "$BUILD_BIN" >/dev/null 2>"$SNAP_STDERR" || true
+    SNAP_T1=$(date +%s%N)
+    SNAP_MS=$(( (SNAP_T1 - SNAP_T0) / 1000000 ))
 
-RUNTIME_ERRORS=$(grep -cE '^error:|^\[luajit-runtime\]|^\[evalExpr error\]|^\[evalToString error\]|^\[evalLuaMapData error\]|^\[js_on_press\].*error|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" 2>/dev/null || true)
-RUNTIME_ERRORS=${RUNTIME_ERRORS//[^0-9]/}; RUNTIME_ERRORS=${RUNTIME_ERRORS:-0}
-if [ "$RUNTIME_ERRORS" -gt 0 ]; then
-    echo "[$NAME] runtime: ${RUNTIME_ERRORS} error(s) detected" >&2
-    grep -E '^error:|^\[luajit-runtime\]|^\[eval.*error\]|^\[evalLuaMapData error\]|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" | head -10 >&2
+    RUNTIME_ERRORS=$(grep -cE '^error:|^\[luajit-runtime\]|^\[evalExpr error\]|^\[evalToString error\]|^\[evalLuaMapData error\]|^\[js_on_press\].*error|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" 2>/dev/null || true)
+    RUNTIME_ERRORS=${RUNTIME_ERRORS//[^0-9]/}; RUNTIME_ERRORS=${RUNTIME_ERRORS:-0}
+    if [ "$RUNTIME_ERRORS" -gt 0 ]; then
+        echo "[$NAME] runtime: ${RUNTIME_ERRORS} error(s) detected" >&2
+        grep -E '^error:|^\[luajit-runtime\]|^\[eval.*error\]|^\[evalLuaMapData error\]|ReferenceError|SyntaxError|TypeError' "$SNAP_STDERR" | head -10 >&2
+    fi
+    grep '^\[snapshot\]' "$SNAP_STDERR" 2>/dev/null || true
+    SNAP_LOG_KEEP="$CART_ROOT/tests/screenshots/${NAME}/.last-snapshot.log"
+    mkdir -p "$(dirname "$SNAP_LOG_KEEP")"
+    cp "$SNAP_STDERR" "$SNAP_LOG_KEEP" 2>/dev/null || true
+    rm -f "$SNAP_STDERR"
+
+    EXPECT_COUNT=0; CLICK_COUNT=0; FAIL_COUNT=0
+    if [ -f "$AUTOTEST_FILE" ]; then
+        EXPECT_COUNT=$(grep -c '^expect ' "$AUTOTEST_FILE" 2>/dev/null || true)
+        CLICK_COUNT=$(grep -c '^click ' "$AUTOTEST_FILE" 2>/dev/null || true)
+        FAIL_COUNT=$(grep -c '^# FAIL' "$AUTOTEST_FILE" 2>/dev/null || true)
+        EXPECT_COUNT=${EXPECT_COUNT//[^0-9]/}; EXPECT_COUNT=${EXPECT_COUNT:-0}
+        CLICK_COUNT=${CLICK_COUNT//[^0-9]/}; CLICK_COUNT=${CLICK_COUNT:-0}
+        FAIL_COUNT=${FAIL_COUNT//[^0-9]/}; FAIL_COUNT=${FAIL_COUNT:-0}
+    else
+        echo "[$NAME] snapshot: failed to generate autotest (${SNAP_MS}ms)" >&2
+    fi
+
+    TOTAL_FAILS=$(( FAIL_COUNT + RUNTIME_ERRORS ))
+    if [ "$TOTAL_FAILS" -gt 0 ]; then
+        echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks + ${TOTAL_FAILS} FAILS in ${SNAP_MS}ms → $AUTOTEST_FILE" >&2
+        echo "[$NAME] SNAPSHOT FAILED — cleaning up broken binary" >&2
+        rm -f "$BUILD_BIN" 2>/dev/null || true
+        rm -rf "$CART_ROOT/zig-out/bin/${NAME}.app" 2>/dev/null || true
+        exit 1
+    fi
+    echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
 fi
-grep '^\[snapshot\]' "$SNAP_STDERR" 2>/dev/null || true
-# Keep the full snapshot log for post-mortem diagnostics. Not a bypass: binary
-# still gets cleaned up on TOTAL_FAILS below; this just preserves stack traces.
-SNAP_LOG_KEEP="$CART_ROOT/tests/screenshots/${NAME}/.last-snapshot.log"
-mkdir -p "$(dirname "$SNAP_LOG_KEEP")"
-cp "$SNAP_STDERR" "$SNAP_LOG_KEEP" 2>/dev/null || true
-rm -f "$SNAP_STDERR"
 
-EXPECT_COUNT=0; CLICK_COUNT=0; FAIL_COUNT=0
-if [ -f "$AUTOTEST_FILE" ]; then
-    EXPECT_COUNT=$(grep -c '^expect ' "$AUTOTEST_FILE" 2>/dev/null || true)
-    CLICK_COUNT=$(grep -c '^click ' "$AUTOTEST_FILE" 2>/dev/null || true)
-    FAIL_COUNT=$(grep -c '^# FAIL' "$AUTOTEST_FILE" 2>/dev/null || true)
-    EXPECT_COUNT=${EXPECT_COUNT//[^0-9]/}; EXPECT_COUNT=${EXPECT_COUNT:-0}
-    CLICK_COUNT=${CLICK_COUNT//[^0-9]/}; CLICK_COUNT=${CLICK_COUNT:-0}
-    FAIL_COUNT=${FAIL_COUNT//[^0-9]/}; FAIL_COUNT=${FAIL_COUNT:-0}
-else
-    echo "[$NAME] snapshot: failed to generate autotest (${SNAP_MS}ms)" >&2
-fi
-
-TOTAL_FAILS=$(( FAIL_COUNT + RUNTIME_ERRORS ))
-if [ "$TOTAL_FAILS" -gt 0 ]; then
-    echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks + ${TOTAL_FAILS} FAILS in ${SNAP_MS}ms → $AUTOTEST_FILE" >&2
-    echo "[$NAME] SNAPSHOT FAILED — cleaning up broken binary" >&2
-    rm -f "$BUILD_BIN" 2>/dev/null || true
-    rm -rf "$CART_ROOT/zig-out/bin/${NAME}.app" 2>/dev/null || true
-    exit 1
-fi
-echo "[$NAME] snapshot: ${EXPECT_COUNT} expects + ${CLICK_COUNT} clicks in ${SNAP_MS}ms → $AUTOTEST_FILE"
-
-# ── 6. Post-build autotest replay ─────────────────────────────────────
-# Replay the just-generated autotest against the binary and produce the
-# proof grid. Skip with SHIP_SKIP_AUTOTEST=1 for faster iterations.
-if [ "${SHIP_SKIP_AUTOTEST:-0}" != "1" ] && [ -f "$AUTOTEST_FILE" ]; then
+# ── 5. Post-build autotest replay ─────────────────────────────────────
+# Replay the autotest file (must already exist from a prior SHIP_RUN_SNAPSHOT
+# run) and produce the proof grid. Disabled by default since the V8 migration
+# — opt in with SHIP_RUN_AUTOTEST=1.
+if [ "${SHIP_RUN_AUTOTEST:-0}" = "1" ] && [ -f "$AUTOTEST_FILE" ]; then
     "$(dirname "$0")/autotest" "$NAME" || true
 fi

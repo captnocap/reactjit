@@ -234,7 +234,7 @@ export const connectionReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Provider',
-    targetSource: 'cart/component-gallery/data/provider.ts',
+    targetSource: 'cart/app/gallery/data/provider.ts',
     sourceField: 'providerId',
     targetField: 'id',
     summary:
@@ -243,7 +243,7 @@ export const connectionReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary:
@@ -252,7 +252,7 @@ export const connectionReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Env vars',
-    targetSource: 'cart/component-gallery/data/env-var.ts',
+    targetSource: 'cart/app/gallery/data/env-var.ts',
     sourceField: 'kind',
     targetField: 'connectionKind',
     summary:
@@ -261,7 +261,7 @@ export const connectionReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Event adapter',
-    targetSource: 'cart/component-gallery/data/event-adapter.ts',
+    targetSource: 'cart/app/gallery/data/event-adapter.ts',
     sourceField: 'kind',
     targetField: 'connectionKind',
     summary:

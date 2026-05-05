@@ -8,7 +8,7 @@ export const diodeSelectorSection = defineGallerySection({
     defineGalleryStory({
       id: 'diode-selector/default',
       title: 'Diode Selector',
-      source: 'cart/component-gallery/components/controls-specimen/DiodeSelector.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/DiodeSelector.tsx',
       status: 'ready',
       summary: 'Numeric diode bank selector with LED pips and active frame tint.',
       tags: ['controls', 'selection', 'atom'],

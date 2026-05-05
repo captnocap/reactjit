@@ -8,7 +8,7 @@ export const verticalBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'vertical-badge/default',
       title: 'Vertical Badge',
-      source: 'cart/component-gallery/components/controls-specimen/VerticalBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/VerticalBadge.tsx',
       status: 'ready',
       summary: 'Rotated spine label badge with outline and solid treatments.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

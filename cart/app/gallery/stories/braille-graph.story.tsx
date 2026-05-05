@@ -8,7 +8,7 @@ export const brailleGraphSection = defineGallerySection({
     defineGalleryStory({
       id: 'braille-graph/default',
       title: 'Braille Graph',
-      source: 'cart/component-gallery/components/braille-graph/BrailleGraph.tsx',
+      source: 'cart/app/gallery/components/braille-graph/BrailleGraph.tsx',
       status: 'ready',
       variants: [
         { id: 'sine', name: 'Sine', render: () => <BrailleGraph data={{ mode: 'sine' }} /> },

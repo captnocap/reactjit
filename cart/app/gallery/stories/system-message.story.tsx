@@ -13,7 +13,7 @@ export const systemMessageSection = defineGallerySection({
     defineGalleryDataStory({
       id: "system-message/catalog",
       title: "System Message",
-      source: "cart/component-gallery/data/system-message.ts",
+      source: "cart/app/gallery/data/system-message.ts",
       format: 'data',
       status: 'draft',
       tags: ["prompt", "settings"],

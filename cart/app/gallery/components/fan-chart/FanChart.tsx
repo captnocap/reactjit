@@ -107,7 +107,7 @@ export function FanChart(props: FanChartProps) {
 
       {labels.map((l, i) => (
         <Box key={l} style={{ position: 'absolute', left: xScale(i) - 8, top: plot.y + plot.h + 4, width: 16, alignItems: 'center' }}>
-          <Text fontSize={9} color="#7a6e5d">{l}</Text>
+          <Text fontSize={9} color="theme:inkDimmer">{l}</Text>
         </Box>
       ))}
     </Box>

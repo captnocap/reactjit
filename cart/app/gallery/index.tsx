@@ -12,7 +12,7 @@ import {
 import { Box, Col, Pressable, Row, ScrollView, StaticSurface, Text, TextInput } from '@reactjit/runtime/primitives';
 import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import { ChevronDown, ChevronRight, Maximize, Minimize, X } from '@reactjit/runtime/icons/icons';
-import { Route, Router, useNavigate, useRoute } from '@reactjit/runtime/router';
+import { Route, Router, useNavigate, useRoute } from './local-router';
 import { GalleryDisplayContainer } from './components/gallery-display-container/GalleryDisplayContainer';
 import { ChartAnimationProvider } from './lib/useSpring';
 import { findGalleryThemeOption, useGalleryTheme } from './gallery-theme';
@@ -114,6 +114,38 @@ const NEXT_GALLERY_GRID_CARD = {
 const NEXT_GALLERY_FILTER_COLUMNS = 16;
 const NEXT_GALLERY_FILTER_TAB_WIDTH = '6.25%';
 const NEXT_GALLERY_FILTER_ROW_HEIGHT = 34;
+
+// ─── PERF DEBUG KNOB ───────────────────────────────────────────────────
+// Binary-search dial for the atoms-page slowness. Each level adds one
+// piece of work back on top of the previous level. Flip this and reload.
+// `ChartAnimationProvider disabled` always wraps variant renders — it's
+// not part of the perf experiment, it's a sanity guard against
+// run-amok preview animations.
+//
+//   0 — empty placeholder Box. No variant.render() at all. Baseline.
+//   1 — variant.render() inside a flex-centered un-scaled box. Tests if
+//       rendering the variant tree itself is the cost.
+//   2 — full layout-and-scale pipeline (transform: scale + canvas-sized
+//       intermediate box). Final form.
+const PERF_BUDGET: 0 | 1 | 2 = 2;
+
+// ─── ATOM BISECT KNOB ──────────────────────────────────────────────────
+// Tiles whose index falls in [start, end) render their variants normally
+// (subject to PERF_BUDGET above). Tiles outside the range render the
+// level-0 placeholder Box only. Use to bisect which atoms are causing the
+// per-frame work blowup.
+//
+//   [0, 999]  — render all variants (default)
+//   [0, 15]   — first half on, second half off
+//   [15, 999] — opposite
+//   [10, 12]  — narrow to two specific atoms
+//   [0, 0]    — render NOTHING (equivalent to PERF_BUDGET=0)
+const VARIANT_RANGE: [number, number] = [0, 9999];
+
+// Virtualization for the 'all' grid: how many extra rows of tiles to keep
+// mounted above and below the visible viewport. Higher = smoother scroll
+// (less mount/unmount churn), lower = fewer concurrent renders.
+const VIRTUAL_BUFFER_ROWS = 2;
 
 const NEXT_GALLERY_PREVIEW_CANVAS: Record<NextGalleryRouteId, { width: number; height: number }> = {
   data: { width: 520, height: 360 },
@@ -324,12 +356,25 @@ function formatNextGalleryTabLabel(title: string): string {
     .trim();
 }
 
-function getGridPreviewScale(categoryId: NextGalleryRouteId): number {
-  const canvas = NEXT_GALLERY_PREVIEW_CANVAS[categoryId];
+function getGridPreviewScale(canvas: { width: number; height: number }): number {
   const availableWidth = NEXT_GALLERY_GRID_CARD.width - NEXT_GALLERY_GRID_CARD.stagePadding * 2;
   const availableHeight =
     NEXT_GALLERY_GRID_CARD.height - NEXT_GALLERY_GRID_CARD.topbarHeight - NEXT_GALLERY_GRID_CARD.stagePadding * 2;
   return Math.min(1, availableWidth / canvas.width, availableHeight / canvas.height);
+}
+
+// Resolve the preview canvas for a story+variant. Variant override wins,
+// then story override, then per-category default.
+function resolvePreviewCanvas(
+  categoryId: NextGalleryRouteId,
+  story: GalleryStory,
+  variant: GalleryVariant | null,
+): { width: number; height: number } {
+  return (
+    variant?.previewCanvas
+    ?? story.previewCanvas
+    ?? NEXT_GALLERY_PREVIEW_CANVAS[categoryId]
+  );
 }
 
 function getTagTone(tag: GalleryCanonicalTag): string {
@@ -2633,60 +2678,103 @@ function NextGallerySummaryCard({
   index: number;
   onSelect: () => void;
 }) {
-  const canvas = NEXT_GALLERY_PREVIEW_CANVAS[categoryId];
-  const scale = getGridPreviewScale(categoryId);
-  const stagePadding = NEXT_GALLERY_GRID_CARD.stagePadding;
   const variant = getStoryVariants(entry.story)[0] || null;
+  const canvas = resolvePreviewCanvas(categoryId, entry.story, variant);
+  const scale = getGridPreviewScale(canvas);
+  const stagePadding = NEXT_GALLERY_GRID_CARD.stagePadding;
+  // Bisect dial: tiles outside VARIANT_RANGE render placeholder regardless
+  // of PERF_BUDGET. Lets us narrow which atoms are paying the per-frame cost.
+  const inRange = index >= VARIANT_RANGE[0] && index < VARIANT_RANGE[1];
+  const effectiveBudget = inRange ? PERF_BUDGET : 999;
   return (
     <Pressable onPress={onSelect}>
-      <GalleryDisplayContainer
-        code={formatNextGalleryCode(categoryId, index)}
-        title={entry.story.title}
-        meta={getSourceName(entry.story.source)}
-        ratio="compact"
-        stagePadding={stagePadding}
-        center
+      {/* One StaticSurface per tile — caches the WHOLE thing (frame chrome,
+          title, code, meta, AND the rendered preview) into a single GPU
+          texture. Drops per-tile node cost in the grid from "every Text +
+          Box in every tile" down to one quad per tile. The
+          subtree-mutation invalidation patch handles re-capture if any
+          descendant ever changes (favorite, theme swap, etc.). */}
+      <StaticSurface
+        staticKey={`gallery-tile:${entry.story.id}`}
+        introFrames={30}
       >
-        {variant ? (
-          <StaticSurface
-            staticKey={`gallery-preview:${entry.story.id}`}
-            introFrames={30}
-            style={{
-              width: canvas.width * scale,
-              height: canvas.height * scale,
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <Box
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                width: canvas.width,
-                height: canvas.height,
-                overflow: 'hidden',
-                transform: { scaleX: scale, scaleY: scale, originX: 0, originY: 0 },
-              }}
-            >
-              <ChartAnimationProvider disabled>
-                {variant.render()}
-              </ChartAnimationProvider>
-            </Box>
-          </StaticSurface>
-        ) : (
-          isDataStory(entry.story) ? (
-            <JsonSchemaPreview value={entry.story.schema} />
+        <GalleryDisplayContainer
+          code={formatNextGalleryCode(categoryId, index)}
+          title={entry.story.title}
+          meta={getSourceName(entry.story.source)}
+          ratio="compact"
+          stagePadding={stagePadding}
+          center
+        >
+          {variant ? (
+            effectiveBudget === 0 ? (
+              // Empty placeholder Box, sized to the scaled canvas footprint.
+              <Box
+                style={{
+                  width: canvas.width * scale,
+                  height: canvas.height * scale,
+                  backgroundColor: '#1a1a1d',
+                  borderRadius: 6,
+                }}
+              />
+            ) : effectiveBudget === 1 ? (
+              // variant.render() inside a flex-centered, un-scaled box.
+              <Box
+                style={{
+                  width: canvas.width * scale,
+                  height: canvas.height * scale,
+                  overflow: 'hidden',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <ChartAnimationProvider disabled>
+                  {variant.render()}
+                </ChartAnimationProvider>
+              </Box>
+            ) : (
+              // Full layout-and-scale pipeline.
+              <Box
+                style={{
+                  width: canvas.width * scale,
+                  height: canvas.height * scale,
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
+                <Box
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    width: canvas.width,
+                    height: canvas.height,
+                    overflow: 'hidden',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: { scaleX: scale, scaleY: scale, originX: 0, originY: 0 },
+                  }}
+                >
+                  <ChartAnimationProvider disabled>
+                    {variant.render()}
+                  </ChartAnimationProvider>
+                </Box>
+              </Box>
+            )
           ) : (
-            <Col style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: PAGE_SURFACE.textColor }}>{getStoryTypeLabel(entry)}</Text>
-              <Text numberOfLines={2} style={{ fontSize: 9, color: PAGE_SURFACE.mutedTextColor }}>
-                {entry.story.summary || entry.story.source}
-              </Text>
-            </Col>
-          )
-        )}
-      </GalleryDisplayContainer>
+            isDataStory(entry.story) ? (
+              <JsonSchemaPreview value={entry.story.schema} />
+            ) : (
+              <Col style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 12, fontWeight: 'bold', color: PAGE_SURFACE.textColor }}>{getStoryTypeLabel(entry)}</Text>
+                <Text numberOfLines={2} style={{ fontSize: 9, color: PAGE_SURFACE.mutedTextColor }}>
+                  {entry.story.summary || entry.story.source}
+                </Text>
+              </Col>
+            )
+          )}
+        </GalleryDisplayContainer>
+      </StaticSurface>
     </Pressable>
   );
 }
@@ -2740,6 +2828,209 @@ function NextGalleryDetailCard({
   );
 }
 
+function getNextGalleryGridGeometry(containerW: number, totalCount: number) {
+  const tileW = NEXT_GALLERY_GRID_CARD.width;
+  const tileH = NEXT_GALLERY_GRID_CARD.height;
+  const gap = NEXT_GALLERY_GRID_CARD.gap;
+  const pad = NEXT_GALLERY_GRID_CARD.pagePadding;
+  const innerW = Math.max(tileW, containerW - pad * 2);
+  const cols = Math.max(1, Math.floor((innerW + gap) / (tileW + gap)));
+  const rowStride = tileH + gap;
+  const totalRows = Math.ceil(totalCount / cols);
+  const totalH = totalRows > 0 ? totalRows * rowStride - gap + pad * 2 : 0;
+  const usedW = cols * tileW + Math.max(0, cols - 1) * gap;
+  const leftPad = pad + Math.max(0, (innerW - usedW) / 2);
+  return { tileW, tileH, gap, pad, cols, rowStride, totalRows, totalH, leftPad };
+}
+
+function VirtualizedTileGrid({
+  entries,
+  allEntries,
+  categoryId,
+  containerW,
+  viewportH,
+  scrollY,
+  onSelectStory,
+}: {
+  entries: StoryEntry[];
+  allEntries: StoryEntry[];
+  categoryId: NextGalleryRouteId;
+  containerW: number;
+  viewportH: number;
+  scrollY: number;
+  onSelectStory: (categoryId: NextGalleryRouteId, storyId: string) => void;
+}) {
+  const geom = getNextGalleryGridGeometry(containerW, entries.length);
+  const firstRow = Math.max(
+    0,
+    Math.floor((scrollY - geom.pad) / geom.rowStride) - VIRTUAL_BUFFER_ROWS
+  );
+  const lastRow = Math.min(
+    Math.max(0, geom.totalRows - 1),
+    Math.floor((scrollY + viewportH - geom.pad) / geom.rowStride) + VIRTUAL_BUFFER_ROWS
+  );
+
+  const tiles: any[] = [];
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    for (let col = 0; col < geom.cols; col += 1) {
+      const i = row * geom.cols + col;
+      if (i < 0 || i >= entries.length) continue;
+      const entry = entries[i];
+      const left = geom.leftPad + col * (geom.tileW + geom.gap);
+      const top = geom.pad + row * geom.rowStride;
+      tiles.push(
+        <Box
+          key={entry.story.id}
+          style={{
+            position: 'absolute',
+            left,
+            top,
+            width: geom.tileW,
+            height: geom.tileH,
+          }}
+        >
+          <NextGallerySummaryCard
+            entry={entry}
+            categoryId={categoryId}
+            index={Math.max(
+              0,
+              allEntries.findIndex((candidate) => candidate.story.id === entry.story.id)
+            )}
+            onSelect={() => onSelectStory(categoryId, entry.story.id)}
+          />
+        </Box>
+      );
+    }
+  }
+
+  return (
+    <Box style={{ width: '100%', height: geom.totalH, position: 'relative' }}>
+      {tiles}
+    </Box>
+  );
+}
+
+// AtomsBrowser — two-column hover-to-preview replacement for the atoms
+// grid. Left column is a scrollable list of every atom (name + source
+// path). Hovering a row sets `hoveredId`, which causes the right column
+// to mount that atom's variants and unmount the previous one. Only ONE
+// atom is mounted at any time, so atom mount cost is amortized to a
+// single tile rather than the whole catalog.
+function AtomsBrowser({
+  entries,
+  categoryId,
+  allEntries,
+  dataStoriesBySource,
+  activeThemeId,
+  onApplyTheme,
+  onSelectReference,
+}: {
+  entries: StoryEntry[];
+  categoryId: NextGalleryRouteId;
+  allEntries: StoryEntry[];
+  dataStoriesBySource: Map<string, StoryEntry>;
+  activeThemeId: string;
+  onApplyTheme: (id: string) => void;
+  onSelectReference: (entry: StoryEntry) => void;
+}) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const hoveredEntry = hoveredId
+    ? entries.find((entry) => entry.story.id === hoveredId) || null
+    : null;
+
+  return (
+    <Row style={{ width: '100%', alignItems: 'stretch', padding: 0, gap: 0 }}>
+      <Col
+        style={{
+          width: 320,
+          flexShrink: 0,
+          borderRightWidth: 1,
+          borderRightColor: PAGE_SURFACE.borderColor,
+        }}
+      >
+        <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
+          <Col style={{ width: '100%', paddingTop: 6, paddingBottom: 6 }}>
+            {entries.map((entry) => {
+              const active = hoveredId === entry.story.id;
+              return (
+                <Pressable
+                  key={entry.story.id}
+                  onHoverEnter={() => setHoveredId(entry.story.id)}
+                  onPress={() => setHoveredId(entry.story.id)}
+                  style={{
+                    width: '100%',
+                    paddingLeft: 12,
+                    paddingRight: 12,
+                    paddingTop: 6,
+                    paddingBottom: 6,
+                    backgroundColor: active ? PAGE_SURFACE.backgroundColor : 'transparent',
+                    borderLeftWidth: 2,
+                    borderLeftColor: active ? COLORS.accent : 'transparent',
+                  }}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      fontSize: 11,
+                      fontWeight: active ? 'bold' : 'normal',
+                      color: active ? PAGE_SURFACE.textColor : COLORS.muted,
+                    }}
+                  >
+                    {entry.story.title}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      fontSize: 9,
+                      color: COLORS.faint,
+                      fontFamily: 'monospace',
+                      paddingTop: 1,
+                    }}
+                  >
+                    {entry.story.source}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </Col>
+        </ScrollView>
+      </Col>
+      <Col style={{ flexGrow: 1, flexBasis: 0, minWidth: 0, padding: 18 }}>
+        {hoveredEntry ? (
+          <NextGalleryDetailCard
+            entry={hoveredEntry}
+            categoryId={categoryId}
+            index={Math.max(
+              0,
+              allEntries.findIndex((entry) => entry.story.id === hoveredEntry.story.id)
+            )}
+            dataStoriesBySource={dataStoriesBySource}
+            activeThemeId={activeThemeId}
+            onApplyTheme={onApplyTheme}
+            onSelectReference={onSelectReference}
+          />
+        ) : (
+          <Col
+            style={{
+              flexGrow: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            <Text style={{ fontSize: 14, fontWeight: 'bold', color: PAGE_SURFACE.textColor }}>
+              {`${entries.length} atom${entries.length === 1 ? '' : 's'}`}
+            </Text>
+            <Text style={{ fontSize: 11, color: PAGE_SURFACE.mutedTextColor }}>
+              Hover an entry on the left to preview.
+            </Text>
+          </Col>
+        )}
+      </Col>
+    </Row>
+  );
+}
+
 function NextGalleryCollection({
   categoryId,
   entries,
@@ -2749,6 +3040,9 @@ function NextGalleryCollection({
   activeThemeId,
   onApplyTheme,
   onSelectStory,
+  containerW,
+  viewportH,
+  scrollY,
 }: {
   categoryId: NextGalleryRouteId;
   entries: StoryEntry[];
@@ -2758,7 +3052,26 @@ function NextGalleryCollection({
   activeThemeId: string;
   onApplyTheme: (id: string) => void;
   onSelectStory: (categoryId: NextGalleryRouteId, storyId: string) => void;
+  containerW: number;
+  viewportH: number;
+  scrollY: number;
 }) {
+  // Atoms get the new hover-to-preview browser instead of the grid.
+  // Only one atom mounts at a time, killing the all-mount cost.
+  if (categoryId === 'atoms') {
+    return (
+      <AtomsBrowser
+        entries={entries}
+        categoryId={categoryId}
+        allEntries={allEntries}
+        dataStoriesBySource={dataStoriesBySource}
+        activeThemeId={activeThemeId}
+        onApplyTheme={onApplyTheme}
+        onSelectReference={(entry) => onSelectStory('data', entry.story.id)}
+      />
+    );
+  }
+
   const selectedEntry =
     selectedStoryId === 'all' ? null : entries.find((entry) => entry.story.id === selectedStoryId) || null;
 
@@ -2788,17 +3101,15 @@ function NextGalleryCollection({
   }
 
   return (
-    <Row style={{ width: '100%', gap: NEXT_GALLERY_GRID_CARD.gap, flexWrap: 'wrap', alignItems: 'flex-start', padding: NEXT_GALLERY_GRID_CARD.pagePadding }}>
-      {entries.map((entry) => (
-        <NextGallerySummaryCard
-          key={entry.story.id}
-          entry={entry}
-          categoryId={categoryId}
-          index={Math.max(0, allEntries.findIndex((candidate) => candidate.story.id === entry.story.id))}
-          onSelect={() => onSelectStory(categoryId, entry.story.id)}
-        />
-      ))}
-    </Row>
+    <VirtualizedTileGrid
+      entries={entries}
+      allEntries={allEntries}
+      categoryId={categoryId}
+      containerW={containerW}
+      viewportH={viewportH}
+      scrollY={scrollY}
+      onSelectStory={onSelectStory}
+    />
   );
 }
 
@@ -2812,6 +3123,12 @@ function NextComponentGalleryShell({ selection }: { selection: Selection | null 
     components: 'all',
     tokens: 'all',
   });
+  // Virtualization state — onScroll/onLayout feed these so VirtualizedTileGrid
+  // can compute which row range to keep mounted. Sane defaults so first paint
+  // (before onLayout fires) renders ~one viewport-worth of tiles instead of
+  // nothing.
+  const [scrollY, setScrollY] = useState(0);
+  const [viewport, setViewport] = useState<{ width: number; height: number }>({ width: 1200, height: 900 });
   const tokens = galleryTheme.active?.tokensByPath;
   const backgroundColor = getThemeStringToken(tokens, 'surfaces.bg', COLORS.appBg);
   const panelColor = getThemeStringToken(tokens, 'surfaces.bg1', COLORS.railBg);
@@ -2875,19 +3192,21 @@ function NextComponentGalleryShell({ selection }: { selection: Selection | null 
         mutedTextColor={mutedTextColor}
         accentColor={accentColor}
       />
-      <NextGalleryIndividualTabs
-        categoryId={activeCategoryId}
-        entries={searchedEntries}
-        totalCount={categoryEntries.length}
-        selectedStoryId={selectedStoryId}
-        onSelect={(storyId) => selectStoryFilter(activeCategoryId, storyId)}
-        panelColor={panelColor}
-        panelRaisedColor={panelRaisedColor}
-        borderColor={borderColor}
-        textColor={textColor}
-        mutedTextColor={mutedTextColor}
-        accentColor={accentColor}
-      />
+      {activeCategoryId === 'atoms' ? null : (
+        <NextGalleryIndividualTabs
+          categoryId={activeCategoryId}
+          entries={searchedEntries}
+          totalCount={categoryEntries.length}
+          selectedStoryId={selectedStoryId}
+          onSelect={(storyId) => selectStoryFilter(activeCategoryId, storyId)}
+          panelColor={panelColor}
+          panelRaisedColor={panelRaisedColor}
+          borderColor={borderColor}
+          textColor={textColor}
+          mutedTextColor={mutedTextColor}
+          accentColor={accentColor}
+        />
+      )}
       <Box
         style={{
           width: '100%',
@@ -2895,8 +3214,24 @@ function NextComponentGalleryShell({ selection }: { selection: Selection | null 
           flexBasis: 0,
           backgroundColor,
         }}
+        onLayout={(rect: any) => {
+          if (!rect) return;
+          const w = Number.isFinite(rect.width) ? rect.width : 0;
+          const h = Number.isFinite(rect.height) ? rect.height : 0;
+          if (w <= 0 && h <= 0) return;
+          setViewport((prev) =>
+            prev.width === w && prev.height === h ? prev : { width: w || prev.width, height: h || prev.height }
+          );
+        }}
       >
-        <ScrollView showScrollbar style={{ width: '100%', height: '100%' }}>
+        <ScrollView
+          showScrollbar
+          style={{ width: '100%', height: '100%' }}
+          onScroll={(payload: any) => {
+            const y = Number.isFinite(payload?.scrollY) ? payload.scrollY : 0;
+            setScrollY((prev) => (prev === y ? prev : y));
+          }}
+        >
           <NextGalleryCollection
             categoryId={activeCategoryId}
             entries={collectionEntries}
@@ -2906,6 +3241,9 @@ function NextComponentGalleryShell({ selection }: { selection: Selection | null 
             activeThemeId={galleryTheme.activeThemeId}
             onApplyTheme={galleryTheme.setTheme}
             onSelectStory={selectStoryFilter}
+            containerW={viewport.width}
+            viewportH={viewport.height}
+            scrollY={scrollY}
           />
           <Box style={{ height: 28 }} />
           <Text style={{ fontSize: 9, fontFamily: 'monospace', color: mutedTextColor }}>

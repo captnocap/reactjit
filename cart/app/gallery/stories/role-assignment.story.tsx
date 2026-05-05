@@ -13,7 +13,7 @@ export const roleAssignmentSection = defineGallerySection({
     defineGalleryDataStory({
       id: "role-assignment/catalog",
       title: "Role Assignment",
-      source: "cart/component-gallery/data/role-assignment.ts",
+      source: "cart/app/gallery/data/role-assignment.ts",
       format: 'data',
       status: 'draft',
       tags: ["role", "assignment", "worker"],

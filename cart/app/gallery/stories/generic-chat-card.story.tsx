@@ -8,7 +8,7 @@ export const genericChatCardSection = defineGallerySection({
     defineGalleryStory({
       id: 'generic-chat-card/default',
       title: 'Advanced Worker Card',
-      source: 'cart/component-gallery/components/generic-chat-card/GenericChatCard.tsx',
+      source: 'cart/app/gallery/components/generic-chat-card/GenericChatCard.tsx',
       status: 'ready',
       variants: [
         {

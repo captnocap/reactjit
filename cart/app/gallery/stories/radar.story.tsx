@@ -9,7 +9,7 @@ export const radarSection = defineGallerySection({
     defineGalleryStory({
       id: 'radar/default',
       title: 'Radar',
-      source: 'cart/component-gallery/components/radar/Radar.tsx',
+      source: 'cart/app/gallery/components/radar/Radar.tsx',
       status: 'draft',
       variants: [
         {

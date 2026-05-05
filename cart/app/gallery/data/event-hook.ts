@@ -303,7 +303,7 @@ export const eventHookReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary:
@@ -312,7 +312,7 @@ export const eventHookReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Job (action target)',
-    targetSource: 'cart/component-gallery/data/job.ts',
+    targetSource: 'cart/app/gallery/data/job.ts',
     sourceField: 'action.spec.jobId (when action.kind=queue-job)',
     targetField: 'id',
     summary: 'Closes the loop with Job.trigger.eventHookId — Hook fires Job, Job consults Hook to know what fired it.',
@@ -320,7 +320,7 @@ export const eventHookReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Events (matched against)',
-    targetSource: 'cart/component-gallery/data/event.ts',
+    targetSource: 'cart/app/gallery/data/event.ts',
     sourceField: 'id',
     targetField: 'kind (via match.kind)',
     summary: 'When an Event is appended, the resolver scans enabled hooks for matches and dispatches actions.',

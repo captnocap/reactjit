@@ -23,7 +23,9 @@
 
 const std = @import("std");
 
-const MAX_LATCHES: usize = 4096;
+// Matches MAX_ANIMS in framework/animations.zig — host-driven anims
+// each write to one latch, so the two pools should grow together.
+const MAX_LATCHES: usize = 8192;
 const MAX_KEY_LEN: usize = 128;
 
 const LatchEntry = struct {

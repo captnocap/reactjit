@@ -632,7 +632,13 @@ fn ensureSharedModel(model_path: []const u8) bool {
     return true;
 }
 
-/// __embed_ingest_start(rootPath, sourceType, modelPath, slug, nWorkers) → 1 | 0
+/// __embed_ingest_start(rootPath, kind, modelPath, slug, nWorkers) → 1 | 0
+///
+/// `kind` is one of: "code" | "claude" | "claude-overflow" | "codex" |
+/// "kimi" | "memory". The framework picks the right walker, parser, and
+/// canonical source_type label automatically. Backwards-compat: if the
+/// arg looks like a source_type label ("code-chunk" / "chat-log-chunk" /
+/// "document-chunk") we map it to the closest kind.
 fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const info = v8.FunctionCallbackInfo.initFromV8(info_c);
     const a = allocator();
@@ -642,11 +648,11 @@ fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
         return;
     };
     defer a.free(root_path);
-    const source_type = argStringAlloc(a, info, 1) orelse {
+    const kind_str = argStringAlloc(a, info, 1) orelse {
         setNumber(info, 0);
         return;
     };
-    defer a.free(source_type);
+    defer a.free(kind_str);
     const model_path = argStringAlloc(a, info, 2) orelse {
         setNumber(info, 0);
         return;
@@ -659,6 +665,16 @@ fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
     defer a.free(slug);
     const n_workers_i = argI32(info, 4, 4);
     const n_workers: usize = if (n_workers_i <= 0) 1 else if (n_workers_i > 16) 16 else @intCast(n_workers_i);
+
+    // Map kind string → SourceKind. Accept the canonical kind labels the
+    // enum knows about, plus the source_type aliases for legacy callers.
+    const kind: embed.SourceKind = embed.SourceKind.fromStr(kind_str) orelse blk: {
+        if (std.mem.eql(u8, kind_str, "code-chunk")) break :blk embed.SourceKind.code;
+        if (std.mem.eql(u8, kind_str, "chat-log-chunk")) break :blk embed.SourceKind.claude;
+        if (std.mem.eql(u8, kind_str, "document-chunk")) break :blk embed.SourceKind.memory;
+        setNumber(info, 0);
+        return;
+    };
 
     // Reap a previous (finished) session so we don't leak.
     if (g_ingest) |s| {
@@ -676,11 +692,7 @@ fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
         setNumber(info, 0);
         return;
     }
-    // Free the query ctx for the duration of the ingest. The cart's UI
-    // hides the query panel while ingesting, so an idle ~2.2 GB of KV +
-    // compute buffer just sits there competing with the worker pool for
-    // host-visible Vulkan memory. Lazily recreated when the user types
-    // their first query after ingest finishes.
+    // Free the query ctx for the duration of the ingest.
     freeQueryCtx();
 
     // Open / re-open the store at the right slug + dim.
@@ -693,7 +705,7 @@ fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
         setNumber(info, 0);
         return;
     };
-    g_store.?.buildPartialHnsw(source_type) catch {};
+    g_store.?.buildPartialHnsw(kind.canonicalSourceType()) catch {};
 
     // Use c_allocator for the session so its threads can use it without
     // contention with V8's main-thread-bound GPA.
@@ -704,7 +716,7 @@ fn hostIngestStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
         &g_shared.?,
         &g_store.?,
         root_path,
-        source_type,
+        kind,
         model_id,
         n_workers,
     ) catch {

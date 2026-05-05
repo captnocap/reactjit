@@ -4,7 +4,7 @@ import type { CommandComposerShortcut as CommandComposerShortcutData } from '../
 export function CommandComposerKeycap({ value }: { value: string }) {
   return (
     <S.CommandComposerKeycap>
-      <S.CommandComposerHotText>{value}</S.CommandComposerHotText>
+      <S.CommandComposerKeycapText>{value}</S.CommandComposerKeycapText>
     </S.CommandComposerKeycap>
   );
 }

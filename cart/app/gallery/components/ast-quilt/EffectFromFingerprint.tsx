@@ -40,6 +40,13 @@ export type FingerprintGenes = {
   scaleA: number;
   scaleB: number;
   speed: number;
+  variant: number;
+  contrast: number;
+  cadence: number;
+  asymmetry: number;
+  grain: number;
+  phaseA: number;
+  phaseB: number;
   symmetry: number;
   warp: number;
   twist: number;
@@ -100,6 +107,10 @@ export function extractFingerprintGenes(file: AstFingerprintFile): FingerprintGe
   let maxDepth = 0;
   let totalLength = 0;
   let visited = 0;
+  let spanMix = 0 >>> 0;
+  let childMix = 0 >>> 0;
+  let depthMix = 0 >>> 0;
+  let leafMix = 0 >>> 0;
 
   const stack: number[] = [file.root, 0];
   while (stack.length > 0) {
@@ -112,13 +123,27 @@ export function extractFingerprintGenes(file: AstFingerprintFile): FingerprintGe
     visited++;
     if (depth > maxDepth) maxDepth = depth;
     depthSum += depth;
-    kindXor ^= file.kind[i] || 0;
-    kindSum = (kindSum + (file.kind[i] || 0)) >>> 0;
-    totalLength += Math.max(0, (file.end[i] || 0) - (file.start[i] || 0));
+    const kind = file.kind[i] || 0;
+    const start = file.start[i] || 0;
+    const end = file.end[i] || 0;
+    const span = Math.max(0, end - start);
+    kindXor ^= kind;
+    kindSum = (kindSum + kind) >>> 0;
+    totalLength += span;
+    const nodeMix = mix32(
+      kind ^
+      Math.imul(start + 1, 0x85ebca6b) ^
+      Math.imul(end + 1, 0xc2b2ae35) ^
+      Math.imul(depth + 1, 0x27d4eb2d) ^
+      Math.imul(i + 1, 0x165667b1),
+    );
+    spanMix ^= mix32(nodeMix ^ Math.imul(span + 1, 0x9e3779b1));
+    depthMix = (depthMix + mix32(nodeMix ^ Math.imul(depth + 1, 0x7feb352d))) >>> 0;
 
     const fc = file.firstChild[i] || 0;
     if (fc === 0) {
       leafCount++;
+      leafMix ^= mix32(nodeMix ^ 0xa5a5a5a5);
     } else {
       let b = 0;
       let c = fc;
@@ -130,23 +155,46 @@ export function extractFingerprintGenes(file: AstFingerprintFile): FingerprintGe
       }
       branchSum += b;
       branchCount++;
+      childMix ^= mix32(nodeMix ^ Math.imul(b + 1, 0x94d049bb));
     }
   }
 
   const pathHash = hashStr(file.path);
-  const shapeMix = (kindXor ^ kindSum ^ Math.imul(file.count, 0x9e3779b1) ^ Math.imul(maxDepth + 1, 0x85ebca6b) ^ Math.imul(leafCount + 1, 0xc2b2ae35) ^ ((totalLength | 0) >>> 0)) >>> 0;
+  const shapeMix = (
+    kindXor ^
+    kindSum ^
+    spanMix ^
+    childMix ^
+    depthMix ^
+    leafMix ^
+    Math.imul(file.count, 0x9e3779b1) ^
+    Math.imul(maxDepth + 1, 0x85ebca6b) ^
+    Math.imul(leafCount + 1, 0xc2b2ae35) ^
+    ((totalLength | 0) >>> 0)
+  ) >>> 0;
   const seed = mix32((pathHash ^ shapeMix) >>> 0);
+  const structuralSeed = mix32(seed ^ spanMix ^ childMix ^ depthMix ^ leafMix);
 
   const voiceCount = 16;
   const voices: number[] = [];
   for (let v = 0; v < voiceCount; v++) {
-    const idx =
-      ((Math.imul(v + 1, 0x9e3779b1) ^ seed) >>> 0) % Math.max(1, file.count);
+    const idx = (
+      mix32(seed ^ structuralSeed ^ Math.imul(v + 1, 0x9e3779b1) ^ Math.imul(v + file.count + 1, 0x85ebca6b))
+    ) % Math.max(1, file.count);
     const k = file.kind[idx] || 0;
     const s = file.start[idx] || 0;
     const e = file.end[idx] || 0;
+    const fc = file.firstChild[idx] || 0;
+    const ns = file.nextSibling[idx] || 0;
     voices.push(
-      mix32(k ^ Math.imul(s + 1, 0x85ebca6b) ^ Math.imul(e + 1, 0xc2b2ae35)),
+      mix32(
+        k ^
+        Math.imul(s + 1, 0x85ebca6b) ^
+        Math.imul(e + 1, 0xc2b2ae35) ^
+        Math.imul(fc + 1, 0x27d4eb2d) ^
+        Math.imul(ns + 1, 0x165667b1) ^
+        Math.imul(idx + 1, 0x94d049bb),
+      ),
     );
   }
 
@@ -154,11 +202,14 @@ export function extractFingerprintGenes(file: AstFingerprintFile): FingerprintGe
   const avgBranch = branchCount > 0 ? branchSum / branchCount : 1;
   const avgDepth = depthSum / safeVisited;
   const avgLength = totalLength / safeVisited;
+  const leafRatio = leafCount / safeVisited;
+  const branchRatio = branchCount / safeVisited;
   const densityBoost = Math.min(20, Math.floor(file.count / 32));
   const depthBoost = Math.min(0.6, avgDepth * 0.05);
   const lengthScale = Math.min(1.2, avgLength / 64);
 
-  const engineId = mix32(seed) % ENGINE_COUNT;
+  const engineId = mix32(structuralSeed ^ Math.imul(kindXor + 1, 0x9e3779b1)) % ENGINE_COUNT;
+  const variant = mix32(structuralSeed ^ Math.imul(maxDepth + file.count + 1, 0x27d4eb2d)) % 11;
 
   return {
     seed,
@@ -172,6 +223,13 @@ export function extractFingerprintGenes(file: AstFingerprintFile): FingerprintGe
     scaleA: rangeFrom(seed, 6, 0.005, 0.05) * (0.6 + lengthScale * 0.6),
     scaleB: rangeFrom(seed, 7, 0.004, 0.06) * (0.6 + lengthScale * 0.6),
     speed: rangeFrom(seed, 8, 0.25, 2.4) * (1 + (avgBranch - 1) * 0.08),
+    variant,
+    contrast: Math.min(1.65, rangeFrom(structuralSeed, 17, 0.65, 1.35) + leafRatio * 0.35),
+    cadence: rangeFrom(structuralSeed, 18, 0.35, 2.25) * (0.85 + branchRatio * 2),
+    asymmetry: rangeFrom(structuralSeed, 19, -1, 1) * (0.25 + Math.min(1, avgDepth / 8)),
+    grain: rangeFrom(structuralSeed, 20, 0, 1),
+    phaseA: rangeFrom(structuralSeed, 21, -Math.PI, Math.PI),
+    phaseB: rangeFrom(structuralSeed, 22, -Math.PI, Math.PI),
     symmetry: 1 + Math.floor(r01(seed, 9) * 7),
     warp: rangeFrom(seed, 10, 0, 1.6) + depthBoost,
     twist: rangeFrom(seed, 11, -3.5, 3.5),
@@ -184,14 +242,29 @@ export function extractFingerprintGenes(file: AstFingerprintFile): FingerprintGe
   };
 }
 
+function clamp01(value: number): number {
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function voice01(genes: FingerprintGenes, slot: number, shift: number): number {
+  const voice = genes.voices[((slot % genes.voices.length) + genes.voices.length) % genes.voices.length] || 0;
+  return ((voice >>> shift) & 0xff) / 255;
+}
+
 function buildPalette(effect: any, genes: FingerprintGenes): Uint8Array {
   const out = new Uint8Array(PALETTE_SIZE * 3);
   const sat = genes.saturation;
   const baseV = genes.brightness;
+  const curve = Math.max(0.25, genes.contrast);
   for (let i = 0; i < PALETTE_SIZE; i++) {
     const t = i / (PALETTE_SIZE - 1);
-    const hue = ((genes.hueBase + t * genes.hueSpan) % 1 + 1) % 1;
-    const v = baseV * (0.25 + 0.75 * t);
+    const flutter = Math.sin((t * (2 + genes.variant)) * Math.PI * 2 + genes.phaseA) * 0.035 * genes.grain;
+    const hue = ((genes.hueBase + t * genes.hueSpan + flutter) % 1 + 1) % 1;
+    const shaped = Math.pow(t, 1 / curve);
+    const tone = 0.88 + 0.12 * Math.sin((t * (3 + (genes.variant % 5))) * Math.PI * 2 + genes.phaseB);
+    const v = clamp01(baseV * (0.18 + 0.82 * shaped) * tone);
     const rgb = effect.hsv(hue, sat, v);
     out[i * 3] = (rgb[0] * 255) | 0;
     out[i * 3 + 1] = (rgb[1] * 255) | 0;
@@ -239,6 +312,8 @@ function paintPlasma(
   const sa = genes.scaleA;
   const sb = genes.scaleB;
   const detail = genes.detail;
+  const mode = genes.variant % 3;
+  const warpA = genes.warp * (0.08 + genes.grain * 0.12);
   const xEnd = x0 + W;
   const yEnd = y0 + H;
   for (let py = y0; py < yEnd; py += PIXEL_STEP) {
@@ -246,9 +321,13 @@ function paintPlasma(
     const pyNext = Math.min(yEnd, py + PIXEL_STEP);
     for (let px = x0; px < xEnd; px += PIXEL_STEP) {
       const lx = px - x0;
-      const f = effect.fbm(lx * sa + t * 0.3, ly * sa - t * 0.2, detail);
-      const g = effect.fbm(lx * sb + 100 - t * 0.15, ly * sb + 200 + t * 0.25, detail);
-      const v = (f + g) * 0.25 + 0.5;
+      const bendX = Math.sin(ly * sb + genes.phaseA) * warpA;
+      const bendY = Math.cos(lx * sa + genes.phaseB) * warpA;
+      const f = effect.fbm(lx * sa + bendX + t * 0.3, ly * sa + bendY - t * 0.2, detail);
+      const g = effect.fbm(lx * sb + 100 - t * 0.15 + genes.asymmetry, ly * sb + 200 + t * 0.25, detail);
+      let v = (f + g) * 0.25 + 0.5;
+      if (mode === 1) v = Math.abs(f - g) * 0.5 + 0.18 + genes.grain * 0.18;
+      else if (mode === 2) v = Math.sin((f + g + genes.phaseA) * Math.PI * genes.cadence) * 0.5 + 0.5;
       paintBlock(write, px, py, Math.min(xEnd, px + PIXEL_STEP), pyNext, palette, paletteIndex(v));
     }
   }
@@ -266,6 +345,8 @@ function paintVoronoi(
 ) {
   const t = effect.time * genes.speed * 0.4;
   const seedCount = Math.max(4, Math.min(20, genes.density));
+  const driftScale = 12 + genes.grain * 42;
+  const manhattan = genes.variant % 2 === 1;
   const sx = new Float32Array(seedCount);
   const sy = new Float32Array(seedCount);
   const st = new Float32Array(seedCount);
@@ -274,9 +355,9 @@ function paintVoronoi(
     const ox = ((v >>> 0) & 0xff) / 255;
     const oy = ((v >>> 8) & 0xff) / 255;
     const drift = ((v >>> 16) & 0xff) / 255;
-    sx[i] = ox * W + Math.cos(t + i * 0.71) * drift * 24;
-    sy[i] = oy * H + Math.sin(t * 0.83 + i * 1.31) * drift * 24;
-    st[i] = (i + 0.5) / seedCount;
+    sx[i] = ox * W + Math.cos(t * genes.cadence + i * 0.71 + genes.phaseA) * drift * driftScale + genes.asymmetry * W * 0.05;
+    sy[i] = oy * H + Math.sin(t * 0.83 + i * 1.31 + genes.phaseB) * drift * driftScale - genes.asymmetry * H * 0.04;
+    st[i] = ((i + 0.5) / seedCount + voice01(genes, i, 24) * 0.22) % 1;
   }
   const xEnd = x0 + W;
   const yEnd = y0 + H;
@@ -291,7 +372,9 @@ function paintVoronoi(
       for (let i = 0; i < seedCount; i++) {
         const dx = lx - sx[i];
         const dy = ly - sy[i];
-        const d = dx * dx + dy * dy;
+        const d = manhattan
+          ? Math.abs(dx) * (0.75 + genes.contrast * 0.25) + Math.abs(dy) * (1.25 - genes.contrast * 0.15)
+          : dx * dx + dy * dy;
         if (d < bestD) {
           secondD = bestD;
           bestD = d;
@@ -300,8 +383,10 @@ function paintVoronoi(
           secondD = d;
         }
       }
-      const edge = Math.min(1, (Math.sqrt(secondD) - Math.sqrt(bestD)) / 12);
-      const v = st[bestI] * 0.7 + edge * 0.3;
+      const edge = manhattan
+        ? Math.min(1, (secondD - bestD) / (8 + genes.contrast * 12))
+        : Math.min(1, (Math.sqrt(secondD) - Math.sqrt(bestD)) / (8 + genes.contrast * 8));
+      const v = st[bestI] * (0.55 + genes.grain * 0.25) + edge * (0.45 - genes.grain * 0.15);
       paintBlock(write, px, py, Math.min(xEnd, px + PIXEL_STEP), pyNext, palette, paletteIndex(v));
     }
   }
@@ -317,14 +402,15 @@ function paintMandala(
   W: number,
   H: number,
 ) {
-  const cx = W * 0.5;
-  const cy = H * 0.5;
+  const cx = W * (0.5 + genes.asymmetry * 0.07);
+  const cy = H * (0.5 - genes.asymmetry * 0.05);
   const t = effect.time * genes.speed;
-  const sym = genes.symmetry;
+  const sym = Math.max(1, genes.symmetry + (genes.variant % 3) - 1);
   const twist = genes.twist;
   const xEnd = x0 + W;
   const yEnd = y0 + H;
   const maxDim = Math.max(W, H);
+  const rings = 16 + genes.density * (0.35 + genes.grain * 0.35);
   for (let py = y0; py < yEnd; py += PIXEL_STEP) {
     const dy = (py - y0) - cy;
     const pyNext = Math.min(yEnd, py + PIXEL_STEP);
@@ -332,10 +418,12 @@ function paintMandala(
       const dx = (px - x0) - cx;
       const r = Math.sqrt(dx * dx + dy * dy) / maxDim;
       const theta = Math.atan2(dy, dx);
-      const phase = theta * sym + r * twist + t * 0.6;
-      const ringWave = Math.sin(r * 22 - t * 1.3) * 0.5 + 0.5;
+      const radialWarp = Math.sin(theta * (2 + (genes.variant % 5)) + genes.phaseB) * genes.warp * 0.04;
+      const phase = theta * sym + (r + radialWarp) * twist + t * 0.6 + genes.phaseA;
+      const ringWave = Math.sin((r + radialWarp) * rings - t * 1.3) * 0.5 + 0.5;
       const angularWave = Math.sin(phase) * 0.5 + 0.5;
-      const v = ringWave * 0.55 + angularWave * 0.45;
+      const petal = Math.sin(theta * (sym * 2 + 1) + r * genes.cadence * 12 + genes.phaseB) * 0.5 + 0.5;
+      const v = ringWave * 0.42 + angularWave * 0.38 + petal * 0.2;
       paintBlock(write, px, py, Math.min(xEnd, px + PIXEL_STEP), pyNext, palette, paletteIndex(v));
     }
   }
@@ -359,14 +447,16 @@ function paintWaves(
   const sp = new Float32Array(sources);
   for (let i = 0; i < sources; i++) {
     const v = genes.voices[i % genes.voices.length];
-    sx[i] = ((v >>> 0) & 0xff) / 255 * W;
-    sy[i] = ((v >>> 8) & 0xff) / 255 * H;
-    sf[i] = 0.04 + ((v >>> 16) & 0xff) / 255 * 0.16;
-    sp[i] = ((v >>> 24) & 0xff) / 255 * Math.PI * 2;
+    sx[i] = ((v >>> 0) & 0xff) / 255 * W + genes.asymmetry * W * 0.08;
+    sy[i] = ((v >>> 8) & 0xff) / 255 * H - genes.asymmetry * H * 0.06;
+    sf[i] = (0.035 + ((v >>> 16) & 0xff) / 255 * 0.18) * (0.75 + genes.contrast * 0.35);
+    sp[i] = ((v >>> 24) & 0xff) / 255 * Math.PI * 2 + genes.phaseA;
   }
   const xEnd = x0 + W;
   const yEnd = y0 + H;
-  const invSources = 1 / sources;
+  let totalWeight = 0;
+  for (let i = 0; i < sources; i++) totalWeight += 0.65 + voice01(genes, i, 8) * 0.7;
+  const invSources = 1 / Math.max(0.001, totalWeight);
   for (let py = y0; py < yEnd; py += PIXEL_STEP) {
     const ly = py - y0;
     const pyNext = Math.min(yEnd, py + PIXEL_STEP);
@@ -377,9 +467,11 @@ function paintWaves(
         const dx = lx - sx[i];
         const dy = ly - sy[i];
         const d = Math.sqrt(dx * dx + dy * dy);
-        acc += Math.sin(d * sf[i] + t + sp[i]);
+        const weight = 0.65 + voice01(genes, i, 8) * 0.7;
+        acc += Math.sin(d * sf[i] + t * (0.6 + voice01(genes, i, 0) * genes.cadence) + sp[i]) * weight;
       }
-      const v = acc * invSources * 0.5 + 0.5;
+      const directional = Math.sin((lx * Math.cos(genes.phaseB) + ly * Math.sin(genes.phaseB)) * genes.scaleB + t) * genes.grain * 0.18;
+      const v = Math.pow(clamp01(acc * invSources * 0.5 + 0.5 + directional), 1 / Math.max(0.35, genes.contrast));
       paintBlock(write, px, py, Math.min(xEnd, px + PIXEL_STEP), pyNext, palette, paletteIndex(v));
     }
   }
@@ -399,24 +491,28 @@ function paintLattice(
   const t = effect.time * genes.speed;
   const xEnd = x0 + W;
   const yEnd = y0 + H;
-  for (let cy = 0; cy < H; cy += cellSize) {
-    for (let cx = 0; cx < W; cx += cellSize) {
-      const fx = cx / cellSize;
-      const fy = cy / cellSize;
-      const a = effect.noise2(fx * 0.5 + t * 0.3, fy * 0.5 - t * 0.2);
-      const b = effect.noise2(fx * 0.9 - t * 0.4, fy * 0.9 + t * 0.6 + 100);
+  const aspect = 0.65 + voice01(genes, 1, 8) * 1.35;
+  const cellW = Math.max(4, Math.floor(cellSize * aspect));
+  const cellH = Math.max(4, Math.floor(cellSize * (1.55 - aspect * 0.35)));
+  for (let cy = 0; cy < H; cy += cellH) {
+    for (let cx = 0; cx < W; cx += cellW) {
+      const fx = (cx + cy * genes.asymmetry * 0.35) / cellSize;
+      const fy = (cy - cx * genes.asymmetry * 0.25) / cellSize;
+      const a = effect.noise2(fx * 0.45 + t * 0.3 + genes.phaseA, fy * 0.5 - t * 0.2);
+      const b = effect.noise2(fx * 0.9 - t * 0.4, fy * 0.9 + t * 0.6 + 100 + genes.phaseB);
       const v = (a * 0.6 + b * 0.4 + 1) * 0.5;
       const voice = genes.voices[((cx ^ cy ^ Math.floor(t * 0.5)) >>> 0) % genes.voices.length];
       const hueShift = ((voice & 0xff) / 255) * 0.3;
-      const t01 = (v + hueShift) % 1;
+      const diagonal = ((cx + cy) / Math.max(1, W + H)) * genes.grain * 0.35;
+      const t01 = (Math.pow(clamp01(v), 1 / Math.max(0.35, genes.contrast)) + hueShift + diagonal) % 1;
       const px0 = x0 + cx;
       const py0 = y0 + cy;
       paintBlock(
         write,
         px0,
         py0,
-        Math.min(xEnd, px0 + cellSize - 1),
-        Math.min(yEnd, py0 + cellSize - 1),
+        Math.min(xEnd, px0 + cellW - 1),
+        Math.min(yEnd, py0 + cellH - 1),
         palette,
         paletteIndex(t01),
       );
@@ -438,6 +534,8 @@ function paintStreams(
   const horizontal = genes.symmetry % 2 === 0;
   const sa = genes.scaleA * 1.5;
   const detail = genes.detail;
+  const laneWidth = 7 + voice01(genes, 2, 16) * 16;
+  const mode = genes.variant % 3;
   const xEnd = x0 + W;
   const yEnd = y0 + H;
   for (let py = y0; py < yEnd; py += PIXEL_STEP) {
@@ -445,13 +543,14 @@ function paintStreams(
     const pyNext = Math.min(yEnd, py + PIXEL_STEP);
     for (let px = x0; px < xEnd; px += PIXEL_STEP) {
       const lx = px - x0;
-      const u = horizontal ? lx : ly;
-      const v = horizontal ? ly : lx;
-      const warp = effect.fbm(u * sa, v * sa * 0.4 + t * 0.5, detail) * genes.warp * 60;
-      const stream = ((v + warp) / 12) | 0;
+      const u = mode === 0 ? (horizontal ? lx : ly) : mode === 1 ? lx + ly * 0.55 : lx - ly * 0.45;
+      const v = mode === 0 ? (horizontal ? ly : lx) : mode === 1 ? ly - lx * 0.35 : ly + lx * 0.4;
+      const warp = effect.fbm(u * sa + genes.phaseA, v * sa * 0.4 + t * 0.5 + genes.phaseB, detail) * genes.warp * (42 + genes.grain * 48);
+      const cross = Math.sin(u * genes.scaleB + t * genes.cadence + genes.phaseB) * genes.asymmetry * 35;
+      const stream = ((v + warp + cross) / laneWidth) | 0;
       const voice = genes.voices[(stream >>> 0) % genes.voices.length];
       const huePos = ((voice & 0xff) / 255);
-      const intensity = 0.4 + 0.6 * (Math.sin(stream * 0.7 + t * 1.3) * 0.5 + 0.5);
+      const intensity = 0.4 + 0.6 * Math.pow(Math.sin(stream * 0.7 + t * 1.3) * 0.5 + 0.5, 1 / Math.max(0.35, genes.contrast));
       const t01 = ((huePos * 0.6 + intensity * 0.4) % 1 + 1) % 1;
       paintBlock(write, px, py, Math.min(xEnd, px + PIXEL_STEP), pyNext, palette, paletteIndex(t01));
     }
@@ -468,10 +567,10 @@ function paintSpiral(
   W: number,
   H: number,
 ) {
-  const cx = W * 0.5;
-  const cy = H * 0.5;
+  const cx = W * (0.5 + genes.asymmetry * 0.08);
+  const cy = H * (0.5 - genes.asymmetry * 0.06);
   const t = effect.time * genes.speed;
-  const arms = genes.symmetry;
+  const arms = Math.max(1, genes.symmetry + (genes.variant % 4) - 1);
   const twist = genes.twist;
   const xEnd = x0 + W;
   const yEnd = y0 + H;
@@ -483,10 +582,11 @@ function paintSpiral(
       const dx = (px - x0) - cx;
       const r = Math.sqrt(dx * dx + dy * dy) / maxDim;
       const theta = Math.atan2(dy, dx);
-      const spiral = theta * arms + Math.log(Math.max(0.005, r)) * twist - t * 1.4;
+      const ripple = Math.sin(r * (18 + genes.density * 0.4) + theta * genes.asymmetry * 2 + genes.phaseB) * genes.grain * 0.35;
+      const spiral = theta * arms + Math.log(Math.max(0.005, r)) * twist - t * 1.4 + ripple + genes.phaseA;
       const wave = Math.sin(spiral * 2) * 0.5 + 0.5;
-      const fade = Math.max(0.05, 1 - r * 1.4);
-      const v = wave * fade;
+      const fade = Math.max(0.05, 1 - r * (1.15 + genes.contrast * 0.35));
+      const v = Math.pow(clamp01(wave * fade + ripple * 0.2), 1 / Math.max(0.35, genes.contrast));
       paintBlock(write, px, py, Math.min(xEnd, px + PIXEL_STEP), pyNext, palette, paletteIndex(v));
     }
   }
@@ -505,8 +605,9 @@ function paintReaction(
   const t = effect.time * genes.speed;
   const sa = genes.scaleA;
   const sb = genes.scaleB * 2.5;
-  const tA = genes.threshA * 0.6 - 0.1;
-  const tB = genes.threshB * 0.6 - 0.1;
+  const tA = genes.threshA * (0.45 + genes.grain * 0.3) - 0.12;
+  const tB = genes.threshB * (0.45 + genes.contrast * 0.22) - 0.12;
+  const mode = genes.variant % 3;
   const xEnd = x0 + W;
   const yEnd = y0 + H;
   for (let py = y0; py < yEnd; py += PIXEL_STEP) {
@@ -514,13 +615,21 @@ function paintReaction(
     const pyNext = Math.min(yEnd, py + PIXEL_STEP);
     for (let px = x0; px < xEnd; px += PIXEL_STEP) {
       const lx = px - x0;
-      const a = effect.noise3(lx * sa, ly * sa, t * 0.2);
-      const b = effect.noise3(lx * sb + 100, ly * sb - 100, t * 0.35 + 50);
+      const a = effect.noise3(lx * sa + genes.phaseA, ly * sa + genes.asymmetry, t * 0.2);
+      const b = effect.noise3(lx * sb + 100 + genes.asymmetry * 30, ly * sb - 100 + genes.phaseB, t * 0.35 + 50);
       let v;
-      if (a > tA && b > tB) v = 0.92;
-      else if (a > tA) v = 0.6;
-      else if (b > tB) v = 0.4;
-      else v = 0.12;
+      if (mode === 0) {
+        if (a > tA && b > tB) v = 0.92;
+        else if (a > tA) v = 0.6;
+        else if (b > tB) v = 0.4;
+        else v = 0.12;
+      } else if (mode === 1) {
+        const crackle = Math.abs(a - b);
+        v = crackle > 0.42 - genes.grain * 0.18 ? 0.9 : crackle * (1.1 + genes.contrast * 0.35);
+      } else {
+        const band = Math.sin((a + b + genes.phaseA) * Math.PI * (2 + genes.cadence));
+        v = band > tA ? 0.84 : band > tB ? 0.48 : 0.16 + genes.grain * 0.12;
+      }
       paintBlock(write, px, py, Math.min(xEnd, px + PIXEL_STEP), pyNext, palette, paletteIndex(v));
     }
   }

@@ -8,7 +8,7 @@ export const proportionFiltersSection = defineGallerySection({
     defineGalleryStory({
       id: 'proportion-filters/default',
       title: 'Proportion Filters',
-      source: 'cart/component-gallery/components/proportion-filters/ProportionFilters.tsx',
+      source: 'cart/app/gallery/components/proportion-filters/ProportionFilters.tsx',
       status: 'draft',
       variants: [
         {

@@ -187,14 +187,14 @@ export const semanticMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'User',
-    targetSource: 'cart/component-gallery/data/user.ts',
+    targetSource: 'cart/app/gallery/data/user.ts',
     sourceField: 'userId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Workspace (scope)',
-    targetSource: 'cart/component-gallery/data/workspace.ts',
+    targetSource: 'cart/app/gallery/data/workspace.ts',
     sourceField: 'workspaceId',
     targetField: 'id',
     summary: 'Null = user-wide fact (e.g. response-style preference). Set = workspace-scoped fact.',
@@ -202,7 +202,7 @@ export const semanticMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Source episodes',
-    targetSource: 'cart/component-gallery/data/episodic-memory.ts',
+    targetSource: 'cart/app/gallery/data/episodic-memory.ts',
     sourceField: 'sourceEpisodeIds[]',
     targetField: 'id',
     summary: 'Episodes that reinforced this fact. Confidence grows with reinforcementCount.',
@@ -210,7 +210,7 @@ export const semanticMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Supersedes',
-    targetSource: 'cart/component-gallery/data/semantic-memory.ts',
+    targetSource: 'cart/app/gallery/data/semantic-memory.ts',
     sourceField: 'supersedes',
     targetField: 'id',
     summary: 'Points at a replaced entry — lets stale facts be traced, not just overwritten.',
@@ -218,7 +218,7 @@ export const semanticMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Alternative shape — agent-memory',
-    targetSource: 'cart/component-gallery/data/agent-memory.ts',
+    targetSource: 'cart/app/gallery/data/agent-memory.ts',
     sourceField: '(same concept, simpler model)',
     targetField: 'entries[].body',
     summary:

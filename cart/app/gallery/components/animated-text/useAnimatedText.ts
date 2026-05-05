@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnimationsDisabled } from '../../lib/useSpring';
 
 function useRafTime(running: boolean): number {
+  const animationsDisabled = useAnimationsDisabled();
   const [t, setT] = useState(0);
   const rafRef = useRef<any>(null);
   useEffect(() => {
-    if (!running) return;
+    if (!running || animationsDisabled) return;
     const g: any = globalThis;
     const raf = g.requestAnimationFrame ? (fn: any) => g.requestAnimationFrame(fn) : (fn: any) => setTimeout(fn, 16);
     const caf = g.cancelAnimationFrame || clearTimeout;
@@ -15,7 +17,7 @@ function useRafTime(running: boolean): number {
     };
     rafRef.current = raf(tick);
     return () => { if (rafRef.current != null) { try { caf(rafRef.current); } catch {} } };
-  }, [running]);
+  }, [running, animationsDisabled]);
   return t;
 }
 
@@ -120,10 +122,7 @@ export function useStreamingText(target: string, opts: StreamingOptions = {}): s
 export interface GradientWaveOptions {
   speed?: number;
   spread?: number;
-  hueStart?: number;
-  hueEnd?: number;
-  saturation?: number;
-  lightness?: number;
+  tokens?: string[];
 }
 
 export interface GradientCharacter {
@@ -132,13 +131,20 @@ export interface GradientCharacter {
   index: number;
 }
 
+const GRADIENT_WAVE_TOKENS = [
+  'theme:blue',
+  'theme:lilac',
+  'theme:atch',
+  'theme:accent',
+  'theme:accentHot',
+  'theme:tool',
+  'theme:ok',
+];
+
 export function useGradientWave(text: string, opts: GradientWaveOptions = {}): GradientCharacter[] {
   const speed = opts.speed ?? 1;
   const spread = opts.spread ?? 0.18;
-  const hueStart = opts.hueStart ?? 280;
-  const hueEnd = opts.hueEnd ?? 50;
-  const sat = opts.saturation ?? 80;
-  const light = opts.lightness ?? 65;
+  const tokens = opts.tokens && opts.tokens.length > 0 ? opts.tokens : GRADIENT_WAVE_TOKENS;
 
   const t = useRafTime(true);
   const phase = (t / 1000) * speed;
@@ -147,11 +153,11 @@ export function useGradientWave(text: string, opts: GradientWaveOptions = {}): G
     const out: GradientCharacter[] = [];
     for (let i = 0; i < text.length; i++) {
       const u = (Math.sin(i * spread - phase) + 1) / 2;
-      const hue = hueStart + (hueEnd - hueStart) * u;
-      out.push({ ch: text[i], color: `hsl(${hue.toFixed(1)}, ${sat}%, ${light}%)`, index: i });
+      const colorIndex = Math.min(tokens.length - 1, Math.floor(u * tokens.length));
+      out.push({ ch: text[i], color: tokens[colorIndex], index: i });
     }
     return out;
-  }, [text, phase, spread, hueStart, hueEnd, sat, light]);
+  }, [text, phase, spread, tokens]);
 }
 
 export interface ScrambleOptions {

@@ -14,7 +14,7 @@ export const constraintBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: "constraint-badge/default",
       title: "Constraint Badge",
-      source: "cart/component-gallery/components/constraint-badge/ConstraintBadge.tsx",
+      source: "cart/app/gallery/components/constraint-badge/ConstraintBadge.tsx",
       status: 'draft',
       tags: ["badge", "card"],
       variants: [

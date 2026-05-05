@@ -5,16 +5,16 @@ export function TelemetryStat({ label, value, tone = 'muted' }: { label: string;
   const valueColor = tone === 'hot' ? CHAT_CARD.pink : tone === 'plain' ? CHAT_CARD.text : CHAT_CARD.orange;
 
   return (
-    <Row style={{ gap: 3 }}>
-      <Text style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.muted }}>{`${label}:`}</Text>
-      <Text style={{ fontFamily: 'monospace', fontSize: 8, color: valueColor }}>{value}</Text>
+    <Row style={{ gap: 3, minWidth: 0 }}>
+      <Text numberOfLines={1} style={{ fontFamily: 'monospace', fontSize: 8, color: CHAT_CARD.muted }}>{`${label}:`}</Text>
+      <Text numberOfLines={1} style={{ fontFamily: 'monospace', fontSize: 8, color: valueColor }}>{value}</Text>
     </Row>
   );
 }
 
 export function TelemetryStats({ state, time }: { state: string; time: string }) {
   return (
-    <Row style={{ gap: 9, alignItems: 'center' }}>
+    <Row style={{ flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: 'hidden', gap: 9, alignItems: 'center' }}>
       <TelemetryStat label="status" value={state} />
       <TelemetryDivider />
       <TelemetryStat label="tps" value="0.0" tone="hot" />

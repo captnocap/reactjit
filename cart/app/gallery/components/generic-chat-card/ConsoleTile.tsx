@@ -19,7 +19,7 @@ function CornerFrame() {
 }
 
 export function ConsoleCoreContainer({ children }: { children: any }) {
-  return <Col style={{ padding: 10, gap: 9 }}>{children}</Col>;
+  return <Col style={{ width: '100%', minWidth: 0, padding: 10, gap: 9 }}>{children}</Col>;
 }
 
 export function ConsoleTile({
@@ -46,7 +46,7 @@ export function ConsoleTile({
           paddingRight: 4,
           alignItems: 'flex-end',
           justifyContent: 'flex-start',
-          backgroundColor: 'transparent',
+          backgroundColor: 'theme:transparent',
         }}
       >
         {lane}
@@ -55,6 +55,7 @@ export function ConsoleTile({
         style={{
           position: 'relative',
           flexGrow: 1,
+          minWidth: 0,
           minHeight: 0,
           backgroundColor: CHAT_CARD.bg,
           borderWidth: 1,
@@ -74,7 +75,7 @@ export function ConsoleTile({
           paddingLeft: 4,
           alignItems: 'flex-start',
           justifyContent: 'flex-start',
-          backgroundColor: 'transparent',
+          backgroundColor: 'theme:transparent',
         }}
       >
         {cliff}

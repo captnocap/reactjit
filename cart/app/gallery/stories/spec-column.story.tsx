@@ -8,7 +8,7 @@ export const specColumnSection = defineGallerySection({
     defineGalleryStory({
       id: 'spec-column/default',
       title: 'Spec Column',
-      source: 'cart/component-gallery/components/controls-specimen/SpecColumn.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/SpecColumn.tsx',
       status: 'ready',
       summary: 'Archival mixed-axis column token for stacked identifiers and status tails.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

@@ -193,13 +193,32 @@ export function search(
 
 // ── Multi-worker ingest pool ───────────────────────────────────────────
 
+/**
+ * Which corpus shape the worker pool should ingest. The framework picks
+ * the parser, walker, chunk shape, and canonical source_type from this:
+ *
+ *   'code'             — recursive walk + line-window code chunks
+ *   'claude'           — ~/.claude/projects/<slug>/*.jsonl (chat-log)
+ *   'claude-overflow'  — ~/.claude-overflow/projects/<slug>/*.jsonl
+ *   'codex'            — ~/.codex/sessions/**\/*.jsonl
+ *   'kimi'             — ~/.kimi/sessions/<acct>/<sess>/context.jsonl
+ *   'memory'           — ~/.claude*\/projects/<slug>/memory/*.md
+ */
+export type EmbedKind =
+  | 'code'
+  | 'claude'
+  | 'claude-overflow'
+  | 'codex'
+  | 'kimi'
+  | 'memory';
+
 export interface IngestStartOpts {
   /** Path to the .gguf the framework will load into VRAM for the workers. */
   modelPath: string;
   /** Sanitized slug — controls the per-model table name `chunks_<slug>`. */
   slug: string;
-  /** Source type label written into each chunk row (e.g. 'code-chunk'). */
-  sourceType: string;
+  /** Corpus kind. The framework picks parser + walker + canonical source_type. */
+  kind: EmbedKind;
   /** Number of OS threads in the worker pool. 1–16. */
   nWorkers: number;
 }
@@ -244,7 +263,7 @@ export function ingestStart(rootPath: string, opts: IngestStartOpts): boolean {
     '__embed_ingest_start',
     0,
     rootPath,
-    opts.sourceType,
+    opts.kind,
     opts.modelPath,
     opts.slug,
     opts.nWorkers | 0,

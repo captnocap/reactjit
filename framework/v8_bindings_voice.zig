@@ -1,19 +1,26 @@
 //! V8 host bindings for the voice subsystem (framework/voice.zig).
 //!
 //! Exposes:
-//!   __voice_start()              → bool   open mic + begin VAD streaming
-//!   __voice_stop()               → void   close mic + finalise current utterance
-//!   __voice_set_mode(int)        → void   libfvad aggressiveness 0..3 (default 2)
-//!   __voice_release_buffer(int)  → void   free a captured utterance buffer
+//!   __voice_start()                       → bool   open mic + begin VAD streaming
+//!   __voice_stop()                        → void   close mic + finalise current utterance
+//!   __voice_set_mode(int)                 → void   libfvad aggressiveness 0..3 (default 2)
+//!   __voice_set_floor(int)                → void   amplitude floor 0..10000 (peak-dBFS ×100)
+//!   __voice_set_preview_stride_ms(int)    → void   live-preview snapshot interval; 0 disables
+//!   __voice_release_buffer(int)           → void   free a captured utterance buffer
 //!
 //! Events (fired from voice.tick on the engine thread, picked up by useVoiceInput):
-//!   __voice_onLevel(rms_x100)    every tick while listening, 0..10000 (×100)
-//!   __voice_onSpeechStart()      VAD edge: confirmed speech start
-//!   __voice_onSpeechEnd(id, len) VAD edge: confirmed silence end. id keys
-//!                                a buffer of `len` int16 samples.
-//!   __voice_onTranscript(text)   reserved — fired by whisper integration once
-//!                                that lands. Cart can listen for it today; it
-//!                                just stays silent until wired.
+//!   __voice_onLevel(rms_x100)      every tick while listening, 0..10000 (×100)
+//!   __voice_onSpeechStart()        VAD edge: confirmed speech start
+//!   __voice_onSpeechEnd(id, len)   VAD edge: confirmed silence end. id keys
+//!                                  a buffer of `len` int16 samples.
+//!   __voice_onPreviewReady(id, len) Periodic in-flight snapshot of the current
+//!                                  utterance. Same buffer-store as SpeechEnd —
+//!                                  JS calls __whisper_transcribe(id, model) on
+//!                                  it for a live preview, then __voice_release_buffer(id).
+//!   __voice_onTranscript(text)     fired by framework/whisper.zig when a
+//!                                  transcription job completes. Carries the
+//!                                  resolved text only; whisper.ts also fires
+//!                                  __whisper_onResult with id+timing.
 
 const std = @import("std");
 const v8 = @import("v8");
@@ -57,11 +64,18 @@ fn hostReleaseBuffer(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) voi
     voice.releaseBuffer(@intCast(id));
 }
 
+fn hostSetPreviewStrideMs(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
+    const info = v8.FunctionCallbackInfo.initFromV8(info_c);
+    const ms = argToI32(info, 0) orelse return;
+    voice.setPreviewStrideMs(ms);
+}
+
 pub fn registerVoice(_: anytype) void {
     v8_runtime.registerHostFn("__voice_start", hostStart);
     v8_runtime.registerHostFn("__voice_stop", hostStop);
     v8_runtime.registerHostFn("__voice_set_mode", hostSetMode);
     v8_runtime.registerHostFn("__voice_set_floor", hostSetFloor);
+    v8_runtime.registerHostFn("__voice_set_preview_stride_ms", hostSetPreviewStrideMs);
     v8_runtime.registerHostFn("__voice_release_buffer", hostReleaseBuffer);
 }
 

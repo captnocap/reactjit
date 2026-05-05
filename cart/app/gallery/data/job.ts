@@ -298,11 +298,11 @@ export const jobSchema: JsonObject = {
 };
 
 export const jobReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Settings', targetSource: 'cart/component-gallery/data/settings.ts', sourceField: 'settingsId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Settings', targetSource: 'cart/app/gallery/data/settings.ts', sourceField: 'settingsId', targetField: 'id' },
   {
     kind: 'has-many',
     label: 'Job runs',
-    targetSource: 'cart/component-gallery/data/job-run.ts',
+    targetSource: 'cart/app/gallery/data/job-run.ts',
     sourceField: 'id',
     targetField: 'jobId',
     summary:
@@ -311,14 +311,14 @@ export const jobReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Owning worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'ownerWorkerId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Triggering event hook',
-    targetSource: 'cart/component-gallery/data/event-hook.ts',
+    targetSource: 'cart/app/gallery/data/event-hook.ts',
     sourceField: 'trigger.eventHookId',
     targetField: 'id',
     summary:

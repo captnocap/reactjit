@@ -62,17 +62,17 @@ function CounterPen({ task }: { task: CounterTask }) {
       </TaskStep>
       <TaskStep color={CHAT_CARD.green} connectTop={true} showConnector={true} badgeName="list">
         <S.InlineX3>
-          <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, backgroundColor: '#54351d', borderRadius: 3 }}>
+          <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, backgroundColor: 'theme:paperRule', borderRadius: 3 }}>
             <Text style={{ fontFamily: 'monospace', fontSize: 7, fontWeight: 'bold', color: CHAT_CARD.orange }}>DRAFT 2</Text>
           </Box>
-          <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, backgroundColor: '#1a1511', borderRadius: 3 }}>
+          <Box style={{ paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, backgroundColor: 'theme:bg2', borderRadius: 3 }}>
             <Text style={{ fontFamily: 'monospace', fontSize: 7, fontWeight: 'bold', color: CHAT_CARD.green }}>COUNTER SLOT</Text>
           </Box>
           <S.Spacer />
           <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>TARGET: {task.target}</Text>
         </S.InlineX3>
-        <Box style={{ width: 320, height: 5, backgroundColor: '#26364a' }}>
-          <Box style={{ width: fill, height: 5, backgroundColor: '#13c996' }} />
+        <Box style={{ width: 320, height: 5, backgroundColor: 'theme:inkGhost' }}>
+          <Box style={{ width: fill, height: 5, backgroundColor: 'theme:ok' }} />
         </Box>
       </TaskStep>
       <TaskStep color={CHAT_CARD.green} connectTop={true} showConnector={false} title="verification command" badgeName="terminal">
@@ -114,9 +114,9 @@ export function ConsoleTaskPanel({ task, attached = false }: { task: TaskPanelDa
         paddingRight: 10,
         paddingTop: attached ? 8 : 10,
         paddingBottom: attached ? 10 : 10,
-        backgroundColor: attached ? 'transparent' : '#1c2232',
+        backgroundColor: attached ? 'theme:transparent' : 'theme:paperInk',
         borderWidth: attached ? 0 : 1,
-        borderColor: task.kind === 'counter' ? '#54413a' : CHAT_CARD.borderSoft,
+        borderColor: task.kind === 'counter' ? 'theme:inkGhost' : CHAT_CARD.borderSoft,
         borderRadius: attached ? 0 : 4,
       }}
     >

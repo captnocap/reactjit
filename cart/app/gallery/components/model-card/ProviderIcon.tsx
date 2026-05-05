@@ -1,6 +1,6 @@
 import { Box, Image, Text } from '@reactjit/runtime/primitives';
 import { CircleHelp } from '@reactjit/runtime/icons/icons';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { PROVIDER_ICONS } from './providerIcons.generated';
 
 export type ProviderIconProps = {
@@ -13,7 +13,7 @@ export type ProviderIconProps = {
 // always renders inside a light badge. Color matches the cockpit theme's warm
 // paper (PAGE_SURFACE.backgroundColor / theme `previewBg`) so the badge reads
 // as part of the gallery palette, not an arbitrary white square.
-const BADGE_BG = '#e8dcc4';
+const BADGE_BG = 'theme:paper';
 
 export function ProviderIcon({ providerId, size = 24 }: ProviderIconProps) {
   const src = PROVIDER_ICONS[providerId];
@@ -34,11 +34,11 @@ export function ProviderIcon({ providerId, size = 24 }: ProviderIconProps) {
         }}
       >
         {letter ? (
-          <Text style={{ fontSize: Math.round(size * 0.55), fontWeight: 'bold', color: '#14100d' }}>
+          <Text style={{ fontSize: Math.round(size * 0.55), fontWeight: 'bold', color: 'theme:bg1' }}>
             {letter}
           </Text>
         ) : (
-          <Icon icon={CircleHelp} size={Math.round(size * 0.62)} color="#14100d" strokeWidth={2.2} />
+          <Icon icon={CircleHelp} size={Math.round(size * 0.62)} color="theme:bg1" strokeWidth={2.2} />
         )}
       </Box>
     );

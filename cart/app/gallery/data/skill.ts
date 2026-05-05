@@ -188,7 +188,7 @@ export const skillReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary: 'Skills are profile-scoped; a strict profile can carry read-only variants of general skills.',
@@ -196,21 +196,21 @@ export const skillReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'System message',
-    targetSource: 'cart/component-gallery/data/system-message.ts',
+    targetSource: 'cart/app/gallery/data/system-message.ts',
     sourceField: 'systemMessageId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Prompt template',
-    targetSource: 'cart/component-gallery/data/prompt-template.ts',
+    targetSource: 'cart/app/gallery/data/prompt-template.ts',
     sourceField: 'promptTemplateId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Required capabilities',
-    targetSource: 'cart/component-gallery/data/capability.ts',
+    targetSource: 'cart/app/gallery/data/capability.ts',
     sourceField: 'requiredCapabilities[]',
     targetField: 'id',
     summary:
@@ -219,7 +219,7 @@ export const skillReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Required tools (Privacy)',
-    targetSource: 'cart/component-gallery/data/privacy.ts',
+    targetSource: 'cart/app/gallery/data/privacy.ts',
     sourceField: 'requiredTools[]',
     targetField: 'tools.allowed[]',
     summary:
@@ -228,7 +228,7 @@ export const skillReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Roles (composition)',
-    targetSource: 'cart/component-gallery/data/role.ts',
+    targetSource: 'cart/app/gallery/data/role.ts',
     sourceField: 'id',
     targetField: 'skills[]',
     summary: 'Roles are composed of skills. A Reviewer role bundles code-review + document-section, for example.',

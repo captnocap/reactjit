@@ -10,16 +10,16 @@ export const conditionalGuttersSection = defineGallerySection({
   },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/conditional-gutters/ConditionalGutter.tsx',
-    'cart/component-gallery/components/conditional-gutters/GutterChrome.tsx',
-    'cart/component-gallery/components/conditional-gutters/GutterToggle.tsx',
-    'cart/component-gallery/components/conditional-gutters/gutterMotion.ts',
+    'cart/app/gallery/components/conditional-gutters/ConditionalGutter.tsx',
+    'cart/app/gallery/components/conditional-gutters/GutterChrome.tsx',
+    'cart/app/gallery/components/conditional-gutters/GutterToggle.tsx',
+    'cart/app/gallery/components/conditional-gutters/gutterMotion.ts',
   ],
   stories: [
     defineGalleryStory({
       id: 'conditional-gutters/default',
       title: 'Conditional Gutters',
-      source: 'cart/component-gallery/components/conditional-gutters/ConditionalGutters.tsx',
+      source: 'cart/app/gallery/components/conditional-gutters/ConditionalGutters.tsx',
       status: 'draft',
       summary: 'Edge-owned layout gutters that animate through app shell close and hide states.',
       tags: ['motion', 'layout', 'shell', 'gutter'],

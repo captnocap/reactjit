@@ -13,7 +13,7 @@ export const dexSparkHistogramSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-spark-histogram/default",
       title: "Dex Spark Histogram",
-      source: "cart/component-gallery/components/dex-spark-histogram/DexSparkHistogram.tsx",
+      source: "cart/app/gallery/components/dex-spark-histogram/DexSparkHistogram.tsx",
       status: 'ready',
       summary: 'Tiny column distribution sparkline for table headers.',
       tags: ["data-explorer", "atom"],

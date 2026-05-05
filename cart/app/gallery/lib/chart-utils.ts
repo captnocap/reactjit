@@ -59,11 +59,8 @@ export function donutSegment(cx: number, cy: number, inner: number, outer: numbe
   return `M ${sxo} ${syo} A ${outer} ${outer} 0 ${large} 1 ${exo} ${eyo} L ${exi} ${eyi} A ${inner} ${inner} 0 ${large} 0 ${sxi} ${syi} Z`;
 }
 
-export function hexColorWithAlpha(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
+export function hexColorWithAlpha(color: string, _alpha: number): string {
+  return color;
 }
 
 export type Margin = { top: number; right: number; bottom: number; left: number };

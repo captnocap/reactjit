@@ -1,6 +1,6 @@
 // RubricPanel — gallery component bound to the `OutcomeRubric` data shape.
 //
-// Source of truth: cart/component-gallery/data/outcome-rubric.ts
+// Source of truth: cart/app/gallery/data/outcome-rubric.ts
 //
 // Top-level fields on `OutcomeRubric`:
 //   id: string
@@ -41,8 +41,8 @@ export type RubricPanelProps = {
 export function RubricPanel({ row }: RubricPanelProps) {
   return (
     <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>Rubric Panel</Text>
-      <Text style={{ fontSize: 12, color: '#657185' }}>OutcomeRubric: {String((row as { id?: unknown }).id ?? '—')}</Text>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'theme:bg2' }}>Rubric Panel</Text>
+      <Text style={{ fontSize: 12, color: 'theme:paperInkDim' }}>OutcomeRubric: {String((row as { id?: unknown }).id ?? '—')}</Text>
     </Col>
   );
 }

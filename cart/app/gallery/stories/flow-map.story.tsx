@@ -8,7 +8,7 @@ export const flowMapSection = defineGallerySection({
     defineGalleryStory({
       id: 'flow-map/default',
       title: 'Flow Map',
-      source: 'cart/component-gallery/components/flow-map/FlowMap.tsx',
+      source: 'cart/app/gallery/components/flow-map/FlowMap.tsx',
       status: 'draft',
       variants: [
         {

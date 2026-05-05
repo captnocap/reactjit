@@ -1,6 +1,6 @@
 // HookList — gallery component bound to the `EventHook` data shape.
 //
-// Source of truth: cart/component-gallery/data/event-hook.ts
+// Source of truth: cart/app/gallery/data/event-hook.ts
 //
 // Top-level fields on `EventHook`:
 //   id: string
@@ -43,8 +43,8 @@ export type HookListProps = {
 export function HookList({ row }: HookListProps) {
   return (
     <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>Hook List</Text>
-      <Text style={{ fontSize: 12, color: '#657185' }}>EventHook: {String((row as { id?: unknown }).id ?? '—')}</Text>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'theme:bg2' }}>Hook List</Text>
+      <Text style={{ fontSize: 12, color: 'theme:paperInkDim' }}>EventHook: {String((row as { id?: unknown }).id ?? '—')}</Text>
     </Col>
   );
 }

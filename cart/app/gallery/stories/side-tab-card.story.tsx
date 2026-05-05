@@ -8,7 +8,7 @@ export const sideTabCardSection = defineGallerySection({
     defineGalleryStory({
       id: 'side-tab-card/default',
       title: 'Side Tab Card',
-      source: 'cart/component-gallery/components/controls-specimen/SideTabCard.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/SideTabCard.tsx',
       status: 'ready',
       summary: 'Mixed-axis readout card with a vertical spine tab and horizontal value block.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

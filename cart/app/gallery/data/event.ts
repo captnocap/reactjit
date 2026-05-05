@@ -283,7 +283,7 @@ export const eventReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Subject (polymorphic)',
-    targetSource: 'cart/component-gallery/data/(varies by subjectKind)',
+    targetSource: 'cart/app/gallery/data/(varies by subjectKind)',
     sourceField: '(subjectKind, subjectId)',
     targetField: 'id',
     summary: 'Polymorphic FK — subjectKind names the target table; subjectId is the row in that table.',
@@ -291,7 +291,7 @@ export const eventReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Causal event',
-    targetSource: 'cart/component-gallery/data/event.ts',
+    targetSource: 'cart/app/gallery/data/event.ts',
     sourceField: 'causalEventId',
     targetField: 'id',
     summary: 'Forms the chain "what set off what." Replay tooling walks this in reverse.',
@@ -299,7 +299,7 @@ export const eventReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Hooks (matched on this kind)',
-    targetSource: 'cart/component-gallery/data/event-hook.ts',
+    targetSource: 'cart/app/gallery/data/event-hook.ts',
     sourceField: 'kind',
     targetField: 'match.kind',
     summary:
@@ -308,14 +308,14 @@ export const eventReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Worker / actor',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Session',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'sessionId',
     targetField: 'id',
   },

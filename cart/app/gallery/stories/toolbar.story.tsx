@@ -34,15 +34,15 @@ export const toolbarSection = defineGallerySection({
   },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/toolbar/ToolbarMenu.tsx',
-    'cart/component-gallery/components/controls-specimen/StatusBadge.tsx',
-    'cart/component-gallery/components/controls-specimen/controlsSpecimenParts.tsx',
+    'cart/app/gallery/components/toolbar/ToolbarMenu.tsx',
+    'cart/app/gallery/components/controls-specimen/StatusBadge.tsx',
+    'cart/app/gallery/components/controls-specimen/controlsSpecimenParts.tsx',
   ],
   stories: [
     defineGalleryStory({
       id: 'toolbar/default',
       title: 'Toolbar',
-      source: 'cart/component-gallery/components/toolbar/Toolbar.tsx',
+      source: 'cart/app/gallery/components/toolbar/Toolbar.tsx',
       status: 'draft',
       summary: 'One toolbar surface for text menu bars, square icon bars, system status strips, and vertical tool rails.',
       tags: ['controls', 'menu', 'toolbar'],

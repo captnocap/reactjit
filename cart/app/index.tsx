@@ -7,7 +7,7 @@ import { Route, Router, useNavigate, useRoute } from '@reactjit/runtime/router';
 import { installBrowserShims } from '@reactjit/runtime/hooks';
 import { useBreakpoint, useActiveVariant, setVariant } from '@reactjit/runtime/theme';
 import { TooltipRoot } from '@reactjit/runtime/tooltip/Tooltip';
-import { BotMessageSquare, Home, LayoutGrid, Maximize, Minimize, Settings, User2, X } from '@reactjit/runtime/icons/icons';
+import { BotMessageSquare, Boxes, Home, LayoutGrid, Maximize, Minimize, Settings, User2, X } from '@reactjit/runtime/icons/icons';
 import { callHost } from '@reactjit/runtime/ffi';
 import { applyGalleryTheme, getActiveGalleryThemeId, useGalleryTheme } from './gallery/gallery-theme';
 import { classifiers as S } from '@reactjit/core';
@@ -16,9 +16,11 @@ import IndexPage from './page.tsx';
 import SettingsPage, { SettingsNav } from './settings/page.tsx';
 import SweatshopPage from './sweatshop/page';
 import CharacterPage from './character/page';
+import Face3DPage from './face3d/page';
 import ComposerPage from './composer/page';
 import GalleryPage from './gallery';
 import { OnboardingProvider, useOnboarding } from './onboarding/state.tsx';
+import { EffectProfilerOverlay } from './EffectProfilerOverlay';
 import { useAnimationTimeline } from './anim';
 import { InputStrip } from './InputStrip';
 import {
@@ -51,6 +53,7 @@ const ROUTES: Array<{ path: string; label: string; icon: number[][]; mode: Route
   { path: '/activity/sweatshop', label: 'Sweatshop', icon: Settings,         mode: 'side' },
   { path: '/composer',           label: 'Composer',  icon: Settings,         mode: 'side' },
   { path: '/character',          label: 'Character', icon: User2,            mode: 'side' },
+  { path: '/face3d',             label: 'Face3D',    icon: Boxes,            mode: 'side' },
   { path: '/gallery',            label: 'Gallery',   icon: LayoutGrid,       mode: 'side' },
 ];
 
@@ -561,6 +564,9 @@ function ShellBody() {
                 <Route path="/character">
                   <CharacterPage />
                 </Route>
+                <Route path="/face3d">
+                  <Face3DPage />
+                </Route>
                 <Route path="/gallery">
                   <GalleryPage />
                 </Route>
@@ -622,6 +628,7 @@ function ShellBody() {
                 </S.AppBottomInputBar>
               )}
             </Box>
+            <EffectProfilerOverlay />
           </Box>
   );
 }

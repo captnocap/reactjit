@@ -132,14 +132,14 @@ export const barrierReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Owning workstream',
-    targetSource: 'cart/component-gallery/data/workstream.ts',
+    targetSource: 'cart/app/gallery/data/workstream.ts',
     sourceField: 'workstreamId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Required workstreams',
-    targetSource: 'cart/component-gallery/data/workstream.ts',
+    targetSource: 'cart/app/gallery/data/workstream.ts',
     sourceField: 'requiredWorkstreamIds[]',
     targetField: 'id',
     summary: 'The set of workstreams that must reach targetStatus before the barrier resolves.',
@@ -147,7 +147,7 @@ export const barrierReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Resulting merge proposal',
-    targetSource: 'cart/component-gallery/data/merge-proposal.ts',
+    targetSource: 'cart/app/gallery/data/merge-proposal.ts',
     sourceField: 'resultMergeProposalId',
     targetField: 'id',
     summary: 'When onSatisfied=merge resolves, the produced MergeProposal is linked here for traceability.',

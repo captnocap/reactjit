@@ -32,7 +32,7 @@ export function DexCanvasNode({
           borderRadius: size / 2,
           borderWidth: 1,
           borderColor: selected ? DEX_COLORS.accent : container ? DEX_COLORS.ruleBright : DEX_COLORS.rule,
-          backgroundColor: container ? '#14100ddd' : DEX_COLORS.bg1,
+          backgroundColor: container ? 'theme:bg1' : DEX_COLORS.bg1,
           alignItems: 'center',
           justifyContent: 'center',
         }}

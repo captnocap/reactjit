@@ -180,7 +180,7 @@ export const inferencePresetReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary:
@@ -189,7 +189,7 @@ export const inferencePresetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Inference parameters',
-    targetSource: 'cart/component-gallery/data/inference-parameter.ts',
+    targetSource: 'cart/app/gallery/data/inference-parameter.ts',
     sourceField: 'values[].parameter',
     targetField: 'name',
     summary:
@@ -198,7 +198,7 @@ export const inferencePresetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Connection kinds (scoping)',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'scopedKinds[]',
     targetField: 'kind',
     summary: 'Optional scoping — restricts the preset to specific auth/wire paths.',
@@ -206,7 +206,7 @@ export const inferencePresetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Models (scoping)',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'scopedModelIds[]',
     targetField: 'id',
     summary: 'Optional scoping — restricts the preset to specific models (e.g. a GPT-5-only reasoning preset).',
@@ -214,7 +214,7 @@ export const inferencePresetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'System message (forward)',
-    targetSource: 'cart/component-gallery/data/system-message.ts',
+    targetSource: 'cart/app/gallery/data/system-message.ts',
     sourceField: 'systemMessageId',
     targetField: 'id',
     summary:
@@ -223,7 +223,7 @@ export const inferencePresetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Prompt template (forward)',
-    targetSource: 'cart/component-gallery/data/prompt-template.ts',
+    targetSource: 'cart/app/gallery/data/prompt-template.ts',
     sourceField: 'promptTemplateId',
     targetField: 'id',
     summary:

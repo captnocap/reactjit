@@ -60,7 +60,7 @@ export function AreaChart(props: AreaChartProps) {
         {[0, 0.25, 0.5, 0.75, 1.0].map((t) => {
           const y = plot.y + plot.h * (1 - t);
           return (
-            <Graph.Path key={`grid-${t}`} d={`M ${plot.x} ${y} L ${plot.x + plot.w} ${y}`} stroke="#3a2a1e" strokeWidth={1} />
+            <Graph.Path key={`grid-${t}`} d={`M ${plot.x} ${y} L ${plot.x + plot.w} ${y}`} stroke="theme:rule" strokeWidth={1} />
           );
         })}
         <Graph.Path d={areaPath(data2, grow)} fill={PALETTE.cyan} fillOpacity={0.25} stroke="none" />
@@ -100,7 +100,7 @@ export function AreaChart(props: AreaChartProps) {
 
       {labels.map((l, i) => (
         <Box key={l} style={{ position: 'absolute', left: xScale(i) - 8, top: plot.y + plot.h + 4, width: 16, alignItems: 'center' }}>
-          <Text fontSize={9} color="#7a6e5d">{l}</Text>
+          <Text fontSize={9} color="theme:inkDimmer">{l}</Text>
         </Box>
       ))}
     </Box>

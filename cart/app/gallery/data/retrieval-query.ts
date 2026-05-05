@@ -210,21 +210,21 @@ export const retrievalQueryReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
   },
   {
     kind: 'belongs-to',
     label: 'Strategy',
-    targetSource: 'cart/component-gallery/data/retrieval-strategy.ts',
+    targetSource: 'cart/app/gallery/data/retrieval-strategy.ts',
     sourceField: 'strategyId',
     targetField: 'id',
   },
   {
     kind: 'belongs-to',
     label: 'Embedding model',
-    targetSource: 'cart/component-gallery/data/embedding-model.ts',
+    targetSource: 'cart/app/gallery/data/embedding-model.ts',
     sourceField: 'embeddingModelId',
     targetField: 'id',
     summary: 'Both the query and the candidate vectors must use the same model — RetrievalQuery records which.',
@@ -232,14 +232,14 @@ export const retrievalQueryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Result embeddings',
-    targetSource: 'cart/component-gallery/data/embedding.ts',
+    targetSource: 'cart/app/gallery/data/embedding.ts',
     sourceField: 'results[].embeddingId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Feeding inference request',
-    targetSource: 'cart/component-gallery/data/inference-request.ts',
+    targetSource: 'cart/app/gallery/data/inference-request.ts',
     sourceField: 'feedingRequestId',
     targetField: 'id',
     summary:

@@ -13,7 +13,7 @@ export const chartDemoDataSection = defineGallerySection({
     defineGalleryDataStory({
       id: 'chart-demo-data/catalog',
       title: 'Chart Demo Data',
-      source: 'cart/component-gallery/data/chart-demo-data.ts',
+      source: 'cart/app/gallery/data/chart-demo-data.ts',
       format: 'data',
       status: 'ready',
       summary:

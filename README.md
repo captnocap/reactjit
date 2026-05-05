@@ -111,7 +111,7 @@ This isn't React with a thinner browser. It's React without a browser. Behind th
 
 That's the load-bearing five — picked by where bugs land most often, not by importance. `ls framework/` is ~120 more `.zig` files in the same shape: read the file, fix the bug.
 
-**What we actually depend on:** wgpu-native, V8, SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D, libsodium, libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv (`dlopen`'d, embedding hand-rolled). The dep graph is shallow on purpose. When layout misbehaves, the bug is in a file you can read in one sitting, not buried under a million lines of Blink.
+**What we actually depend on:** wgpu-native, V8 (lightpanda), SDL3, FreeType, esbuild, react / react-reconciler / scheduler. Behind feature gates: Box2D, libsodium, libsqlite3, libvterm, libfvad, libwhisper.cpp, DuckDB, libmpv (`dlopen`'d, embedding hand-rolled). The dep graph is shallow on purpose. When layout misbehaves, the bug is in a file you can read in one sitting, not buried under a million lines of Blink.
 
 The line between "uses dependencies" and "is native" runs through how much of the hard parts you wrote yourself. We wrote most of them.
 

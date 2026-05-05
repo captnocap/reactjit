@@ -14,7 +14,7 @@ export const gitCommitRailRowSection = defineGallerySection({
     defineGalleryStory({
       id: "git-commit-rail-row/default",
       title: "Git Commit Rail Row",
-      source: "cart/component-gallery/components/git-lanes/GitCommitRailRow.tsx",
+      source: "cart/app/gallery/components/git-lanes/GitCommitRailRow.tsx",
       status: 'ready',
       summary: 'Single Git history row atom with SHA, message, worker, age, and diff stat slots.',
       tags: ["card", "table"],

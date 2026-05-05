@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# stage-pg-bundle — copy the system postgres install into <RJIT_HOME>/.pg-bundle/
+# so the dev host (and `scripts/ship`-packaged binaries) can run without a
+# system postgres dependency.
+#
+# What ships:
+#   bin/{postgres,initdb,pg_ctl}        # server + first-run init + control
+#   lib/postgresql/vector.so            # pgvector extension (required for
+#                                       # the embeddings bucket)
+#   share/postgresql/                   # initdb templates, encodings,
+#                                       # locale data — initdb won't run
+#                                       # without these
+#
+# Idempotent: writes `.pg-bundle/.stamp` with the source path; re-running
+# is a no-op unless the source version changed.
+#
+# Run once after install or when upgrading postgres. Output is ~55 MB.
+
+set -euo pipefail
+
+RJIT_HOME="${RJIT_HOME:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+DEST="$RJIT_HOME/.pg-bundle"
+
+# ── Locate system postgres ───────────────────────────────────────────────
+#
+# Search same paths the framework's findPgBin scans, so the framework's
+# bundle-vs-system fallback resolves the same install we staged from.
+
+PG_BIN_CANDIDATES=(
+    /usr/lib/postgresql/17/bin/postgres
+    /usr/lib/postgresql/16/bin/postgres
+    /usr/lib/postgresql/15/bin/postgres
+    /usr/lib/postgresql/14/bin/postgres
+    /opt/homebrew/opt/postgresql@17/bin/postgres
+    /opt/homebrew/opt/postgresql@16/bin/postgres
+    /opt/homebrew/opt/postgresql@15/bin/postgres
+    /opt/homebrew/bin/postgres
+    /usr/local/bin/postgres
+    /usr/bin/postgres
+)
+
+PG_BIN=""
+for candidate in "${PG_BIN_CANDIDATES[@]}"; do
+    if [[ -x "$candidate" ]]; then
+        PG_BIN="$candidate"
+        break
+    fi
+done
+
+# Fall back to PATH if none of the known locations matched.
+if [[ -z "$PG_BIN" ]] && command -v postgres >/dev/null 2>&1; then
+    PG_BIN="$(command -v postgres)"
+fi
+
+if [[ -z "$PG_BIN" ]]; then
+    cat >&2 <<EOF
+[stage-pg-bundle] no postgres binary found.
+
+Install postgres + pgvector (Ubuntu/Debian):
+    sudo apt-get install postgresql-17 postgresql-17-pgvector
+
+Or on macOS:
+    brew install postgresql@17 pgvector
+
+Then re-run this script.
+EOF
+    exit 1
+fi
+
+PG_BIN_DIR="$(dirname "$PG_BIN")"
+PG_PREFIX="$(dirname "$PG_BIN_DIR")"   # parent of bin/, e.g. /usr/lib/postgresql/17
+
+# ── Resolve share + lib + version ────────────────────────────────────────
+
+PG_VERSION="$("$PG_BIN" --version | awk '{print $NF}' | cut -d. -f1)"
+
+# share/ is sometimes co-located with bin/ (Homebrew) and sometimes split
+# (Debian: /usr/share/postgresql/<ver> while bin is /usr/lib/postgresql/<ver>/bin).
+PG_SHARE_CANDIDATES=(
+    "$PG_PREFIX/share/postgresql"
+    "$PG_PREFIX/share"
+    "/usr/share/postgresql/$PG_VERSION"
+    "/usr/share/postgresql"
+    "/opt/homebrew/share/postgresql@$PG_VERSION"
+    "/opt/homebrew/share/postgresql"
+)
+PG_SHARE=""
+for candidate in "${PG_SHARE_CANDIDATES[@]}"; do
+    if [[ -d "$candidate" && -f "$candidate/postgres.bki" ]]; then
+        PG_SHARE="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$PG_SHARE" ]]; then
+    echo "[stage-pg-bundle] FATAL: cannot locate share/postgresql tree (postgres.bki not found)" >&2
+    exit 1
+fi
+
+# pgvector — the framework's embeddings bucket needs vector.so loadable
+# from postgres. Library dir layout matches share/.
+PG_LIB_CANDIDATES=(
+    "$PG_PREFIX/lib/postgresql"
+    "$PG_PREFIX/lib"
+    "/usr/lib/postgresql/$PG_VERSION/lib"
+    "/opt/homebrew/lib/postgresql@$PG_VERSION"
+    "/opt/homebrew/lib/postgresql"
+)
+PG_LIB=""
+VECTOR_SO=""
+for candidate in "${PG_LIB_CANDIDATES[@]}"; do
+    if [[ -f "$candidate/vector.so" ]]; then
+        PG_LIB="$candidate"
+        VECTOR_SO="$candidate/vector.so"
+        break
+    fi
+done
+
+# ── Idempotency check ────────────────────────────────────────────────────
+
+STAMP="$DEST/.stamp"
+SIG="postgres-$PG_VERSION src=$PG_BIN"
+if [[ -f "$STAMP" ]] && [[ "$(cat "$STAMP")" == "$SIG" ]]; then
+    echo "[stage-pg-bundle] up to date ($SIG)"
+    exit 0
+fi
+
+# ── Stage ────────────────────────────────────────────────────────────────
+
+echo "[stage-pg-bundle] staging from $PG_PREFIX (pg $PG_VERSION) → $DEST"
+
+rm -rf "$DEST"
+mkdir -p "$DEST/bin" "$DEST/lib/postgresql" "$DEST/share"
+
+# Resolve symlinks with -L so we ship the real ELF, not a dangling link.
+cp -L "$PG_BIN_DIR/postgres" "$DEST/bin/"
+cp -L "$PG_BIN_DIR/initdb"   "$DEST/bin/"
+cp -L "$PG_BIN_DIR/pg_ctl"   "$DEST/bin/" 2>/dev/null || true
+
+# share/postgresql contains everything initdb needs. Copy as
+# share/postgresql/ (no version suffix) so PGSHAREDIR points cleanly.
+cp -RL "$PG_SHARE" "$DEST/share/postgresql"
+
+if [[ -n "$VECTOR_SO" ]]; then
+    cp -L "$VECTOR_SO" "$DEST/lib/postgresql/"
+    # vector also installs SQL + control files into share/extension/.
+    # Those got copied with the share tree above as long as PG_SHARE
+    # included them, which is the standard Debian/Homebrew layout.
+else
+    cat >&2 <<EOF
+[stage-pg-bundle] WARNING: pgvector (vector.so) not found alongside postgres.
+The embeddings bucket won't work without it.
+
+Install:
+    sudo apt-get install postgresql-${PG_VERSION}-pgvector   # Ubuntu/Debian
+    brew install pgvector                                    # macOS
+EOF
+fi
+
+echo "$SIG" > "$STAMP"
+
+SIZE="$(du -sh "$DEST" | awk '{print $1}')"
+echo "[stage-pg-bundle] done ($SIZE) — framework will find it at <exe>/.pg-bundle/"

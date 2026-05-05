@@ -740,7 +740,7 @@ export const compositionReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary:
@@ -749,7 +749,7 @@ export const compositionReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Source kind registry',
-    targetSource: 'cart/component-gallery/data/composition-source-kind.ts',
+    targetSource: 'cart/app/gallery/data/composition-source-kind.ts',
     sourceField: 'slots[].sources[].kind',
     targetField: 'id',
     summary:
@@ -758,7 +758,7 @@ export const compositionReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Inheritance parent',
-    targetSource: 'cart/component-gallery/data/composition.ts',
+    targetSource: 'cart/app/gallery/data/composition.ts',
     sourceField: 'inheritsFromCompositionId',
     targetField: 'id',
     summary:
@@ -767,7 +767,7 @@ export const compositionReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Recursive — composition slot',
-    targetSource: 'cart/component-gallery/data/composition.ts',
+    targetSource: 'cart/app/gallery/data/composition.ts',
     sourceField: 'slots[].sources[].ref (when kind=src_composition)',
     targetField: 'id',
     summary:
@@ -776,7 +776,7 @@ export const compositionReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Roles / skills / worker-actions / presets (opt-in)',
-    targetSource: 'cart/component-gallery/data/(role | skill | worker-action | inference-preset).ts',
+    targetSource: 'cart/app/gallery/data/(role | skill | worker-action | inference-preset).ts',
     sourceField: 'id',
     targetField: 'compositionId',
     summary:

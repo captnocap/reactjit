@@ -8,7 +8,7 @@ export const vennSection = defineGallerySection({
     defineGalleryStory({
       id: 'venn/default',
       title: 'Venn',
-      source: 'cart/component-gallery/components/venn/Venn.tsx',
+      source: 'cart/app/gallery/components/venn/Venn.tsx',
       status: 'draft',
       variants: [
         {

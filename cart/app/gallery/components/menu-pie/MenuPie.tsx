@@ -44,14 +44,14 @@ export function MenuPie({ rows }: MenuPieProps) {
       <S.MenuRadialBox>
         <Box style={{ position: 'relative', width: SIZE, height: SIZE, flexShrink: 0 }}>
           <Graph style={{ width: SIZE, height: SIZE }}>
-            <Graph.Path d={ringPath(R_OUTER)} fill="none" stroke="#3a342a" strokeWidth={2} />
-            <Graph.Path d={ringPath(R_INNER)} fill="none" stroke="#3a342a" strokeWidth={2} />
+            <Graph.Path d={ringPath(R_OUTER)} fill="none" stroke="theme:paperRule" strokeWidth={2} />
+            <Graph.Path d={ringPath(R_INNER)} fill="none" stroke="theme:paperRule" strokeWidth={2} />
             {rows.map((_, i) => (
               <Graph.Path
                 key={`wedge-${i}`}
                 d={wedgePath(i, rows.length)}
-                fill={i === active ? '#2a1a14' : '#15120f'}
-                stroke={i === active ? '#ef6a3a' : '#6e6353'}
+                fill={i === active ? 'theme:paperInk' : 'theme:bg1'}
+                stroke={i === active ? 'theme:accent' : 'theme:paperInkDim'}
                 strokeWidth={i === active ? 3 : 2}
               />
             ))}
@@ -70,7 +70,7 @@ export function MenuPie({ rows }: MenuPieProps) {
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontFamily: 'monospace', fontSize: 10, color: i === active ? '#ef6a3a' : '#ece6da', letterSpacing: 1.2 }}>
+                <Text style={{ fontFamily: 'monospace', fontSize: 10, color: i === active ? 'theme:accent' : 'theme:ink', letterSpacing: 1.2 }}>
                   {entry.label.toUpperCase()}
                 </Text>
               </Pressable>

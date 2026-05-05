@@ -8,7 +8,7 @@ export const tabularHierarchySection = defineGallerySection({
     defineGalleryStory({
       id: 'tabular-hierarchy/default',
       title: 'Tabular Hierarchy',
-      source: 'cart/component-gallery/components/controls-specimen/TabularHierarchy.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/TabularHierarchy.tsx',
       status: 'ready',
       summary: 'Hierarchical metadata block with rotated row heads and current-row emphasis.',
       tags: ['controls', 'mixed-axis', 'atom'],

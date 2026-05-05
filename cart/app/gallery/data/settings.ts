@@ -85,7 +85,7 @@ export const settingsReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'User',
-    targetSource: 'cart/component-gallery/data/user.ts',
+    targetSource: 'cart/app/gallery/data/user.ts',
     sourceField: 'userId',
     targetField: 'id',
     summary:
@@ -94,7 +94,7 @@ export const settingsReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Privacy (active)',
-    targetSource: 'cart/component-gallery/data/privacy.ts',
+    targetSource: 'cart/app/gallery/data/privacy.ts',
     sourceField: 'privacyId',
     targetField: 'id',
     summary:
@@ -103,7 +103,7 @@ export const settingsReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Connections',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'id',
     targetField: 'settingsId',
     summary:
@@ -112,7 +112,7 @@ export const settingsReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Inference presets',
-    targetSource: 'cart/component-gallery/data/inference-preset.ts',
+    targetSource: 'cart/app/gallery/data/inference-preset.ts',
     sourceField: 'id',
     targetField: 'settingsId',
     summary: 'Presets live per-profile too — a work profile can have stricter presets than a personal one.',
@@ -120,7 +120,7 @@ export const settingsReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Budgets',
-    targetSource: 'cart/component-gallery/data/budget.ts',
+    targetSource: 'cart/app/gallery/data/budget.ts',
     sourceField: 'id',
     targetField: 'settingsId',
     summary:
@@ -129,21 +129,21 @@ export const settingsReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Default connection',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'defaultConnectionId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Default model',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'defaultModelId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Default preset',
-    targetSource: 'cart/component-gallery/data/inference-preset.ts',
+    targetSource: 'cart/app/gallery/data/inference-preset.ts',
     sourceField: 'defaultPresetId',
     targetField: 'id',
   },

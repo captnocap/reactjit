@@ -8,7 +8,7 @@ export const polarChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'polar-chart/default',
       title: 'Polar Chart',
-      source: 'cart/component-gallery/components/polar-chart/PolarChart.tsx',
+      source: 'cart/app/gallery/components/polar-chart/PolarChart.tsx',
       status: 'draft',
       variants: [
         {

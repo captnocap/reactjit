@@ -130,6 +130,7 @@ fn measureLineWidth(text: []const u8, size_px: u32, letter_spacing: f32) f32 {
 fn measureWrapped(
     text: []const u8,
     font_size: u16,
+    _: u8,
     max_width: f32,
     letter_spacing: f32,
     line_height_override: f32,

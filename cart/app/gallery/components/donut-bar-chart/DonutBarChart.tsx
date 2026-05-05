@@ -90,7 +90,7 @@ export function DonutBarChart(props: DonutBarChartProps) {
       )}
 
       <Box style={{ position: 'absolute', alignItems: 'center' }}>
-        <Text fontSize={10} color="#7a6e5d">Total</Text>
+        <Text fontSize={10} color="theme:inkDimmer">Total</Text>
         <Text fontSize={16} color={PALETTE.white} style={{ fontWeight: 'bold' }}>{total}</Text>
       </Box>
     </Box>

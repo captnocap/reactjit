@@ -6,6 +6,7 @@ import { DexCanvasNode } from '../dex-canvas-node/DexCanvasNode';
 import { DEX_COLORS, DexFrame } from '../dex-frame/DexFrame';
 import { DexHeatCell } from '../dex-heat-cell/DexHeatCell';
 import { DexSearchBar } from '../dex-search-bar/DexSearchBar';
+import { useAnimationsDisabled } from '../../lib/useSpring';
 
 export type DexGraphExplorerProps = {
   width?: number;
@@ -30,15 +31,17 @@ const graphEdges = [
 const heatValues = [0.82, 0.71, 0.58, 0.49, 0.77, 0.7, 0.5, 0.4, 0.32, 0.19, 0.63, 0.88];
 
 export function DexGraphExplorer({ width = 468 }: DexGraphExplorerProps) {
+  const animationsDisabled = useAnimationsDisabled();
   const [phase, setPhase] = useState(0);
   const [selected, setSelected] = useState('planner');
   const graphWidth = Math.max(214, width - 130);
   const graphHeight = 216;
 
   useEffect(() => {
+    if (animationsDisabled) return;
     const id = setInterval(() => setPhase((value) => value + 1), 700);
     return () => clearInterval(id);
-  }, []);
+  }, [animationsDisabled]);
 
   const liveNodes = useMemo(() => {
     return graphNodes.map((node, index) => {

@@ -17,7 +17,7 @@ export const workerSessionSection = defineGallerySection({
     defineGalleryDataStory({
       id: 'worker-session/catalog',
       title: 'Worker Session',
-      source: 'cart/component-gallery/data/worker-session.ts',
+      source: 'cart/app/gallery/data/worker-session.ts',
       format: 'data',
       status: 'draft',
       summary:

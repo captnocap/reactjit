@@ -8,7 +8,7 @@ export const rangeSliderSection = defineGallerySection({
     defineGalleryStory({
       id: "range-slider/default",
       title: "Range Slider",
-      source: "cart/component-gallery/components/controls-specimen/RangeSlider.tsx",
+      source: "cart/app/gallery/components/controls-specimen/RangeSlider.tsx",
       status: 'ready',
       summary: 'Dual-thumb window slider used in the specimen’s range controls.',
       tags: ['controls', 'slider', 'range', 'atom'],

@@ -30,9 +30,9 @@ export function ChronologyTrail({
         return (
           <S.InlineX5 key={`${event.ts}-${index}`}>
             <S.StackX1Center>
-              <Box style={{ width: 1, height: index === 0 ? 2 : 7, backgroundColor: index === 0 ? 'transparent' : CTRL.rule }} />
+              <Box style={{ width: 1, height: index === 0 ? 2 : 7, backgroundColor: index === 0 ? 'theme:transparent' : CTRL.rule }} />
               <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
-              <Box style={{ width: 1, height: index === events.length - 1 ? 2 : 7, backgroundColor: index === events.length - 1 ? 'transparent' : CTRL.rule }} />
+              <Box style={{ width: 1, height: index === events.length - 1 ? 2 : 7, backgroundColor: index === events.length - 1 ? 'theme:transparent' : CTRL.rule }} />
             </S.StackX1Center>
             <Mono color={CTRL.inkDimmer} style={{ width: 62 }}>{event.ts}</Mono>
             <Body fontSize={11} color={color}>{event.label}</Body>

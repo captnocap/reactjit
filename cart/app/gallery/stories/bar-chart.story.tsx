@@ -15,7 +15,7 @@ export const barChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'bar-chart/default',
       title: 'Bar Chart',
-      source: 'cart/component-gallery/components/bar-chart/BarChart.tsx',
+      source: 'cart/app/gallery/components/bar-chart/BarChart.tsx',
       status: 'draft',
       variants: [
         {

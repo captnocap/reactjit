@@ -13,7 +13,7 @@ export const connectionSection = defineGallerySection({
     defineGalleryDataStory({
       id: "connection/catalog",
       title: "Connection",
-      source: "cart/component-gallery/data/connection.ts",
+      source: "cart/app/gallery/data/connection.ts",
       format: 'data',
       status: 'draft',
       tags: ["credential", "connection"],

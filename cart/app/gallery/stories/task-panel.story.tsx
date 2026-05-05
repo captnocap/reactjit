@@ -8,7 +8,7 @@ export const taskPanelSection = defineGallerySection({
     defineGalleryStory({
       id: 'task-panel/default',
       title: 'Task Panel',
-      source: 'cart/component-gallery/components/generic-chat-card/TaskPanel.tsx',
+      source: 'cart/app/gallery/components/generic-chat-card/TaskPanel.tsx',
       status: 'ready',
       summary: 'Goal and verification atom for counter and checklist states inside the chat card.',
       tags: ['chat', 'console', 'task'],
@@ -24,7 +24,7 @@ export const taskPanelSection = defineGallerySection({
                 count: 142,
                 target: 200,
                 progress: 0.71,
-                command: "grep -c '\\[\\]' cart/component-gallery/**/*.tsx",
+                command: "grep -c '\\[\\]' cart/app/gallery/**/*.tsx",
               }}
             />
           ),

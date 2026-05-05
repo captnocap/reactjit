@@ -124,7 +124,7 @@ function section(
 export const layerVisibilityToggleSection = section(
   'layer-visibility-toggle',
   'Layer Visibility Toggle',
-  'cart/component-gallery/components/layer-control-panel/LayerToggleAtoms.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerToggleAtoms.tsx',
   [
     {
       id: 'visible',
@@ -150,7 +150,7 @@ export const layerVisibilityToggleSection = section(
 export const layerLockToggleSection = section(
   'layer-lock-toggle',
   'Layer Lock Toggle',
-  'cart/component-gallery/components/layer-control-panel/LayerToggleAtoms.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerToggleAtoms.tsx',
   [
     {
       id: 'unlocked',
@@ -176,7 +176,7 @@ export const layerLockToggleSection = section(
 export const layerThumbnailSection = section(
   'layer-thumbnail',
   'Layer Thumbnail',
-  'cart/component-gallery/components/layer-control-panel/LayerThumbnail.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerThumbnail.tsx',
   [
     {
       id: 'compact',
@@ -210,7 +210,7 @@ export const layerThumbnailSection = section(
 export const layerRowSection = section(
   'layer-row',
   'Layer Row',
-  'cart/component-gallery/components/layer-control-panel/LayerRow.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerRow.tsx',
   [
     {
       id: 'selected',
@@ -233,7 +233,7 @@ export const layerRowSection = section(
 export const layerToolbarSection = section(
   'layer-toolbar',
   'Layer Toolbar',
-  'cart/component-gallery/components/layer-control-panel/LayerToolbar.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerToolbar.tsx',
   [
     {
       id: 'document',
@@ -255,7 +255,7 @@ export const layerToolbarSection = section(
 export const layerBlendModeControlSection = section(
   'layer-blend-mode-control',
   'Layer Blend Mode Control',
-  'cart/component-gallery/components/layer-control-panel/LayerBlendModeControl.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerBlendModeControl.tsx',
   [
     {
       id: 'blend',
@@ -268,7 +268,7 @@ export const layerBlendModeControlSection = section(
 export const layerOpacityControlsSection = section(
   'layer-opacity-controls',
   'Layer Opacity Controls',
-  'cart/component-gallery/components/layer-control-panel/LayerOpacityControls.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerOpacityControls.tsx',
   [
     {
       id: 'sliders',
@@ -281,7 +281,7 @@ export const layerOpacityControlsSection = section(
 export const layerPropertiesPanelSection = section(
   'layer-properties-panel',
   'Layer Properties Panel',
-  'cart/component-gallery/components/layer-control-panel/LayerPropertiesPanel.tsx',
+  'cart/app/gallery/components/layer-control-panel/LayerPropertiesPanel.tsx',
   [
     {
       id: 'detail',

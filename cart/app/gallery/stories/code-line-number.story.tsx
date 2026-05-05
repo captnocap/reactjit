@@ -14,7 +14,7 @@ export const codeLineNumberSection = defineGallerySection({
     defineGalleryStory({
       id: "code-line-number/default",
       title: "Code Line Number",
-      source: "cart/component-gallery/components/code-line-number/CodeLineNumber.tsx",
+      source: "cart/app/gallery/components/code-line-number/CodeLineNumber.tsx",
       status: 'ready',
       summary: 'Reusable monospace gutter atom for numbered code rows.',
       tags: ["data"],

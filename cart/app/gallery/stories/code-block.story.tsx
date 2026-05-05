@@ -16,15 +16,15 @@ export const codeBlockSection = defineGallerySection({
   },
   kind: "top-level",
   composedOf: [
-    "cart/component-gallery/components/code-line-number/CodeLineNumber.tsx",
-    "cart/component-gallery/components/syntax-highlighter/SyntaxHighlighter.tsx",
-    "cart/component-gallery/components/code-copy-button/CodeCopyButton.tsx",
+    "cart/app/gallery/components/code-line-number/CodeLineNumber.tsx",
+    "cart/app/gallery/components/syntax-highlighter/SyntaxHighlighter.tsx",
+    "cart/app/gallery/components/code-copy-button/CodeCopyButton.tsx",
   ],
   stories: [
     defineGalleryStory({
       id: "code-block/default",
       title: "Code Block",
-      source: "cart/component-gallery/components/code-block/CodeBlock.tsx",
+      source: "cart/app/gallery/components/code-block/CodeBlock.tsx",
       status: 'ready',
       summary: 'Top-level code surface composed from reusable line-number, syntax-highlight, and copy-button atoms.',
       tags: ["button", "card", "panel", "data"],

@@ -182,11 +182,11 @@ export const planSchema: JsonObject = {
 };
 
 export const planReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Project', targetSource: 'cart/component-gallery/data/project.ts', sourceField: 'projectId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Project', targetSource: 'cart/app/gallery/data/project.ts', sourceField: 'projectId', targetField: 'id' },
   {
     kind: 'belongs-to',
     label: 'Goal (required)',
-    targetSource: 'cart/component-gallery/data/goal.ts',
+    targetSource: 'cart/app/gallery/data/goal.ts',
     sourceField: 'goalId',
     targetField: 'id',
     summary:
@@ -195,7 +195,7 @@ export const planReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Planning phases',
-    targetSource: 'cart/component-gallery/data/planning-phase.ts',
+    targetSource: 'cart/app/gallery/data/planning-phase.ts',
     sourceField: 'phaseIds[]',
     targetField: 'id',
     summary: 'Phases are ordered; phaseIds preserves order. A new phase is appended by writing to the end of phaseIds + a new PlanningPhase row.',
@@ -203,7 +203,7 @@ export const planReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Owning worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'owningWorkerId',
     targetField: 'id',
     summary: 'The worker driving the plan. Typically a supervisor / planner persona.',
@@ -211,14 +211,14 @@ export const planReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Related research',
-    targetSource: 'cart/component-gallery/data/research.ts',
+    targetSource: 'cart/app/gallery/data/research.ts',
     sourceField: 'relatedResearchIds[]',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Supersedes',
-    targetSource: 'cart/component-gallery/data/plan.ts',
+    targetSource: 'cart/app/gallery/data/plan.ts',
     sourceField: 'supersedes',
     targetField: 'id',
   },

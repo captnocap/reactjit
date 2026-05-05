@@ -8,7 +8,7 @@ export const verticalBipolarFaderSection = defineGallerySection({
     defineGalleryStory({
       id: 'vertical-bipolar-fader/default',
       title: 'Vertical Bipolar Fader',
-      source: 'cart/component-gallery/components/controls-specimen/VerticalBipolarFader.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/VerticalBipolarFader.tsx',
       status: 'ready',
       summary: 'Centered vertical fader for positive and negative offset trims.',
       tags: ['controls', 'fader', 'atom'],

@@ -12,15 +12,15 @@ export const newsFeedSection = defineGallerySection({
   },
   kind: "top-level",
   composedOf: [
-    "cart/component-gallery/components/news-feed/FeedComposer.tsx",
-    "cart/component-gallery/components/news-feed/FeedPostCard.tsx",
-    "cart/component-gallery/components/news-feed/FeedActionButton.tsx",
+    "cart/app/gallery/components/news-feed/FeedComposer.tsx",
+    "cart/app/gallery/components/news-feed/FeedPostCard.tsx",
+    "cart/app/gallery/components/news-feed/FeedActionButton.tsx",
   ],
   stories: [
     defineGalleryStory({
       id: "news-feed/default",
       title: "News Feed",
-      source: "cart/component-gallery/components/news-feed/NewsFeed.tsx",
+      source: "cart/app/gallery/components/news-feed/NewsFeed.tsx",
       status: 'draft',
       tags: ["input", "card", "panel"],
       variants: [

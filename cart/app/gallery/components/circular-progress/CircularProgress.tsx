@@ -31,7 +31,7 @@ export function CircularProgress(props: CircularProgressProps) {
   return (
     <Box style={{ width, height, alignItems: 'center', justifyContent: 'center' }}>
       <Graph style={{ width, height }}>
-        <Graph.Path d={bgPath} stroke="#3a2a1e" strokeWidth={10} fill="none" />
+        <Graph.Path d={bgPath} stroke="theme:rule" strokeWidth={10} fill="none" />
         <Graph.Path d={fillPath} stroke={PALETTE.cyan} strokeWidth={10} fill="none" />
       </Graph>
 
@@ -69,7 +69,7 @@ export function CircularProgress(props: CircularProgressProps) {
           justifyContent: 'center',
         }}
       >
-        <Text fontSize={22} color="#2a1f14" style={{ fontWeight: 'bold' }}>{Math.round(progress * 100)}%</Text>
+        <Text fontSize={22} color="theme:paperInk" style={{ fontWeight: 'bold' }}>{Math.round(progress * 100)}%</Text>
       </Box>
     </Box>
   );

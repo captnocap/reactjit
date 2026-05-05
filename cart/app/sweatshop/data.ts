@@ -11,7 +11,7 @@
 // user is one identity across cartridges. We do not own the schema here;
 // we own the reads.
 
-import { useCRUD } from '@reactjit/runtime/hooks';
+import { useCRUD } from '../db';
 import type { User } from '../gallery/data/user';
 import type { Settings } from '../gallery/data/settings';
 import type { Connection } from '../gallery/data/connection';

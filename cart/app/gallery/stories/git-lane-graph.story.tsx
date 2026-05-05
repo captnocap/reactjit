@@ -14,7 +14,7 @@ export const gitLaneGraphSection = defineGallerySection({
     defineGalleryStory({
       id: "git-lane-graph/default",
       title: "Git Lane Graph",
-      source: "cart/component-gallery/components/git-lanes/GitLaneGraph.tsx",
+      source: "cart/app/gallery/components/git-lanes/GitLaneGraph.tsx",
       status: 'ready',
       summary: 'Static Git lane graph atom built from Graph.Path segments and commit points.',
       tags: ["chart", "graph"],

@@ -15,7 +15,7 @@ export const documentOutlineSection = defineGallerySection({
     defineGalleryStory({
       id: 'document-outline/default',
       title: 'Document Outline',
-      source: 'cart/component-gallery/components/document-viewer/DocumentOutline.tsx',
+      source: 'cart/app/gallery/components/document-viewer/DocumentOutline.tsx',
       status: 'draft',
       summary: 'Sidebar table of contents listing every heading with active highlight.',
       tags: ['panel', 'selector'],

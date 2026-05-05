@@ -8,7 +8,7 @@ export const fanChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'fan-chart/default',
       title: 'Fan Chart',
-      source: 'cart/component-gallery/components/fan-chart/FanChart.tsx',
+      source: 'cart/app/gallery/components/fan-chart/FanChart.tsx',
       status: 'draft',
       variants: [
         {

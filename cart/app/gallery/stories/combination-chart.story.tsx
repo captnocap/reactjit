@@ -15,7 +15,7 @@ export const combinationChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'combination-chart/default',
       title: 'Combination Chart',
-      source: 'cart/component-gallery/components/combination-chart/CombinationChart.tsx',
+      source: 'cart/app/gallery/components/combination-chart/CombinationChart.tsx',
       status: 'draft',
       variants: [
         {

@@ -8,7 +8,7 @@ export const layeredPyramidSection = defineGallerySection({
     defineGalleryStory({
       id: 'layered-pyramid/default',
       title: 'Layered Pyramid',
-      source: 'cart/component-gallery/components/layered-pyramid/LayeredPyramid.tsx',
+      source: 'cart/app/gallery/components/layered-pyramid/LayeredPyramid.tsx',
       status: 'draft',
       variants: [
         {

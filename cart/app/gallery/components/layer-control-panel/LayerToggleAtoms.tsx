@@ -1,6 +1,6 @@
 import { Pressable } from '@reactjit/runtime/primitives';
 import { Eye, EyeOff, Lock, LockOpen } from '@reactjit/runtime/icons/icons';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { CTRL } from '../controls-specimen/controlsSpecimenTheme';
 
 export type LayerToggleProps = {

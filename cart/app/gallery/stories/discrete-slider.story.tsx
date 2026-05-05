@@ -8,7 +8,7 @@ export const discreteSliderSection = defineGallerySection({
     defineGalleryStory({
       id: 'discrete-slider/default',
       title: 'Discrete Slider',
-      source: 'cart/component-gallery/components/controls-specimen/DiscreteSlider.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/DiscreteSlider.tsx',
       status: 'ready',
       summary: 'Quantized horizontal slider with optional slot cells and ruler ticks.',
       tags: ['controls', 'slider', 'atom'],

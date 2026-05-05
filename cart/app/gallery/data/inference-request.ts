@@ -194,7 +194,7 @@ export const inferenceRequestReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Worker session',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'workerSessionId',
     targetField: 'id',
     summary: 'Each request belongs to a session. A session has many requests, one per turn.',
@@ -202,7 +202,7 @@ export const inferenceRequestReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Connection',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'connectionId',
     targetField: 'id',
     summary: 'Which Connection fired this request — carries the auth path and wire format used.',
@@ -210,7 +210,7 @@ export const inferenceRequestReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Model',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'modelId',
     targetField: 'id',
     summary: 'The model that actually served the request (may differ from default if onExceed=degrade-model kicked in).',
@@ -218,7 +218,7 @@ export const inferenceRequestReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Preset',
-    targetSource: 'cart/component-gallery/data/inference-preset.ts',
+    targetSource: 'cart/app/gallery/data/inference-preset.ts',
     sourceField: 'presetId',
     targetField: 'id',
     summary: 'The preset the parameters were resolved from (if any).',
@@ -226,7 +226,7 @@ export const inferenceRequestReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Privacy (snapshot source)',
-    targetSource: 'cart/component-gallery/data/privacy.ts',
+    targetSource: 'cart/app/gallery/data/privacy.ts',
     sourceField: 'privacySnapshot.privacyId',
     targetField: 'id',
     summary:
@@ -235,7 +235,7 @@ export const inferenceRequestReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Worker events',
-    targetSource: 'cart/component-gallery/data/worker-event.ts',
+    targetSource: 'cart/app/gallery/data/worker-event.ts',
     sourceField: 'id',
     targetField: 'requestId (to wire)',
     summary:

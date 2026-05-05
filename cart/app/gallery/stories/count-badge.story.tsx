@@ -8,7 +8,7 @@ export const countBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'count-badge/default',
       title: 'Count Badge',
-      source: 'cart/component-gallery/components/controls-specimen/CountBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/CountBadge.tsx',
       status: 'ready',
       summary: 'Micro label plus framed numeric readout for counters and totals.',
       tags: ['controls', 'badge', 'atom'],

@@ -14,7 +14,7 @@ export const dexCanvasEdgeSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-canvas-edge/default",
       title: "Dex Canvas Edge",
-      source: "cart/component-gallery/components/dex-canvas-edge/DexCanvasEdge.tsx",
+      source: "cart/app/gallery/components/dex-canvas-edge/DexCanvasEdge.tsx",
       status: 'ready',
       summary: 'Canvas path edge atom for pannable spatial maps.',
       tags: ["card", "graph", "data", "motion"],
@@ -23,7 +23,7 @@ export const dexCanvasEdgeSection = defineGallerySection({
           id: 'default',
           name: 'Default',
           render: () => (
-            <Canvas style={{ width: 220, height: 150, backgroundColor: '#0e0b09' }}>
+            <Canvas style={{ width: 220, height: 150, backgroundColor: 'theme:bg' }}>
               <DexCanvasEdge x1={32} y1={96} x2={176} y2={42} weight={0.7} hot />
             </Canvas>
           ),

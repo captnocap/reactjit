@@ -1,6 +1,6 @@
 import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
 import { Check, Circle } from '@reactjit/runtime/icons/icons';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { CHAT_CARD } from './tokens';
 
 const OPTIONS = ['mirror-universe', 'quick-hack', 'trust-decay'];
@@ -23,9 +23,9 @@ export function TripwireMenu({ selected = 'runtime counterpart' }: { selected?: 
     <Box
       style={{
         width: 194,
-        backgroundColor: '#14100d',
+        backgroundColor: 'theme:bg1',
         borderWidth: 1,
-        borderColor: '#8a7fd4',
+        borderColor: 'theme:lilac',
         borderRadius: 5,
       }}
     >
@@ -36,16 +36,16 @@ export function TripwireMenu({ selected = 'runtime counterpart' }: { selected?: 
             paddingRight: 8,
             paddingTop: 7,
             paddingBottom: 7,
-            backgroundColor: '#1a1511',
+            backgroundColor: 'theme:bg2',
             borderBottomWidth: 1,
-            borderColor: '#8a7fd4',
+            borderColor: 'theme:lilac',
             borderRadius: 3,
           }}
         >
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: '#d48aa7' }}>TAG PATHOLOGY</Text>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: 'theme:atch' }}>TAG PATHOLOGY</Text>
         </Box>
-        <Box style={{ paddingLeft: 9, paddingRight: 9, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: '#8a7fd4' }}>
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#d48aa7' }}>{selected}</Text>
+        <Box style={{ paddingLeft: 9, paddingRight: 9, paddingTop: 6, paddingBottom: 6, borderBottomWidth: 1, borderColor: 'theme:lilac' }}>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: 'theme:atch' }}>{selected}</Text>
         </Box>
         {OPTIONS.map((option, index) => (
           <Row
@@ -57,7 +57,7 @@ export function TripwireMenu({ selected = 'runtime counterpart' }: { selected?: 
               paddingRight: 9,
               paddingTop: 7,
               paddingBottom: 7,
-              backgroundColor: index === 0 ? '#1a1511' : '#14100d',
+              backgroundColor: index === 0 ? 'theme:bg2' : 'theme:bg1',
               borderRadius: 3,
             }}
           >

@@ -2,6 +2,8 @@
 
 export type BezierResult = {
   d: string;
+  c1x: number;
+  c1y: number;
   c2x: number;
   c2y: number;
 };
@@ -22,7 +24,7 @@ export function bezierFor(x1: number, y1: number, x2: number, y2: number): Bezie
   const c1x = x1 + horiz;
   const c2x = x2 - horiz;
   const d = `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${c1x.toFixed(1)} ${y1.toFixed(1)}, ${c2x.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`;
-  return { d, c2x, c2y: y2 };
+  return { d, c1x, c1y: y1, c2x, c2y: y2 };
 }
 
 // Builds a two-segment 'V' from the endpoint along the actual bezier tangent

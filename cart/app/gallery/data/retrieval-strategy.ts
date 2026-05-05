@@ -158,14 +158,14 @@ export const retrievalStrategyReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Retrieval queries',
-    targetSource: 'cart/component-gallery/data/retrieval-query.ts',
+    targetSource: 'cart/app/gallery/data/retrieval-query.ts',
     sourceField: 'id',
     targetField: 'strategyId',
     summary: 'Each executed query records which strategy it used.',

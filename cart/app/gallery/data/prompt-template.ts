@@ -189,7 +189,7 @@ export const promptTemplateReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary: 'Templates are profile-scoped.',
@@ -197,7 +197,7 @@ export const promptTemplateReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Presets (linkage)',
-    targetSource: 'cart/component-gallery/data/inference-preset.ts',
+    targetSource: 'cart/app/gallery/data/inference-preset.ts',
     sourceField: 'id',
     targetField: 'promptTemplateId',
     summary: 'Presets may bind a template so the preset encapsulates task-shape too, not just sampling.',
@@ -205,7 +205,7 @@ export const promptTemplateReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Skills (linkage)',
-    targetSource: 'cart/component-gallery/data/skill.ts',
+    targetSource: 'cart/app/gallery/data/skill.ts',
     sourceField: 'id',
     targetField: 'promptTemplateId',
     summary: 'Skills compose a prompt template + system message + tool requirements into a reusable unit.',

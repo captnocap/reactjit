@@ -76,7 +76,7 @@ export function InsetPanel({
         paddingRight: dense ? 8 : 11,
         paddingTop: dense ? 7 : 11,
         paddingBottom: dense ? 6 : 10,
-        backgroundColor: '#281f26',
+        backgroundColor: 'theme:paperInk',
         borderWidth: 1,
         borderColor: color,
       }}
@@ -113,7 +113,7 @@ export function TileCrossOverlay({ size }: { size: SkeletonSize }) {
             top: point.y,
             width: pixel,
             height: pixel,
-            backgroundColor: '#d26a2a',
+            backgroundColor: 'theme:accent',
             opacity: 0.94,
           }}
         />
@@ -127,7 +127,7 @@ export function TileCrossOverlay({ size }: { size: SkeletonSize }) {
             top: point.y,
             width: pixel,
             height: pixel,
-            backgroundColor: '#d26a2a',
+            backgroundColor: 'theme:accent',
             opacity: 0.94,
           }}
         />
@@ -160,14 +160,14 @@ export function TileFooter({
         paddingLeft: compact ? 3 : 4,
         paddingRight: compact ? 3 : 4,
         borderTopWidth: 1,
-        borderColor: warn ? '#8a4a20' : SKELETON.frame,
+        borderColor: warn ? 'theme:ruleBright' : SKELETON.frame,
       }}
     >
       <Box style={{ width: compact ? 13 : 16 }}>
-        <Text style={{ fontFamily: 'monospace', fontSize: compact ? 7 : 8, color: warn ? '#ff7b43' : toneColor(tone) }}>{left}</Text>
+        <Text style={{ fontFamily: 'monospace', fontSize: compact ? 7 : 8, color: warn ? 'theme:accent' : toneColor(tone) }}>{left}</Text>
       </Box>
       <Box style={{ flexGrow: 1, minWidth: 0, alignItems: 'flex-end' }}>
-        <Text style={{ fontFamily: 'monospace', fontSize: compact ? 7 : 7, color: warn ? '#ff9d67' : '#8db4a0' }}>{right}</Text>
+        <Text style={{ fontFamily: 'monospace', fontSize: compact ? 7 : 7, color: warn ? 'theme:warn' : 'theme:ok' }}>{right}</Text>
       </Box>
     </Row>
   );

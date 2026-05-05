@@ -9,7 +9,7 @@ export const candlestickSection = defineGallerySection({
     defineGalleryStory({
       id: 'candlestick/default',
       title: 'Candlestick',
-      source: 'cart/component-gallery/components/candlestick/Candlestick.tsx',
+      source: 'cart/app/gallery/components/candlestick/Candlestick.tsx',
       status: 'draft',
       variants: [
         {

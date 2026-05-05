@@ -14,7 +14,7 @@ export const dexFrameSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-frame/default",
       title: "Dex Frame",
-      source: "cart/component-gallery/components/dex-frame/DexFrame.tsx",
+      source: "cart/app/gallery/components/dex-frame/DexFrame.tsx",
       status: 'ready',
       summary: 'Bordered explorer panel frame with fixed header and optional footer slots.',
       tags: ["data-explorer", "atom"],
@@ -23,8 +23,8 @@ export const dexFrameSection = defineGallerySection({
           id: 'default',
           name: 'Default',
           render: () => (
-            <DexFrame id="A.0" title="explorer frame" footer={<Text style={{ color: '#7a6e5d', fontSize: 9 }}>footer slot</Text>}>
-              <Text style={{ color: '#b8a890', fontSize: 12, padding: 12 }}>content slot</Text>
+            <DexFrame id="A.0" title="explorer frame" footer={<Text style={{ color: 'theme:inkDimmer', fontSize: 9 }}>footer slot</Text>}>
+              <Text style={{ color: 'theme:inkDim', fontSize: 12, padding: 12 }}>content slot</Text>
             </DexFrame>
           ),
         },

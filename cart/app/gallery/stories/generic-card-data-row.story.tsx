@@ -13,7 +13,7 @@ export const genericCardDataRowSection = defineGallerySection({
     defineGalleryStory({
       id: "generic-card-data-row/default",
       title: "Generic Card Data Row",
-      source: "cart/component-gallery/components/generic-card/GenericCardDataRow.tsx",
+      source: "cart/app/gallery/components/generic-card/GenericCardDataRow.tsx",
       status: 'ready',
       summary: 'Single indexed data row with tone-based value coloring.',
       tags: ['card', 'row', 'atom'],

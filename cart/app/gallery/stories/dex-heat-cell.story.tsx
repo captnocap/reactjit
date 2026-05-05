@@ -13,7 +13,7 @@ export const dexHeatCellSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-heat-cell/default",
       title: "Dex Heat Cell",
-      source: "cart/component-gallery/components/dex-heat-cell/DexHeatCell.tsx",
+      source: "cart/app/gallery/components/dex-heat-cell/DexHeatCell.tsx",
       status: 'ready',
       summary: 'Single similarity heatmap cell with value-derived intensity.',
       tags: ["data-explorer", "atom"],

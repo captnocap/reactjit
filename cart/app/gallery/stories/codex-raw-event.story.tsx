@@ -13,7 +13,7 @@ export const codexRawEventSection = defineGallerySection({
     defineGalleryDataStory({
       id: "codex-raw-event/catalog",
       title: "Codex Raw Event",
-      source: "cart/component-gallery/data/codex-raw-event.ts",
+      source: "cart/app/gallery/data/codex-raw-event.ts",
       format: 'data',
       status: 'draft',
       tags: ["raw-event", "codex", "openai", "contract"],

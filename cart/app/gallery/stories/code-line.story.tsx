@@ -13,7 +13,7 @@ export const codeLineSection = defineGallerySection({
     defineGalleryDataStory({
       id: "code-line/catalog",
       title: "Code Line",
-      source: "cart/component-gallery/data/code-line.ts",
+      source: "cart/app/gallery/data/code-line.ts",
       format: 'data',
       status: 'ready',
       tags: ["data"],

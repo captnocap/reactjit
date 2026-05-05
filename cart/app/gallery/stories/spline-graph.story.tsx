@@ -14,7 +14,7 @@ export const splineGraphSection = defineGallerySection({
     defineGalleryStory({
       id: 'spline-graph/default',
       title: 'Spline Graph',
-      source: 'cart/component-gallery/components/spline-graph/SplineGraph.tsx',
+      source: 'cart/app/gallery/components/spline-graph/SplineGraph.tsx',
       status: 'draft',
       variants: [
         {

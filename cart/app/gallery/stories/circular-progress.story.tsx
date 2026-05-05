@@ -8,7 +8,7 @@ export const circularProgressSection = defineGallerySection({
     defineGalleryStory({
       id: 'circular-progress/default',
       title: 'Circular Progress',
-      source: 'cart/component-gallery/components/circular-progress/CircularProgress.tsx',
+      source: 'cart/app/gallery/components/circular-progress/CircularProgress.tsx',
       status: 'draft',
       variants: [
         {

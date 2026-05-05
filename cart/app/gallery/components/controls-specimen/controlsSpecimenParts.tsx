@@ -200,8 +200,8 @@ export function SparkBars(props: {
           index >= props.values.length - 2
             ? CTRL.accent
             : index === props.values.length - 3
-              ? '#d26a2a'
-              : '#d26a2a';
+              ? 'theme:accent'
+              : 'theme:accent';
         return (
           <Box
             key={index}

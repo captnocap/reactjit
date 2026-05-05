@@ -8,7 +8,7 @@ export const consoleHeaderSection = defineGallerySection({
     defineGalleryStory({
       id: 'console-header/default',
       title: 'Console Header',
-      source: 'cart/component-gallery/components/generic-chat-card/ConsoleHeader.tsx',
+      source: 'cart/app/gallery/components/generic-chat-card/ConsoleHeader.tsx',
       status: 'ready',
       summary: 'Identity header atom used at the top of the generic chat card.',
       tags: ['chat', 'console', 'header'],

@@ -1,3 +1,5 @@
+import { galleryColorToRgb } from '../../theme-color';
+
 export const LOGICAL_SIZE = 256;
 export const MAIN_STAGE_SIZE = 512;
 export const PROJECTION_SIZES = [256, 128, 64, 32, 16] as const;
@@ -30,14 +32,14 @@ export type PaletteDef = {
   id: PaletteId;
   label: string;
   accent: string;
-  lut: Uint8Array;
+  stops: Array<[number, string]>;
 };
 
 export const DEFAULT_BRAILLE_PROJECTION_THEME: BrailleProjectionTheme = {
-  labelText: '#d26a2a',
-  metaText: '#7a6e5d',
-  surfaceBorder: '#3a2a1e',
-  surfaceBackground: '#0e0b09',
+  labelText: 'theme:accent',
+  metaText: 'theme:inkDimmer',
+  surfaceBorder: 'theme:rule',
+  surfaceBackground: 'theme:bg',
 };
 
 export function resolveBrailleProjectionTheme(
@@ -96,16 +98,17 @@ function mixByte(a: number, b: number, t: number): number {
   return Math.round(a + (b - a) * t);
 }
 
-function buildPalette(stops: Array<[number, [number, number, number]]>): Uint8Array {
+function buildPalette(stops: Array<[number, string]>): Uint8Array {
+  const resolvedStops = stops.map((stop) => [stop[0], galleryColorToRgb(stop[1])] as const);
   const lut = new Uint8Array(256 * 3);
   for (let i = 0; i < 256; i++) {
     const t = i / 255;
-    let start = stops[0];
-    let end = stops[stops.length - 1];
-    for (let index = 0; index < stops.length - 1; index++) {
-      if (t >= stops[index][0] && t <= stops[index + 1][0]) {
-        start = stops[index];
-        end = stops[index + 1];
+    let start = resolvedStops[0];
+    let end = resolvedStops[resolvedStops.length - 1];
+    for (let index = 0; index < resolvedStops.length - 1; index++) {
+      if (t >= resolvedStops[index][0] && t <= resolvedStops[index + 1][0]) {
+        start = resolvedStops[index];
+        end = resolvedStops[index + 1];
         break;
       }
     }
@@ -122,49 +125,49 @@ export const PALETTES: PaletteDef[] = [
   {
     id: 'amber',
     label: 'amber',
-    accent: '#d26a2a',
-    lut: buildPalette([
-      [0.0, [8, 4, 2]],
-      [0.25, [48, 20, 8]],
-      [0.55, [138, 74, 32]],
-      [0.8, [210, 106, 42]],
-      [1.0, [255, 210, 140]],
-    ]),
+    accent: 'theme:accent',
+    stops: [
+      [0.0, 'theme:bg'],
+      [0.25, 'theme:bg2'],
+      [0.55, 'theme:ruleBright'],
+      [0.8, 'theme:accent'],
+      [1.0, 'theme:ink'],
+    ],
   },
   {
     id: 'red',
     label: 'red',
-    accent: '#e14a2a',
-    lut: buildPalette([
-      [0.0, [6, 3, 3]],
-      [0.3, [60, 12, 8]],
-      [0.65, [180, 40, 20]],
-      [0.85, [232, 80, 28]],
-      [1.0, [255, 180, 130]],
-    ]),
+    accent: 'theme:flag',
+    stops: [
+      [0.0, 'theme:bg'],
+      [0.3, 'theme:rule'],
+      [0.65, 'theme:flag'],
+      [0.85, 'theme:accentHot'],
+      [1.0, 'theme:ink'],
+    ],
   },
   {
     id: 'teal',
     label: 'teal',
-    accent: '#6aa390',
-    lut: buildPalette([
-      [0.0, [4, 8, 8]],
-      [0.3, [14, 40, 40]],
-      [0.6, [42, 110, 100]],
-      [0.85, [106, 163, 144]],
-      [1.0, [196, 240, 220]],
-    ]),
+    accent: 'theme:ok',
+    stops: [
+      [0.0, 'theme:bg'],
+      [0.3, 'theme:bg2'],
+      [0.6, 'theme:paperInk'],
+      [0.85, 'theme:ok'],
+      [1.0, 'theme:ink'],
+    ],
   },
   {
     id: 'mono',
     label: 'mono',
-    accent: '#e8dcc4',
-    lut: buildPalette([
-      [0.0, [4, 4, 4]],
-      [0.5, [90, 84, 76]],
-      [0.85, [210, 196, 176]],
-      [1.0, [255, 246, 232]],
-    ]),
+    accent: 'theme:paper',
+    stops: [
+      [0.0, 'theme:bg'],
+      [0.5, 'theme:inkGhost'],
+      [0.85, 'theme:paper'],
+      [1.0, 'theme:ink'],
+    ],
   },
 ];
 
@@ -555,7 +558,7 @@ export function renderSurface(
   const height = effect.height | 0;
   if (width <= 0 || height <= 0) return;
 
-  const palette = getPalette(paletteId).lut;
+  const palette = buildPalette(getPalette(paletteId).stops);
   const scaleX = LOGICAL_SIZE / width;
   const scaleY = LOGICAL_SIZE / height;
 

@@ -8,7 +8,7 @@ export const scaleLabelCardSection = defineGallerySection({
     defineGalleryStory({
       id: "scale-label-card/default",
       title: "Scale Label Card",
-      source: "cart/component-gallery/components/controls-specimen/ScaleLabelCard.tsx",
+      source: "cart/app/gallery/components/controls-specimen/ScaleLabelCard.tsx",
       status: 'ready',
       summary: 'Readout card with vertical unit rails and inline spark bars.',
       tags: ['controls', 'mixed-axis', 'metric', 'atom'],

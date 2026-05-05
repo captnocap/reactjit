@@ -37,11 +37,11 @@ export function Radar(props: RadarProps) {
       <Graph style={{ width, height }}>
         {[0.2, 0.4, 0.6, 0.8, 1.0].map((r) => {
           const pts = Array.from({ length: axes.length }, (_, i) => polar(0, 0, radius * r, i * angleStep));
-          return <Graph.Path key={r} d={`M ${pts.map((p) => `${p[0]} ${p[1]}`).join(' L ')} Z`} fill="none" stroke="#3a2a1e" strokeWidth={1} />;
+          return <Graph.Path key={r} d={`M ${pts.map((p) => `${p[0]} ${p[1]}`).join(' L ')} Z`} fill="none" stroke="theme:rule" strokeWidth={1} />;
         })}
         {axes.map((_, i) => {
           const [x, y] = polar(0, 0, radius, i * angleStep);
-          return <Graph.Path key={`axis-${i}`} d={`M 0 0 L ${x} ${y}`} stroke="#3a2a1e" strokeWidth={1} />;
+          return <Graph.Path key={`axis-${i}`} d={`M 0 0 L ${x} ${y}`} stroke="theme:rule" strokeWidth={1} />;
         })}
         <Graph.Path d={polyPath(data1)} fill={PALETTE.pink} fillOpacity={0.25 * fade} stroke={PALETTE.pink} strokeWidth={1.5} />
         <Graph.Path d={polyPath(data2)} fill={PALETTE.cyan} fillOpacity={0.25 * fade} stroke={PALETTE.cyan} strokeWidth={1.5} />

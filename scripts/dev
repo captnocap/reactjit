@@ -54,20 +54,97 @@ mkdir -p "$CART_ROOT/.cache"
 # fix-react-imports honors RJIT_HOME + CART_ROOT env when set.
 RJIT_HOME="$RJIT_HOME" CART_ROOT="$CART_ROOT" scripts/fix-react-imports
 
+# Reap orphan watch-and-push.js processes from prior dev sessions whose
+# terminal closed without running cleanup (eg. SIGHUP from window close).
+# Those orphans get reparented to init (ppid=1) and keep racing to push their
+# stale carts at /tmp/reactjit.sock as soon as a new host comes up — which
+# hijacks the active tab away from whatever cart this invocation is targeting.
+# Only ppid=1 processes are killed, so concurrent legit dev sessions in other
+# terminals are untouched.
+#
+# Two orphan shapes to catch:
+#   (a) watcher itself reparented to init   — ppid=1 directly
+#   (b) dev SHELL reparented to init, watcher still attached as its child
+#       — watcher.ppid is the orphaned shell, NOT 1. Walk up one level.
+# Both observed in the wild (May-01 manifest_gate hijack was shape (b)).
+for _orphan_pid in $(pgrep -f "scripts/watch-and-push.js" 2>/dev/null); do
+    _orphan_ppid=$(ps -o ppid= -p "$_orphan_pid" 2>/dev/null | tr -d ' ')
+    _is_orphan=0
+    if [[ "$_orphan_ppid" == "1" ]]; then
+        _is_orphan=1
+    elif [[ -n "$_orphan_ppid" ]]; then
+        # Shape (b): is the parent an orphaned `scripts/dev` shell?
+        _gp=$(ps -o ppid= -p "$_orphan_ppid" 2>/dev/null | tr -d ' ')
+        _pcmd=$(ps -o cmd= -p "$_orphan_ppid" 2>/dev/null)
+        if [[ "$_gp" == "1" && "$_pcmd" == *"scripts/dev"* ]]; then
+            _is_orphan=1
+            kill -TERM "$_orphan_ppid" 2>/dev/null || true
+            echo "[dev] reaped orphan dev shell pid=$_orphan_ppid" >&2
+        fi
+    fi
+    if [[ "$_is_orphan" == "1" ]]; then
+        # Kill its esbuild grandchild first so it doesn't survive on its own.
+        for _gc in $(pgrep -P "$_orphan_pid" 2>/dev/null); do
+            kill -TERM "$_gc" 2>/dev/null || true
+        done
+        kill -TERM "$_orphan_pid" 2>/dev/null || true
+        echo "[dev] reaped orphan watcher pid=$_orphan_pid" >&2
+    fi
+done
+unset _orphan_pid _orphan_ppid _gc _gp _pcmd _is_orphan
+
 echo "[dev] bundling ${CART_FILE} → ${PER_CART_BUNDLE}"
 # BUNDLE_FROM_HARNESS=1 is the sentinel the bundler looks for. Direct
 # `tools/v8cli scripts/cart-bundle.js ...` invocations (e.g. ad-hoc from an
 # agent) are refused — they race with the watcher and stamp stale bundles over disk.
 BUNDLE_FROM_HARNESS=1 CART_ROOT="$CART_ROOT" tools/v8cli scripts/cart-bundle.js "$CART_FILE" --out "$PER_CART_BUNDLE"
 
+# Decide if the dev binary is stale BEFORE picking fast-push vs spawn.
+# A running host that's older than current framework source serves
+# yesterday's native code to today's bundle — the cart appears broken in
+# unpredictable ways. Bug pattern: agent edits framework, agent runs
+# `scripts/dev`, fast-push silently lands the new bundle on the stale host,
+# nothing works, agent adds logs, the rebuild trigger STILL doesn't fire
+# (fast-push path again), agent gives up and kills the dev host, restart
+# rebuilds the binary, "now it works" with no real explanation.
+BIN="$RJIT_HOME/zig-out/bin/reactjit-dev"
+needs_build=0
+if [[ ! -x "$BIN" ]]; then
+    needs_build=1
+elif [[ -n "$(find framework build.zig v8_app.zig sdk/dependency-registry.json scripts/sdk-dependency-resolve.js tools/zig/zig -newer "$BIN" 2>/dev/null | head -1)" ]]; then
+    needs_build=1
+fi
+
 # Fast path: host already running — push and exit.
+# `-S "$SOCKET"` only tells us a socket FILE exists on disk; a dead host can
+# leave that file behind. Probe `ss -lUp` to confirm a process is actually
+# bound. Only then does the staleness check apply (refusing to push to a
+# live-but-stale host). If the file is orphaned, just rm it and fall
+# through to the spawn path so a fresh host gets built.
+host_alive=0
 if [[ -S "$SOCKET" ]]; then
+    if ss -lUp 2>/dev/null | grep -q "$SOCKET"; then
+        host_alive=1
+    else
+        rm -f "$SOCKET"
+    fi
+fi
+
+if [[ "$host_alive" -eq 1 ]]; then
+    if [[ "$needs_build" -eq 1 ]]; then
+        echo "[dev] STALE DEV HOST — running binary predates current framework source." >&2
+        echo "[dev] refusing to push: bundle would talk to yesterday's native code." >&2
+        echo "[dev] kill the running dev host (ctrl-c its terminal) and rerun this command." >&2
+        echo "[dev] inputs newer than $BIN:" >&2
+        find framework build.zig v8_app.zig sdk/dependency-registry.json scripts/sdk-dependency-resolve.js tools/zig/zig -newer "$BIN" 2>/dev/null | head -10 | sed 's/^/[dev]   /' >&2
+        exit 1
+    fi
     echo "[dev] host detected — pushing '${NAME}'"
     if tools/v8cli scripts/push-bundle.js "$NAME" "$PER_CART_BUNDLE"; then
         echo "[dev] host switched to tab '${NAME}'"
         exit 0
     fi
-    # Stale socket file — remove and fall through to spawn.
+    # Push failed despite a live process — remove and fall through to spawn.
     rm -f "$SOCKET"
 fi
 
@@ -78,12 +155,7 @@ fi
 # the same compiled dev binary.
 cp "$PER_CART_BUNDLE" bundle.js
 
-BIN="$RJIT_HOME/zig-out/bin/reactjit-dev"
-needs_build=0
-if [[ ! -x "$BIN" ]]; then
-    needs_build=1
-elif [[ -n "$(find framework build.zig v8_app.zig sdk/dependency-registry.json scripts/sdk-dependency-resolve.js tools/zig/zig -newer "$BIN" 2>/dev/null | head -1)" ]]; then
-    needs_build=1
+if [[ "$needs_build" -eq 1 && -x "$BIN" ]]; then
     echo "[dev] dev host inputs newer than binary — rebuilding..."
 fi
 if [[ "$needs_build" -eq 1 ]]; then
@@ -109,6 +181,72 @@ if [[ "$needs_build" -eq 1 ]]; then
     "$ZIG" build app -p "$RJIT_HOME/zig-out" -Dapp-name="reactjit-dev" -Dapp-source=v8_app.zig "${DEV_FEATURE_ARGS[@]}" -Doptimize=ReleaseFast
 fi
 
+# ── Pre-warm embedded postgres ────────────────────────────────────────
+# Cold-spawn cost (~1-2s) used to land in the cart's first React tick
+# because pg.connect() is a sync host fn. Spawning here in the launcher
+# script daemonizes it (parented to init via pg_ctl), so it survives
+# dev shutdowns and subsequent restarts find it already up. Net: cold
+# start cost paid once per boot, not per dev restart. Framework's
+# auto-spawn (framework/pg.zig connectDefault) still works as fallback
+# for ship'd apps and contexts that don't go through this script.
+ensure_pg_running() {
+    local datadir="$HOME/.cache/reactjit-embed/embed-pg"
+    local sockdir="$HOME/.cache/reactjit-embed/embed-pg-sock"
+    local sock="$sockdir/.s.PGSQL.5432"
+
+    # Resolve binaries: prefer bundle, fall back to system.
+    local pg_bin pg_ctl initdb_bin
+    if [[ -x "$RJIT_HOME/.pg-bundle/bin/postgres" ]]; then
+        pg_bin="$RJIT_HOME/.pg-bundle/bin/postgres"
+        pg_ctl="$RJIT_HOME/.pg-bundle/bin/pg_ctl"
+        initdb_bin="$RJIT_HOME/.pg-bundle/bin/initdb"
+        export PGSHAREDIR="$RJIT_HOME/.pg-bundle/share/postgresql"
+    else
+        for v in 17 16 15 14; do
+            if [[ -x "/usr/lib/postgresql/$v/bin/postgres" ]]; then
+                pg_bin="/usr/lib/postgresql/$v/bin/postgres"
+                pg_ctl="/usr/lib/postgresql/$v/bin/pg_ctl"
+                initdb_bin="/usr/lib/postgresql/$v/bin/initdb"
+                break
+            fi
+        done
+    fi
+    if [[ -z "${pg_bin:-}" ]]; then
+        echo "[dev] postgres not found — install postgresql or run scripts/stage-pg-bundle" >&2
+        return 1
+    fi
+
+    # Check if already running. pg_ctl status reads postmaster.pid and
+    # verifies the PID is alive; bails fast if either is missing.
+    if "$pg_ctl" -D "$datadir" -s status > /dev/null 2>&1; then
+        return 0
+    fi
+
+    # Clear stale postmaster.pid from a previous crashed instance.
+    if [[ -f "$datadir/postmaster.pid" ]]; then
+        local stale_pid
+        stale_pid=$(head -n1 "$datadir/postmaster.pid")
+        if [[ -n "$stale_pid" ]] && ! kill -0 "$stale_pid" 2>/dev/null; then
+            rm -f "$datadir/postmaster.pid"
+        fi
+    fi
+
+    mkdir -p "$datadir" "$sockdir"
+
+    # Initialize data dir on first run.
+    if [[ ! -f "$datadir/PG_VERSION" ]]; then
+        echo "[dev] initializing embedded postgres cluster (first run)..."
+        "$initdb_bin" -D "$datadir" -U embed -A trust -E UTF8 --locale=C --no-sync > /dev/null
+    fi
+
+    echo "[dev] starting embedded postgres..."
+    "$pg_ctl" -D "$datadir" \
+        -l "$datadir/pg.log" \
+        -o "-k $sockdir -c listen_addresses= -c max_connections=300" \
+        -w start > /dev/null
+}
+ensure_pg_running
+
 "$BIN" &
 BIN_PID=$!
 
@@ -118,17 +256,33 @@ cleanup() {
     # race between trap firing and the host fully coming up) leaves the dev
     # process attached to this terminal, still streaming telemetry + tick
     # lines into stdout long after scripts/dev has exited.
+    #
+    # We walk children AND grandchildren explicitly: pkill -P only finds
+    # direct children, but watch-and-push.js spawns esbuild as its own child.
+    # If we don't reach esbuild here it survives reparented to init and
+    # becomes a future orphan watcher.
+    _kill_tree() {
+        local sig=$1
+        for _c in $(pgrep -P $$ 2>/dev/null); do
+            for _gc in $(pgrep -P "$_c" 2>/dev/null); do
+                kill -"$sig" "$_gc" 2>/dev/null || true
+            done
+            kill -"$sig" "$_c" 2>/dev/null || true
+        done
+    }
     kill -TERM "$BIN_PID" 2>/dev/null || true
-    pkill -TERM -P $$ 2>/dev/null || true
+    _kill_tree TERM
     for _ in 1 2 3 4 5; do
         kill -0 "$BIN_PID" 2>/dev/null || break
         sleep 0.1
     done
     kill -KILL "$BIN_PID" 2>/dev/null || true
-    pkill -KILL -P $$ 2>/dev/null || true
+    _kill_tree KILL
     exit 0
 }
-trap cleanup INT TERM EXIT
+# HUP added 2026-05-03: terminal-close fires SIGHUP not SIGINT, and without
+# trapping it the watcher + esbuild leak as orphans (see reap loop above).
+trap cleanup INT TERM HUP EXIT
 
 echo "[dev] host PID=$BIN_PID — run 'scripts/dev <other>' from another terminal to add tabs"
 

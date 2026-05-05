@@ -8,7 +8,7 @@ export const surplusSection = defineGallerySection({
     defineGalleryStory({
       id: 'surplus/default',
       title: 'Surplus',
-      source: 'cart/component-gallery/components/surplus/Surplus.tsx',
+      source: 'cart/app/gallery/components/surplus/Surplus.tsx',
       status: 'draft',
       variants: [
         {

@@ -8,7 +8,7 @@ export const bubbleCorrelationSection = defineGallerySection({
     defineGalleryStory({
       id: 'bubble-correlation/default',
       title: 'Bubble Correlation',
-      source: 'cart/component-gallery/components/bubble-correlation/BubbleCorrelation.tsx',
+      source: 'cart/app/gallery/components/bubble-correlation/BubbleCorrelation.tsx',
       status: 'draft',
       variants: [
         {

@@ -1,6 +1,6 @@
 // CodeCopyButton — gallery atom bound to the `CodeSnippet` data shape.
 //
-// Source of truth: cart/component-gallery/data/code-snippet.ts
+// Source of truth: cart/app/gallery/data/code-snippet.ts
 
 import { classifiers as S } from '@reactjit/core';
 import { Pressable, Text } from '@reactjit/runtime/primitives';

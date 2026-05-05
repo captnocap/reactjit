@@ -8,7 +8,7 @@ import {
   Hash,
   Image as ImageIcon,
 } from '@reactjit/runtime/icons/icons';
-import { Icon, type IconData } from '../../../sweatshop/components/icons';
+import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import type {
   CommandComposerChip as CommandComposerChipData,
   CommandComposerPromptSegment,
@@ -33,11 +33,11 @@ function frameForTone(tone: CommandComposerTone): ClassifierComponent {
 }
 
 function colorForTone(tone: CommandComposerTone): string {
-  if (tone === 'success') return '#6aa390';
-  if (tone === 'warn') return '#d6a51d';
-  if (tone === 'hot') return '#e8501c';
-  if (tone === 'accent') return '#4b8ee8';
-  return '#b8a890';
+  if (tone === 'success') return 'theme:ok';
+  if (tone === 'warn') return 'theme:warn';
+  if (tone === 'hot') return 'theme:accentHot';
+  if (tone === 'accent') return 'theme:blue';
+  return 'theme:inkDim';
 }
 
 function iconForPromptSegment(segment: ReferenceSegment): IconData {

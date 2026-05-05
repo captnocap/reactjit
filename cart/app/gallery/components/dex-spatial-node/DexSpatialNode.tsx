@@ -33,7 +33,7 @@ export function DexSpatialNode({
         borderRadius: size / 2,
         borderWidth: 1,
         borderColor: selected ? DEX_COLORS.accent : container ? DEX_COLORS.ruleBright : DEX_COLORS.rule,
-        backgroundColor: container ? '#14100ddd' : DEX_COLORS.bg1,
+        backgroundColor: container ? 'theme:bg1' : DEX_COLORS.bg1,
       }}
     >
       <Text style={{ color: selected ? DEX_COLORS.accent : DEX_COLORS.ink, fontSize: 10 }}>{label}</Text>

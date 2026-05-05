@@ -1,6 +1,6 @@
 // TaskCard — gallery component bound to the `Task` data shape.
 //
-// Source of truth: cart/component-gallery/data/task.ts
+// Source of truth: cart/app/gallery/data/task.ts
 //
 // Top-level fields on `Task`:
 //   id: string
@@ -49,8 +49,8 @@ export type TaskCardProps = {
 export function TaskCard({ row }: TaskCardProps) {
   return (
     <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>Task Card</Text>
-      <Text style={{ fontSize: 12, color: '#657185' }}>Task: {String((row as { id?: unknown }).id ?? '—')}</Text>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'theme:bg2' }}>Task Card</Text>
+      <Text style={{ fontSize: 12, color: 'theme:paperInkDim' }}>Task: {String((row as { id?: unknown }).id ?? '—')}</Text>
     </Col>
   );
 }

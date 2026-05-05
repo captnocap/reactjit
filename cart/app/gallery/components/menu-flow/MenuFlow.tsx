@@ -32,7 +32,7 @@ export function MenuFlow({ rows }: MenuFlowProps) {
               <Graph.Path
                 key={`step-${i}`}
                 d={`M ${x} ${STEP_Y} L ${x + STEP_W} ${STEP_Y} L ${x + STEP_W} ${STEP_Y + STEP_H} L ${x} ${STEP_Y + STEP_H} Z`}
-                fill={isActive ? 'rgba(239,106,58,.12)' : '#15120f'}
+                fill={isActive ? 'theme:accentHot' : 'theme:bg1'}
                 stroke={isActive ? 'theme:accentHot' : 'theme:ruleBright'}
                 strokeWidth={1}
               />
@@ -67,10 +67,10 @@ export function MenuFlow({ rows }: MenuFlowProps) {
                 alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Text style={{ fontFamily: 'monospace', fontSize: 9, color: '#ece6da', letterSpacing: 1 }}>
+              <Text style={{ fontFamily: 'monospace', fontSize: 9, color: 'theme:ink', letterSpacing: 1 }}>
                 {entry.label.toUpperCase()}
               </Text>
-              <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#7a7367', position: 'absolute', top: -14 }}>
+              <Text style={{ fontFamily: 'monospace', fontSize: 8, color: 'theme:paperInkDim', position: 'absolute', top: -14 }}>
                 STEP {i + 1}
               </Text>
             </Pressable>

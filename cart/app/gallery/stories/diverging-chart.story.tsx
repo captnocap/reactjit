@@ -12,7 +12,7 @@ export const divergingChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'diverging-chart/default',
       title: 'Diverging Chart',
-      source: 'cart/component-gallery/components/diverging-chart/DivergingChart.tsx',
+      source: 'cart/app/gallery/components/diverging-chart/DivergingChart.tsx',
       status: 'draft',
       variants: [
         {

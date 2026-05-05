@@ -210,7 +210,7 @@ export const envVarReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Connection kind',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'connectionKind',
     targetField: 'kind',
     summary:
@@ -219,7 +219,7 @@ export const envVarReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Models',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'default (for model-override role)',
     targetField: 'id',
     summary:

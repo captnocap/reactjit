@@ -26,24 +26,24 @@ export type GenericCardProps = {
 export const GENERIC_CARD = {
   width: 336,
   trackWidth: 112,
-  surface: '#14100d',
-  panel: '#0e0b09',
-  borderColor: '#5a8bd6',
-  frameColor: '#8a7fd4',
-  topBarColor: '#d26a2a',
-  panelBorder: '#5a8bd6',
-  dataPanelBorder: '#5a8bd6',
-  metricTrack: '#4a4238',
-  metricTrackBorder: '#5a8bd6',
-  bodyText: '#f2e8dc',
-  mutedText: '#b8a890',
-  eyebrowText: '#b8a890',
-  scoreText: '#6ac3d6',
-  rowIndexText: '#7a6e5d',
-  rowLabelText: '#f2e8dc',
-  sketchHot: '#d26a2a',
-  sketchCool: '#6ac3d6',
-  sketchOk: '#6aa390',
+  surface: 'theme:bg1',
+  panel: 'theme:bg',
+  borderColor: 'theme:blue',
+  frameColor: 'theme:lilac',
+  topBarColor: 'theme:accent',
+  panelBorder: 'theme:blue',
+  dataPanelBorder: 'theme:blue',
+  metricTrack: 'theme:inkGhost',
+  metricTrackBorder: 'theme:blue',
+  bodyText: 'theme:ink',
+  mutedText: 'theme:inkDim',
+  eyebrowText: 'theme:inkDim',
+  scoreText: 'theme:tool',
+  rowIndexText: 'theme:inkDimmer',
+  rowLabelText: 'theme:ink',
+  sketchHot: 'theme:accent',
+  sketchCool: 'theme:tool',
+  sketchOk: 'theme:ok',
 } as const;
 
 export const DEFAULT_GENERIC_CARD_ROWS: GenericCardRow[] = [
@@ -54,9 +54,9 @@ export const DEFAULT_GENERIC_CARD_ROWS: GenericCardRow[] = [
 ];
 
 export const DEFAULT_GENERIC_CARD_METRICS: GenericCardMetric[] = [
-  { label: 'Primary', value: '72%', fill: 0.72, color: '#6ac3d6' },
-  { label: 'Secondary', value: '48%', fill: 0.48, color: '#8a7fd4' },
-  { label: 'Accent', value: '31%', fill: 0.31, color: '#d26a2a' },
+  { label: 'Primary', value: '72%', fill: 0.72, color: 'theme:tool' },
+  { label: 'Secondary', value: '48%', fill: 0.48, color: 'theme:lilac' },
+  { label: 'Accent', value: '31%', fill: 0.31, color: 'theme:accent' },
 ];
 
 export const DEFAULT_GENERIC_CARD_SKETCH_LINES = [
@@ -81,11 +81,11 @@ export function clampGenericCardFill(value: number): number {
 export function genericCardToneColor(tone: GenericCardTone = 'soft'): string {
   switch (tone) {
     case 'cool':
-      return '#6ac3d6';
+      return 'theme:tool';
     case 'warm':
-      return '#d48aa7';
+      return 'theme:atch';
     default:
-      return '#b8a890';
+      return 'theme:inkDim';
   }
 }
 

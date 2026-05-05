@@ -1,4 +1,4 @@
-import { Tooltip as SharedTooltip, type TooltipAnchor, type TooltipRow } from '../../shared/tooltip/Tooltip';
+import { Tooltip as SharedTooltip, type TooltipAnchor, type TooltipRow } from '@reactjit/runtime/tooltip/Tooltip';
 
 export type { TooltipRow };
 
@@ -16,7 +16,7 @@ export function Tooltip(props: {
       anchor={props.anchor || { kind: 'cursor' }}
       title={props.title}
       rows={props.rows}
-      variant="component-gallery-chart"
+      variant="..-chart"
       staticSurfaceOverlay
     />
   );

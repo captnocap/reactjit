@@ -8,7 +8,7 @@ export const trackingSection = defineGallerySection({
     defineGalleryStory({
       id: 'tracking/default',
       title: 'Tracking',
-      source: 'cart/component-gallery/components/tracking/Tracking.tsx',
+      source: 'cart/app/gallery/components/tracking/Tracking.tsx',
       status: 'draft',
       variants: [
         {

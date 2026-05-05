@@ -13,7 +13,7 @@ export const newsFeedPostSection = defineGallerySection({
     defineGalleryDataStory({
       id: "news-feed-post/catalog",
       title: "News Feed Post",
-      source: "cart/component-gallery/data/news-feed-post.ts",
+      source: "cart/app/gallery/data/news-feed-post.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

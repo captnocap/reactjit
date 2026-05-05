@@ -90,13 +90,13 @@ function MarkableWord(props: {
           paddingRight: 1,
           paddingTop: 1,
           paddingBottom: 1,
-          backgroundColor: isOpen ? '#1a1511' : 'transparent',
+          backgroundColor: isOpen ? 'theme:bg2' : 'theme:transparent',
           borderWidth: 1,
-          borderColor: isOpen ? '#8a7fd4' : 'transparent',
+          borderColor: isOpen ? 'theme:lilac' : 'theme:transparent',
           borderRadius: 2,
         }}
       >
-        <Text style={{ fontFamily: 'monospace', fontSize: 10, color: isOpen ? '#d48aa7' : CHAT_CARD.text }}>{props.token}</Text>
+        <Text style={{ fontFamily: 'monospace', fontSize: 10, color: isOpen ? 'theme:atch' : CHAT_CARD.text }}>{props.token}</Text>
       </Pressable>
     </Box>
   );

@@ -13,7 +13,7 @@ export const embeddingModelSection = defineGallerySection({
     defineGalleryDataStory({
       id: "embedding-model/catalog",
       title: "Embedding Model",
-      source: "cart/component-gallery/data/embedding-model.ts",
+      source: "cart/app/gallery/data/embedding-model.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

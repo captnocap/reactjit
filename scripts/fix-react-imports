@@ -36,12 +36,16 @@ REQUIRE = re.compile(
     r"^const\s+React\s*:\s*any\s*=\s*require\(\s*['\"]react['\"]\s*\)\s*;\s*$",
     re.MULTILINE,
 )
-# If the file *mutates* React (e.g. `React.useState = ...` or
-# `(React as any).foo = ...`) the require() is load-bearing — an ES `import`
-# yields an immutable namespace and breaks the patch. In that case, leave
-# the require alone.
-REACT_MUTATION = re.compile(
-    r"(?:\bReact|\(\s*React\s+as\b[^)]*\))\s*\.\s*\w+\s*="
+# If the file references `React` as a value anywhere — mutation
+# (`React.useState = ...`), member access (`React.createElement(...)`),
+# bare reference (`{ react: React }`), or cast (`(React as any).foo`) — the
+# require() is load-bearing. Dropping it produces a `ReferenceError: React
+# is not defined` at module init that crashes the whole bundle.
+#
+# Only the import/destructure forms count as a "definition" we can tolerate
+# losing the require for; any read use means we keep the require.
+REACT_USAGE = re.compile(
+    r"(?<![A-Za-z0-9_$])React(?![A-Za-z0-9_$])"
 )
 
 
@@ -53,9 +57,17 @@ def heal(path: str) -> bool:
 
     new = src
     m = REQUIRE.search(new)
-    if m and not REACT_MUTATION.search(new):
-        # Safe to drop: no mutation means the require line is dead code.
-        new = new[: m.start()] + new[m.end():].lstrip("\n")
+    if m:
+        # Count React references outside the require line itself. If any
+        # remain, the require is load-bearing — keep it.
+        before = new[: m.start()]
+        after = new[m.end():]
+        usage_count = (
+            len(REACT_USAGE.findall(before))
+            + len(REACT_USAGE.findall(after))
+        )
+        if usage_count == 0:
+            new = before + after.lstrip("\n")
 
     new = DESTRUCTURE.sub(
         lambda mm: f"import {{ {mm.group(1).strip()} }} from 'react';",

@@ -11,16 +11,16 @@ export const gitLanesSection = defineGallerySection({
   },
   kind: "top-level",
   composedOf: [
-    "cart/component-gallery/components/git-lanes/GitLaneFrame.tsx",
-    "cart/component-gallery/components/git-lanes/GitLaneGraph.tsx",
-    "cart/component-gallery/components/git-lanes/GitCommitRailRow.tsx",
-    "cart/component-gallery/components/git-lanes/GitDiffPreview.tsx",
+    "cart/app/gallery/components/git-lanes/GitLaneFrame.tsx",
+    "cart/app/gallery/components/git-lanes/GitLaneGraph.tsx",
+    "cart/app/gallery/components/git-lanes/GitCommitRailRow.tsx",
+    "cart/app/gallery/components/git-lanes/GitDiffPreview.tsx",
   ],
   stories: [
     defineGalleryStory({
       id: "git-lanes/default",
       title: "Git Lanes",
-      source: "cart/component-gallery/components/git-lanes/GitLanes.tsx",
+      source: "cart/app/gallery/components/git-lanes/GitLanes.tsx",
       status: 'ready',
       summary: 'Retro terminal Git activity browser with lane graph, compact history rows, live chrome, keyboard footer, and diff preview.',
       tags: ["panel", "graph", "table"],

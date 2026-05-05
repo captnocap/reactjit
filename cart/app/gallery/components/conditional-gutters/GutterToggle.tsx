@@ -27,16 +27,16 @@ export function GutterToggle({
           paddingRight: 10,
           borderRadius: 7,
           borderWidth: 1,
-          borderColor: active ? color : '#2d2a24',
-          backgroundColor: active ? '#1f1a13' : '#12100d',
+          borderColor: active ? color : 'theme:paperRule',
+          backgroundColor: active ? 'theme:bg2' : 'theme:bg1',
         }}
       >
-        <Icon icon={icon} size={15} color={active ? color : '#746b5e'} strokeWidth={2.2} />
+        <Icon icon={icon} size={15} color={active ? color : 'theme:paperInkDim'} strokeWidth={2.2} />
         <Text
           style={{
             fontSize: 10,
             lineHeight: 12,
-            color: active ? '#f2e8dc' : '#9a8c78',
+            color: active ? 'theme:ink' : 'theme:inkDim',
             fontWeight: active ? 'bold' : 'normal',
             fontFamily: 'monospace',
           }}

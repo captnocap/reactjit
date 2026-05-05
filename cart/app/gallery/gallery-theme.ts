@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { setTokens, setStyleTokens } from '@reactjit/runtime/theme';
+import { setTokens, setStyleTokens, setVariant } from '@reactjit/runtime/theme';
 import { mergeThemeTokenCategories } from './theme-system';
 import { galleryThemeSystems } from './themes';
+import { applyGallerySurfaceTheme } from './surface';
 import type { ResolvedThemeTokenCategory } from './theme-system';
 import type { GalleryThemeTokenValue } from './types';
 
@@ -36,14 +37,27 @@ const TOKEN_PREFIX_BY_CATEGORY: Record<string, string> = {
   letterSpacing: 'ls',
 };
 
+function logGalleryTheme(message: string, payload?: Record<string, unknown>): void {
+  console.log('[gallery-theme]', message, payload || {});
+}
+
 function applyPrefix(categoryId: string, tokenName: string): string {
   const prefix = TOKEN_PREFIX_BY_CATEGORY[categoryId];
   if (!prefix) return tokenName;
   return prefix + tokenName.charAt(0).toUpperCase() + tokenName.slice(1);
 }
 
+export function getGalleryRuntimeTokenName(categoryId: string, tokenName: string): string {
+  return applyPrefix(categoryId, tokenName);
+}
+
 function pushGalleryThemeToRuntime(option: GalleryThemeOption | null): void {
-  if (!option) return;
+  if (!option) {
+    applyGallerySurfaceTheme(null);
+    setVariant(null);
+    logGalleryTheme('push skipped: no active option');
+    return;
+  }
   const colors: Record<string, string> = {};
   const styles: Record<string, number> = {};
 
@@ -58,8 +72,28 @@ function pushGalleryThemeToRuntime(option: GalleryThemeOption | null): void {
     }
   }
 
-  setTokens(colors);
+  const runtimeVariant = option.variantId === 'default' ? null : option.variantId;
+  applyGallerySurfaceTheme(option.tokensByPath);
+  const resolvedColors = applyThemeTokenOverrides(colors);
+  setTokens(resolvedColors);
   setStyleTokens(styles);
+  setVariant(runtimeVariant);
+  logGalleryTheme('pushed runtime theme', {
+    id: option.id,
+    label: option.label,
+    runtimeVariant,
+    colors: Object.keys(resolvedColors).length,
+    styles: Object.keys(styles).length,
+    sample: {
+      bg: resolvedColors.bg,
+      bg1: resolvedColors.bg1,
+      bg2: resolvedColors.bg2,
+      paper: resolvedColors.paper,
+      paperInk: resolvedColors.paperInk,
+      accent: resolvedColors.accent,
+      accentHot: resolvedColors.accentHot,
+    },
+  });
 }
 
 export type GalleryThemeOption = {
@@ -74,7 +108,8 @@ export type GalleryThemeOption = {
   tokensByPath: Record<string, GalleryThemeTokenValue>;
 };
 
-const STORE_KEY = 'component-gallery-active-theme';
+const STORE_KEY = '.-active-theme';
+const OVERRIDES_STORE_KEY = '.-theme-token-overrides';
 
 type Listener = () => void;
 
@@ -96,6 +131,33 @@ function writePersisted(key: string, value: string): void {
     const host = globalThis as { __store_set?: (storeKey: string, storeValue: string) => void };
     if (typeof host.__store_set === 'function') host.__store_set(key, value);
   } catch (_error) {}
+}
+
+export type GalleryThemeTokenOverrides = Record<string, string>;
+
+function readPersistedJson<T>(key: string, fallback: T): T {
+  const raw = readPersisted(key);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+let themeTokenOverrides: GalleryThemeTokenOverrides = readPersistedJson(OVERRIDES_STORE_KEY, {});
+
+function writeThemeTokenOverrides(overrides: GalleryThemeTokenOverrides): void {
+  writePersisted(OVERRIDES_STORE_KEY, JSON.stringify(overrides));
+}
+
+function applyThemeTokenOverrides(colors: Record<string, string>): Record<string, string> {
+  const next = { ...colors };
+  for (const [key, value] of Object.entries(themeTokenOverrides)) {
+    const clean = typeof value === 'string' ? value.trim() : '';
+    if (clean) next[key] = clean;
+  }
+  return next;
 }
 
 function buildGalleryThemeOptions(): GalleryThemeOption[] {
@@ -145,6 +207,7 @@ function restoreActiveThemeId(): string {
 let activeGalleryThemeId = restoreActiveThemeId();
 
 function notifyListeners(): void {
+  logGalleryTheme('notify listeners', { count: listeners.size, activeThemeId: activeGalleryThemeId });
   for (const listener of listeners) listener();
 }
 
@@ -164,6 +227,30 @@ export function getActiveGalleryThemeValue(path: string): GalleryThemeTokenValue
   return getActiveGalleryTheme()?.tokensByPath[path];
 }
 
+export function getGalleryThemeTokenOverrides(): GalleryThemeTokenOverrides {
+  return { ...themeTokenOverrides };
+}
+
+export function setGalleryThemeTokenOverride(tokenName: string, value: string): void {
+  const key = tokenName.trim();
+  if (!key) return;
+  const clean = value.trim();
+  const next = { ...themeTokenOverrides };
+  if (clean) next[key] = clean;
+  else delete next[key];
+  themeTokenOverrides = next;
+  writeThemeTokenOverrides(themeTokenOverrides);
+  pushGalleryThemeToRuntime(getActiveGalleryTheme());
+  notifyListeners();
+}
+
+export function clearGalleryThemeTokenOverrides(): void {
+  themeTokenOverrides = {};
+  writeThemeTokenOverrides(themeTokenOverrides);
+  pushGalleryThemeToRuntime(getActiveGalleryTheme());
+  notifyListeners();
+}
+
 export function findGalleryThemeOption(source: string, variantId: string): GalleryThemeOption | null {
   for (const option of GALLERY_THEME_OPTIONS) {
     if (option.source === source && option.variantId === variantId) return option;
@@ -172,9 +259,20 @@ export function findGalleryThemeOption(source: string, variantId: string): Galle
 }
 
 export function applyGalleryTheme(id: string): void {
-  if (!GALLERY_THEME_OPTIONS_BY_ID.has(id)) return;
-  if (activeGalleryThemeId === id) return;
+  if (!GALLERY_THEME_OPTIONS_BY_ID.has(id)) {
+    logGalleryTheme('apply ignored: unknown theme', {
+      id,
+      available: GALLERY_THEME_OPTIONS.map((option) => option.id),
+    });
+    return;
+  }
+  if (activeGalleryThemeId === id) {
+    logGalleryTheme('apply ignored: already active', { id });
+    return;
+  }
+  const previous = activeGalleryThemeId;
   activeGalleryThemeId = id;
+  logGalleryTheme('apply theme', { previous, next: id });
   writePersisted(STORE_KEY, id);
   pushGalleryThemeToRuntime(GALLERY_THEME_OPTIONS_BY_ID.get(id) || null);
   notifyListeners();
@@ -195,7 +293,10 @@ export function useGalleryTheme(): {
   active: GalleryThemeOption | null;
   activeThemeId: string;
   options: GalleryThemeOption[];
+  tokenOverrides: GalleryThemeTokenOverrides;
   setTheme: (id: string) => void;
+  setTokenOverride: (tokenName: string, value: string) => void;
+  clearTokenOverrides: () => void;
 } {
   const [, tick] = useState(0);
 
@@ -205,6 +306,9 @@ export function useGalleryTheme(): {
     active: getActiveGalleryTheme(),
     activeThemeId: getActiveGalleryThemeId(),
     options: GALLERY_THEME_OPTIONS,
+    tokenOverrides: getGalleryThemeTokenOverrides(),
     setTheme: applyGalleryTheme,
+    setTokenOverride: setGalleryThemeTokenOverride,
+    clearTokenOverrides: clearGalleryThemeTokenOverrides,
   };
 }

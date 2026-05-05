@@ -8,7 +8,7 @@ export const contourMapSection = defineGallerySection({
     defineGalleryStory({
       id: 'contour-map/default',
       title: 'Contour Map',
-      source: 'cart/component-gallery/components/contour-map/ContourMap.tsx',
+      source: 'cart/app/gallery/components/contour-map/ContourMap.tsx',
       status: 'draft',
       variants: [
         {

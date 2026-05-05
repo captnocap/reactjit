@@ -41,7 +41,7 @@ export function BubbleCorrelation(props: BubbleCorrelationProps) {
   return (
     <Box style={{ width, height }}>
       <S.BareGraph>
-        <Graph.Path d={`M ${plot.x} ${plot.y} L ${plot.x} ${plot.y + plot.h} L ${plot.x + plot.w} ${plot.y + plot.h}`} stroke="#3a2a1e" strokeWidth={1} />
+        <Graph.Path d={`M ${plot.x} ${plot.y} L ${plot.x} ${plot.y + plot.h} L ${plot.x + plot.w} ${plot.y + plot.h}`} stroke="theme:rule" strokeWidth={1} />
         {raw.map((p, i) => {
           const r = visualRadius(p) * staggers[i];
           const cx = xScale(p.x);

@@ -120,14 +120,14 @@ export const environmentReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Project',
-    targetSource: 'cart/component-gallery/data/project.ts',
+    targetSource: 'cart/app/gallery/data/project.ts',
     sourceField: 'projectId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Worker sessions (future)',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'id',
     targetField: 'environmentId (to wire)',
     summary: 'Sessions should pin an environment so "which env am I hitting" is explicit.',

@@ -8,7 +8,7 @@ export const verticalThinFaderSection = defineGallerySection({
     defineGalleryStory({
       id: 'vertical-thin-fader/default',
       title: 'Vertical Thin Fader',
-      source: 'cart/component-gallery/components/controls-specimen/VerticalThinFader.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/VerticalThinFader.tsx',
       status: 'ready',
       summary: 'Hairline vertical fader with a flat cap and labeled channel footer.',
       tags: ['controls', 'fader', 'atom'],

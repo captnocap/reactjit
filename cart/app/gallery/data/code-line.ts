@@ -53,7 +53,7 @@ export const codeLineReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Snippet',
-    targetSource: 'cart/component-gallery/data/code-snippet.ts',
+    targetSource: 'cart/app/gallery/data/code-snippet.ts',
     sourceField: 'snippetId',
     targetField: 'id',
     summary: 'A rendered line belongs to the source snippet it was split from.',

@@ -1,6 +1,6 @@
 import { Row, Text, TextInput } from '@reactjit/runtime/primitives';
 import { Search, Slash } from '@reactjit/runtime/icons/icons';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { DEX_COLORS } from '../dex-frame/DexFrame';
 
 export type DexSearchBarProps = {

@@ -134,11 +134,11 @@ export const taskMockData: Task[] = [
   {
     id: 'task_plan_ts',
     taskGraphId: 'tg_phase_planning',
-    label: 'Fill cart/component-gallery/data/plan.ts',
+    label: 'Fill cart/app/gallery/data/plan.ts',
     kind: 'code',
     status: 'completed',
     assignedWorkerId: 'w1',
-    artifactRefs: ['cart/component-gallery/data/plan.ts'],
+    artifactRefs: ['cart/app/gallery/data/plan.ts'],
     startedAt: '2026-04-24T09:25:30Z',
     endedAt: '2026-04-24T09:26:30Z',
     createdAt: '2026-04-24T09:25:00Z',
@@ -151,7 +151,7 @@ export const taskMockData: Task[] = [
     kind: 'code',
     status: 'completed',
     assignedWorkerId: 'w1',
-    artifactRefs: ['cart/component-gallery/data/planning-phase.ts'],
+    artifactRefs: ['cart/app/gallery/data/planning-phase.ts'],
     startedAt: '2026-04-24T09:27:00Z',
     endedAt: '2026-04-24T09:28:00Z',
     createdAt: '2026-04-24T09:25:00Z',
@@ -164,7 +164,7 @@ export const taskMockData: Task[] = [
     kind: 'code',
     status: 'completed',
     assignedWorkerId: 'w1',
-    artifactRefs: ['cart/component-gallery/data/task-graph.ts'],
+    artifactRefs: ['cart/app/gallery/data/task-graph.ts'],
     startedAt: '2026-04-24T09:28:30Z',
     endedAt: '2026-04-24T09:29:30Z',
     createdAt: '2026-04-24T09:25:00Z',
@@ -358,11 +358,11 @@ export const taskSchema: JsonObject = {
 };
 
 export const taskReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Task graph', targetSource: 'cart/component-gallery/data/task-graph.ts', sourceField: 'taskGraphId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Task graph', targetSource: 'cart/app/gallery/data/task-graph.ts', sourceField: 'taskGraphId', targetField: 'id' },
   {
     kind: 'references',
     label: 'Goal (objective this serves)',
-    targetSource: 'cart/component-gallery/data/goal.ts',
+    targetSource: 'cart/app/gallery/data/goal.ts',
     sourceField: 'goalId',
     targetField: 'id',
     summary:
@@ -371,7 +371,7 @@ export const taskReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Constraints (task-scope)',
-    targetSource: 'cart/component-gallery/data/constraint.ts',
+    targetSource: 'cart/app/gallery/data/constraint.ts',
     sourceField: 'id',
     targetField: 'scopeTargetId (when scopeKind=task)',
     summary:
@@ -380,14 +380,14 @@ export const taskReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Assigned worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'assignedWorkerId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Research (if kind=research)',
-    targetSource: 'cart/component-gallery/data/research.ts',
+    targetSource: 'cart/app/gallery/data/research.ts',
     sourceField: 'researchId',
     targetField: 'id',
     summary: 'A research-kind task typically has a Research row as its artifact.',
@@ -395,7 +395,7 @@ export const taskReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Dependencies — upstream',
-    targetSource: 'cart/component-gallery/data/task-dependency.ts',
+    targetSource: 'cart/app/gallery/data/task-dependency.ts',
     sourceField: 'id',
     targetField: 'downstreamTaskId',
     summary: 'Deps where this task is the downstream side (things that block it).',
@@ -403,7 +403,7 @@ export const taskReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Dependencies — downstream',
-    targetSource: 'cart/component-gallery/data/task-dependency.ts',
+    targetSource: 'cart/app/gallery/data/task-dependency.ts',
     sourceField: 'id',
     targetField: 'upstreamTaskId',
     summary: 'Deps where this task is the upstream side (things it blocks).',

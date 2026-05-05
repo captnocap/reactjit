@@ -8,7 +8,7 @@ export const ringsInPieChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'rings-in-pie-chart/default',
       title: 'Rings In Pie Chart',
-      source: 'cart/component-gallery/components/rings-in-pie-chart/RingsInPieChart.tsx',
+      source: 'cart/app/gallery/components/rings-in-pie-chart/RingsInPieChart.tsx',
       status: 'draft',
       variants: [
         {

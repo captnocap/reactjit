@@ -23,18 +23,18 @@ import { workerMockData } from '../data/worker';
 import type { Worker, WorkerLifecycle } from '../data/worker';
 
 const COLORS = {
-  bg: '#0e0b09',
-  bg1: '#14100d',
-  rule: '#3a2a1e',
-  ink: '#f2e8dc',
-  inkDim: '#b8a890',
-  inkDimmer: '#7a6e5d',
-  accent: '#d26a2a',
-  ok: '#6aa390',
-  warn: '#d6a54a',
-  flag: '#e14a2a',
-  blue: '#5a8bd6',
-  lilac: '#8a7fd4',
+  bg: 'theme:bg',
+  bg1: 'theme:bg1',
+  rule: 'theme:rule',
+  ink: 'theme:ink',
+  inkDim: 'theme:inkDim',
+  inkDimmer: 'theme:inkDimmer',
+  accent: 'theme:accent',
+  ok: 'theme:ok',
+  warn: 'theme:warn',
+  flag: 'theme:flag',
+  blue: 'theme:blue',
+  lilac: 'theme:lilac',
 };
 
 function makeWorker(overrides: Partial<Worker>): Worker {
@@ -103,27 +103,27 @@ function PaletteSwatch({ ch, color, name }: { ch: string; color: string; name: s
 function PaletteCard() {
   const groups: { ttl: string; keys: Array<[string, string, string]> }[] = [
     { ttl: 'skin / shell', keys: [
-      ['L', '#e2bd96', 'skin lt'], ['s', '#c79a72', 'skin'], ['S', '#a47a55', 'skin sh'],
-      ['z', '#7a8a55', 'rot'], ['Z', '#556b3a', 'rot sh'], ['v', '#b8c87a', 'sick'],
+      ['L', 'theme:inkDim', 'skin lt'], ['s', 'theme:inkDim', 'skin'], ['S', 'theme:paperInkDim', 'skin sh'],
+      ['z', 'theme:paperInkDim', 'rot'], ['Z', 'theme:inkGhost', 'rot sh'], ['v', 'theme:inkDim', 'sick'],
     ]},
     { ttl: 'hair / outline', keys: [
-      ['h', '#3a2a1e', 'hair'], ['H', '#5a3a26', 'hair2'], ['x', '#0e0b09', 'outline'], ['X', '#3a2a1e', 'soft'],
+      ['h', 'theme:rule', 'hair'], ['H', 'theme:inkGhost', 'hair2'], ['x', 'theme:bg', 'outline'], ['X', 'theme:rule', 'soft'],
     ]},
     { ttl: 'eyes / lights', keys: [
-      ['w', '#f2e8dc', 'white'], ['i', '#5a8bd6', 'iris·b'], ['I', '#6aa390', 'iris·t'],
-      ['p', '#0e0b09', 'pupil'], ['b', '#5a8bd6', 'lt·b'], ['c', '#6aa390', 'lt·c'], ['l', '#8a7fd4', 'lt·l'],
+      ['w', 'theme:ink', 'white'], ['i', 'theme:blue', 'iris·b'], ['I', 'theme:ok', 'iris·t'],
+      ['p', 'theme:bg', 'pupil'], ['b', 'theme:blue', 'lt·b'], ['c', 'theme:ok', 'lt·c'], ['l', 'theme:lilac', 'lt·l'],
     ]},
     { ttl: 'metal / chrome', keys: [
-      ['K', '#1a1511', 'deep'], ['k', '#3a2a1e', 'seam'], ['g', '#7a6e5d', 'metal'],
-      ['G', '#b8a890', 'metal lt'], ['W', '#f2e8dc', 'spec'],
+      ['K', 'theme:bg2', 'deep'], ['k', 'theme:rule', 'seam'], ['g', 'theme:inkDimmer', 'metal'],
+      ['G', 'theme:inkDim', 'metal lt'], ['W', 'theme:ink', 'spec'],
     ]},
     { ttl: 'signal', keys: [
-      ['o', '#d26a2a', 'accent'], ['y', '#d6a54a', 'warn'], ['r', '#e14a2a', 'flag'],
-      ['m', '#7a3a2a', 'mouth'], ['M', '#d26a2a', 'mouth on'],
+      ['o', 'theme:accent', 'accent'], ['y', 'theme:warn', 'warn'], ['r', 'theme:flag', 'flag'],
+      ['m', 'theme:paperRuleBright', 'mouth'], ['M', 'theme:accent', 'mouth on'],
     ]},
     { ttl: 'brain / ghost', keys: [
-      ['q', '#c44848', 'brain'], ['Q', '#8a2828', 'brain sh'],
-      ['e', '#c8b8a0', 'ghost'], ['E', '#7a6e5d', 'ghost mid'],
+      ['q', 'theme:flag', 'brain'], ['Q', 'theme:paperRuleBright', 'brain sh'],
+      ['e', 'theme:inkDim', 'ghost'], ['E', 'theme:inkDimmer', 'ghost mid'],
     ]},
   ];
   return (
@@ -330,7 +330,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/default',
       title: 'Block Faces · worker tile',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [
@@ -365,7 +365,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/system',
       title: 'Block Faces · system',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [
@@ -394,7 +394,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/archetypes',
       title: 'Block Faces · archetypes',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [
@@ -417,7 +417,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/scale',
       title: 'Block Faces · scale',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: blockFacesArchetypes.map((arch) => ({
@@ -429,7 +429,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/states',
       title: 'Block Faces · states',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [
@@ -443,7 +443,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/lifecycle-schedules',
       title: 'Block Faces · lifecycle schedules',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [
@@ -477,7 +477,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/variations',
       title: 'Block Faces · variations',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [
@@ -557,7 +557,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/strip',
       title: 'Block Faces · strip',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [
@@ -588,7 +588,7 @@ export const blockFacesSection = defineGallerySection({
     defineGalleryStory({
       id: 'block-faces/generator',
       title: 'Block Faces · generator',
-      source: 'cart/component-gallery/components/block-faces/BlockFaces.tsx',
+      source: 'cart/app/gallery/components/block-faces/BlockFaces.tsx',
       status: 'ready',
       tags: ['card', 'motion'],
       variants: [

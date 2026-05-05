@@ -1,6 +1,6 @@
 import { Row } from '@reactjit/runtime/primitives';
 import { Hash } from '@reactjit/runtime/icons/icons';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { Body, Mono } from './controlsSpecimenParts';
 import { CTRL, type ControlTone, toneColor } from './controlsSpecimenTheme';
 import { classifiers as S } from '@reactjit/core';

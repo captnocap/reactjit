@@ -43,7 +43,6 @@ export default function KimiChat() {
   const assistant = useAssistant({
     backend: 'kimi_cli_wire',
     cwd,
-    model: 'k2',
     yolo: true,
     persistAcrossUnmount: true,
   });
@@ -82,7 +81,7 @@ export default function KimiChat() {
         </Box>
         <Box style={{ paddingTop: 4 }}>
           <span style={{ color: '#888', fontFamily: 'monospace', fontSize: 11 }}>
-            worker: {assistant.workerId ?? '(none)'} · backend: kimi_cli_wire · model: k2
+            worker: {assistant.workerId ?? '(none)'} · backend: kimi_cli_wire
           </span>
         </Box>
         {assistant.error ? (

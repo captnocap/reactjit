@@ -8,7 +8,7 @@ export const areaChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'area-chart/default',
       title: 'Area Chart',
-      source: 'cart/component-gallery/components/area-chart/AreaChart.tsx',
+      source: 'cart/app/gallery/components/area-chart/AreaChart.tsx',
       status: 'draft',
       variants: [
         {

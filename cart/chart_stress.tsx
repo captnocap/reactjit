@@ -30,11 +30,12 @@
 //   • If LATCH significantly outperforms REACT, the latch primitive
 //     deserves its own PR and a useHostInterval companion.
 
-import { useEffect, useRef, useState } from 'react';
-import { Box, Pressable, Text } from '@reactjit/runtime/primitives';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Effect, Pressable, StaticSurface, Text } from '@reactjit/runtime/primitives';
 
 const TICK_MS = 16;
-const COUNTS = [60, 200, 600, 1000];
+const COUNTS = [500, 1000, 2000, 4000];
+const CHUNK_SIZE = 400; // bars per flex-row; keeps each layout call under MAX_CHILDREN
 
 const COLOR_BG = '#050b16';
 const COLOR_INK = '#e8eef8';
@@ -43,7 +44,7 @@ const COLOR_GREEN = '#34d399';
 const COLOR_BAR = '#3da9ff';
 const COLOR_BAR_HOT = '#ff7a3d';
 
-type Driver = 'react' | 'latch';
+type Driver = 'react' | 'latch' | 'host' | 'sslatch' | 'shader';
 
 // Host fn shim. Set by the V8 binding registered in
 // framework/v8_bindings_core.zig (registerCore). When unavailable the
@@ -54,6 +55,7 @@ function setLatch(key: string, value: number): void {
 }
 
 const CHART_H = 240;
+const ROW_H = 60;
 const BAR_GAP = 1;
 
 function initialHeights(n: number): number[] {
@@ -70,8 +72,18 @@ function initialHeights(n: number): number[] {
 function nextHeight(prev: number, i: number, frame: number): number {
   // Sine carrier + per-bar phase + small random walk for chaos.
   const phase = i * 0.13;
-  const carrier = (Math.sin(frame * 0.05 + phase) * 0.4 + 0.5) * CHART_H;
-  return Math.max(4, Math.min(CHART_H - 4, carrier));
+  const carrier = (Math.sin(frame * 0.05 + phase) * 0.4 + 0.5) * ROW_H;
+  return Math.max(4, Math.min(ROW_H - 2, carrier));
+}
+
+function chunkedIndices(count: number, chunkSize: number): number[][] {
+  const out: number[][] = [];
+  for (let start = 0; start < count; start += chunkSize) {
+    const row: number[] = [];
+    for (let i = start; i < Math.min(count, start + chunkSize); i++) row.push(i);
+    out.push(row);
+  }
+  return out;
 }
 
 export default function ChartStress() {
@@ -92,7 +104,10 @@ export default function ChartStress() {
   const [diag, setDiag] = useState({ rendersPerSec: 0, ticksPerSec: 0 });
 
   useEffect(() => {
-    if (!anim) return;
+    // HOST mode: zero per-frame JS work. The animations are
+    // registered in a separate effect below and ticked entirely
+    // inside framework/animations.zig from the painter loop.
+    if (!anim || driver === 'host') return;
     const id = setInterval(() => {
       tickCount.current += 1;
       frameRef.current += 1;
@@ -121,6 +136,50 @@ export default function ChartStress() {
     return () => clearInterval(id);
   }, [anim, driver, count]);
 
+  // HOST mode: register N animations once, the painter loop ticks
+  // them in compiled Zig. JS does ZERO work per frame for the
+  // animation; this effect runs only on toggle/count change.
+  //
+  // Visual fidelity to REACT/LATCH path:
+  //   The JS path uses `(sin(frame * 0.05 + i * 0.13) * 0.4 + 0.5) * ROW_H`.
+  //   That's a sine wave with per-bar phase offset of `i * 0.13` radians.
+  //   We map to host-driven by:
+  //     - curve='sine' (added to easing.zig — full 0→1→0 cycle over t=[0,1])
+  //     - loop='cycle' (sawtooth: t goes 0→1, jumps to 0)
+  //     - PERIOD_MS = 2π / 0.05 (radian) × 16ms (per setInterval tick)
+  //       ≈ 2010ms per full cycle, matching the JS frame-driven version
+  //     - per-bar startOffsetMs = phase01 * PERIOD_MS, where
+  //       phase01 = (i * 0.13 / 2π) mod 1
+  //   The from/to range mirrors the JS clamp: min height 4, max ROW_H-2.
+  useEffect(() => {
+    if (!anim || driver !== 'host') return;
+    const host = (globalThis as any);
+    if (typeof host.__anim_register !== 'function') return;
+    const ids: number[] = [];
+    const PERIOD_MS = (2 * Math.PI / 0.05) * TICK_MS;
+    const TWO_PI = 2 * Math.PI;
+    for (let i = 0; i < count; i++) {
+      const phase = i * 0.13;
+      const phase01 = ((phase % TWO_PI) + TWO_PI) % TWO_PI / TWO_PI;
+      const startOffsetMs = phase01 * PERIOD_MS;
+      const id = host.__anim_register(
+        `bar:${i}:h`,
+        'sine',
+        'cycle',
+        4,
+        ROW_H - 2,
+        PERIOD_MS,
+        startOffsetMs,
+      );
+      if (typeof id === 'number' && id > 0) ids.push(id);
+    }
+    return () => {
+      if (typeof host.__anim_unregister === 'function') {
+        for (const id of ids) host.__anim_unregister(id);
+      }
+    };
+  }, [anim, driver, count]);
+
   // Diagnostics — sample renders/sec and ticks/sec every 500ms.
   useEffect(() => {
     let lastRenders = renderCount.current;
@@ -138,7 +197,39 @@ export default function ChartStress() {
     return () => clearInterval(id);
   }, []);
 
-  const barW = Math.max(2, Math.floor((1100 - count * BAR_GAP) / count));
+  const chunks = chunkedIndices(count, CHUNK_SIZE);
+  const rowBarCount = Math.min(count, CHUNK_SIZE);
+  const barW = Math.max(2, Math.floor((1100 - rowBarCount * BAR_GAP) / rowBarCount));
+
+  // SHADER mode: WGSL fragment shader that draws all `count` bars in
+  // one Effect. Per-fragment math runs natively on the GPU. The
+  // angular-velocity constant 3.125 = 0.05 rad/JS-frame × (1000/16ms)
+  // frames-per-sec, so the shader's animation cadence matches the
+  // JS-driven REACT/LATCH path's `sin(frame * 0.05 + phase)` math.
+  // Multi-row layout is computed inside the shader from uv.y.
+  const shaderWgsl = useMemo(() => {
+    const numRows = chunks.length;
+    const chunkSize = CHUNK_SIZE;
+    return `
+@fragment fn fs_main(in: VsOut) -> @location(0) vec4f {
+  let count = ${count}.0;
+  let num_rows = ${numRows}.0;
+  let chunk_size = ${chunkSize}.0;
+  let row_f = floor(in.uv.y * num_rows);
+  let row_y = (in.uv.y * num_rows) - row_f;
+  let col = floor(in.uv.x * chunk_size);
+  let bar_idx = row_f * chunk_size + col;
+  if (bar_idx >= count) { return vec4f(0.0, 0.0, 0.0, 0.0); }
+  let phase = bar_idx * 0.13;
+  let h_ratio = sin(U.time * 3.125 + phase) * 0.4 + 0.5;
+  let bar_top = 1.0 - h_ratio;
+  if (row_y < bar_top) { return vec4f(0.0, 0.0, 0.0, 0.0); }
+  let parity = i32(bar_idx) - (i32(bar_idx) / 2) * 2;
+  if (parity == 1) { return vec4f(1.0, 0.48, 0.24, 1.0); }
+  return vec4f(0.24, 0.66, 1.0, 1.0);
+}
+`;
+  }, [count, chunks.length]);
 
   return (
     <Box style={{
@@ -167,46 +258,84 @@ export default function ChartStress() {
         <Toggle label={anim ? 'ANIM ON' : 'ANIM OFF'} on={anim} onPress={() => setAnim((v) => !v)} accent="#ff7a3d" />
         <Toggle label="REACT" on={driver === 'react'} onPress={() => setDriver('react')} accent="#ff7a3d" />
         <Toggle label="LATCH" on={driver === 'latch'} onPress={() => setDriver('latch')} accent="#34d399" />
+        <Toggle label="HOST" on={driver === 'host'} onPress={() => setDriver('host')} accent="#3da9ff" />
+        <Toggle label="SS+LATCH" on={driver === 'sslatch'} onPress={() => setDriver('sslatch')} accent="#a855f7" />
+        <Toggle label="SHADER" on={driver === 'shader'} onPress={() => setDriver('shader')} accent="#facc15" />
         <Box style={{ width: 12 }} />
         {COUNTS.map((c) => (
           <Toggle key={c} label={String(c)} on={c === count} onPress={() => setCount(c)} accent="#3da9ff" />
         ))}
       </Box>
 
-      {/* Bar grid */}
-      <Box style={{
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: BAR_GAP,
-        height: CHART_H,
-        backgroundColor: '#0a0a0d',
-        paddingTop: 4, paddingBottom: 4, paddingLeft: 4, paddingRight: 4,
-        borderWidth: 1, borderColor: '#1d2c45',
-        borderRadius: 6,
-      }}>
-        {Array.from({ length: count }, (_, i) => (
-          <Box
-            key={i}
-            style={driver === 'latch' && anim
-              ? {
-                  width: barW,
-                  // Stable string token. React never re-renders for value
-                  // changes; the host substitutes `latches.get("bar:i:h")`
-                  // into node.style.height before layout each frame.
-                  height: `latch:bar:${i}:h`,
-                  backgroundColor: i % 2 === 0 ? COLOR_BAR : COLOR_BAR_HOT,
-                  borderRadius: 1,
-                }
-              : {
-                  width: barW,
-                  height: heights[i] ?? 4,
-                  backgroundColor: i % 2 === 0 ? COLOR_BAR : COLOR_BAR_HOT,
-                  borderRadius: 1,
-                }
-            }
-          />
-        ))}
-      </Box>
+      {driver === 'shader' ? (
+        // SHADER mode: ONE Effect node renders all N bars via a WGSL
+        // fragment shader. Per-fragment work runs natively on the GPU
+        // (sin computed in parallel for every pixel). CPU/JS does
+        // nothing per frame except letting the painter set u.time.
+        // Total node count: 2 (this Box + the Effect). At 4000 bars
+        // this is 4000× fewer nodes than the other modes.
+        <Box style={{
+          width: '100%',
+          backgroundColor: '#0a0a0d',
+          paddingTop: 4, paddingBottom: 4, paddingLeft: 4, paddingRight: 4,
+          borderWidth: 1, borderColor: '#1d2c45',
+          borderRadius: 6,
+          height: chunks.length * ROW_H + (chunks.length - 1) * 2 + 8,
+        }}>
+          <Effect shader={shaderWgsl} style={{ flexGrow: 1 }} />
+        </Box>
+      ) : (
+        // Bar grid — chunked into row-of-CHUNK_SIZE Boxes so the per-flex
+        // MAX_CHILDREN cap doesn't truncate at higher counts. Total nodes
+        // are unaffected; each row layout-call sees ≤CHUNK_SIZE children.
+        <Box style={{
+          flexDirection: 'column',
+          gap: 2,
+          backgroundColor: '#0a0a0d',
+          paddingTop: 4, paddingBottom: 4, paddingLeft: 4, paddingRight: 4,
+          borderWidth: 1, borderColor: '#1d2c45',
+          borderRadius: 6,
+        }}>
+          {chunks.map((row, rowIdx) => (
+            <Box key={rowIdx} style={{
+              flexDirection: 'row',
+              alignItems: 'flex-end',
+              gap: BAR_GAP,
+              height: ROW_H,
+            }}>
+              {row.map((i) => {
+                const useLatchHeight = (driver === 'latch' || driver === 'host' || driver === 'sslatch') && anim;
+                return (
+                  <Box
+                    key={i}
+                    style={useLatchHeight
+                      ? {
+                          width: barW,
+                          // Stable string token — React never re-renders
+                          // for value changes. Host substitutes
+                          // latches.get into node.style.height each
+                          // pre-frame sync. LATCH + SS+LATCH modes write
+                          // latches from JS RAF; HOST mode writes them
+                          // from the painter loop in Zig
+                          // (animations.tickAll).
+                          height: `latch:bar:${i}:h`,
+                          backgroundColor: i % 2 === 0 ? COLOR_BAR : COLOR_BAR_HOT,
+                          borderRadius: 1,
+                        }
+                      : {
+                          width: barW,
+                          height: heights[i] ?? 4,
+                          backgroundColor: i % 2 === 0 ? COLOR_BAR : COLOR_BAR_HOT,
+                          borderRadius: 1,
+                        }
+                    }
+                  />
+                );
+              })}
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }

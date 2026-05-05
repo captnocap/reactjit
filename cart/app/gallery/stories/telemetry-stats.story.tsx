@@ -8,7 +8,7 @@ export const telemetryStatsSection = defineGallerySection({
     defineGalleryStory({
       id: 'telemetry-stats/default',
       title: 'Telemetry Stats',
-      source: 'cart/component-gallery/components/generic-chat-card/TelemetryStats.tsx',
+      source: 'cart/app/gallery/components/generic-chat-card/TelemetryStats.tsx',
       status: 'ready',
       summary: 'Compact monospace runtime readout atom used in the chat card telemetry bar.',
       tags: ['chat', 'console', 'telemetry'],

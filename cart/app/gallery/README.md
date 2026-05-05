@@ -23,10 +23,10 @@ scripts/gallery-component MessageComposer \
 
 This creates:
 
-- `cart/component-gallery/components/button/Button.tsx`
-- `cart/component-gallery/stories/button.story.tsx`
+- `cart/app/gallery/components/button/Button.tsx`
+- `cart/app/gallery/stories/button.story.tsx`
 
-It also updates `cart/component-gallery/stories/index.ts`.
+It also updates `cart/app/gallery/stories/index.ts`.
 
 An explicit component file can be passed when the component should live somewhere else:
 
@@ -63,14 +63,14 @@ scripts/gallery-component ConsoleTheme \
 
 That creates:
 
-- `cart/component-gallery/themes/shared/global-theme-tokens.ts` on first run only
-- `cart/component-gallery/themes/index.ts` updated with the global theme registry
-- `cart/component-gallery/themes/console-theme/ConsoleThemeThemeSystem.ts`
-- `cart/component-gallery/themes/console-theme/theme-classifier.ts`
-- `cart/component-gallery/themes/console-theme/style-classifier.ts`
-- `cart/component-gallery/themes/console-theme/variant-classifier.ts`
-- `cart/component-gallery/themes/console-theme/breakpoint-classifier.ts`
-- `cart/component-gallery/stories/console-theme.story.tsx`
+- `cart/app/gallery/themes/shared/global-theme-tokens.ts` on first run only
+- `cart/app/gallery/themes/index.ts` updated with the global theme registry
+- `cart/app/gallery/themes/console-theme/ConsoleThemeThemeSystem.ts`
+- `cart/app/gallery/themes/console-theme/theme-classifier.ts`
+- `cart/app/gallery/themes/console-theme/style-classifier.ts`
+- `cart/app/gallery/themes/console-theme/variant-classifier.ts`
+- `cart/app/gallery/themes/console-theme/breakpoint-classifier.ts`
+- `cart/app/gallery/stories/console-theme.story.tsx`
 
 The intent is to keep the shared token vocabulary in one place, then let each theme system override or extend that vocabulary locally without rewriting the gallery story by hand. Any theme registered there shows up in the gallery header as a global file-theme toggle, and file/card atoms that read the gallery theme runtime update against the active token set.
 
@@ -135,7 +135,7 @@ export const chartDemoDataSection = defineGallerySection({
     defineGalleryDataStory({
       id: 'chart-demo-data/catalog',
       title: 'Chart Demo Data',
-      source: 'cart/component-gallery/data/chart-demo-data.ts',
+      source: 'cart/app/gallery/data/chart-demo-data.ts',
       format: 'data',
       storage: ['sqlite-document'],
       tags: ['data-shape', 'demo-data'],
@@ -166,7 +166,7 @@ export const consoleThemeSection = defineGallerySection({
     defineGalleryThemeStory({
       id: 'console-theme/theme-system',
       title: 'Console Theme',
-      source: 'cart/component-gallery/themes/console-theme/ConsoleThemeThemeSystem.ts',
+      source: 'cart/app/gallery/themes/console-theme/ConsoleThemeThemeSystem.ts',
       format: 'theme',
       tags: ['theme-system', 'theme', 'classifier'],
       classifiers: consoleThemeThemeSystem.classifiers,

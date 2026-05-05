@@ -13,13 +13,13 @@ export type BasicWorkerCardProps = {
 };
 
 const COLORS = {
-  bg: '#14100d',
-  border: '#4a4238',
-  text: '#f2e8dc',
-  muted: '#5a8bd6',
-  worker: '#d26a2a',
-  user: '#6ac3d6',
-  dot: { idle: '#5a8bd6', working: '#6aa390', stuck: '#d26a2a' },
+  bg: 'theme:bg1',
+  border: 'theme:inkGhost',
+  text: 'theme:ink',
+  muted: 'theme:blue',
+  worker: 'theme:accent',
+  user: 'theme:tool',
+  dot: { idle: 'theme:blue', working: 'theme:ok', stuck: 'theme:accent' },
 };
 
 const DEFAULT_MESSAGES: BasicWorkerMessage[] = [

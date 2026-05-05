@@ -14,9 +14,9 @@ const TILE_BASE = {
   flexDirection: 'column' as const,
   flexShrink: 0,
   borderWidth: 1,
-  borderColor: 'rgba(236,230,218,.14)',
+  borderColor: 'theme:inkGhost',
   borderRadius: 8,
-  backgroundColor: '#0e0c0a',
+  backgroundColor: 'theme:bg',
   overflow: 'hidden' as const,
 };
 
@@ -29,7 +29,7 @@ const STAGE_STYLE = {
   flexDirection: 'column' as const,
   position: 'relative' as const,
   overflow: 'hidden' as const,
-  backgroundColor: '#0e0c0a',
+  backgroundColor: 'theme:bg',
 };
 
 export function MenuTileShell({ id, title, kind, ratio = 'landscape', children }: MenuTileShellProps) {

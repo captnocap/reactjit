@@ -1,5 +1,6 @@
 import type { NewsFeedPost } from '../../data/news-feed-post';
 import { newsFeedPostMockData } from '../../data/news-feed-post';
+import { resolveGalleryColor } from '../../theme-color';
 
 export type SocialImageItem = {
   id: string;
@@ -31,10 +32,10 @@ type Palette = {
 };
 
 const IMAGE_PALETTES: Palette[] = [
-  { background: '#100c09', panel: '#201814', accent: '#d26a2a', line: '#8a4a20', ink: '#f2e8dc' },
-  { background: '#0d1513', panel: '#17201a', accent: '#6aa390', line: '#355e4d', ink: '#e8f2ee' },
-  { background: '#111126', panel: '#1b1830', accent: '#8a7fd4', line: '#57508e', ink: '#eceaff' },
-  { background: '#0d1421', panel: '#151f2d', accent: '#5a8bd6', line: '#365985', ink: '#edf4ff' },
+  { background: 'theme:bg', panel: 'theme:bg2', accent: 'theme:accent', line: 'theme:ruleBright', ink: 'theme:ink' },
+  { background: 'theme:bg1', panel: 'theme:bg2', accent: 'theme:ok', line: 'theme:inkGhost', ink: 'theme:ink' },
+  { background: 'theme:bg2', panel: 'theme:bg2', accent: 'theme:lilac', line: 'theme:paperInkDim', ink: 'theme:ink' },
+  { background: 'theme:bg2', panel: 'theme:bg2', accent: 'theme:blue', line: 'theme:paperInkDim', ink: 'theme:ink' },
 ];
 
 export const DEFAULT_SOCIAL_IMAGE_POST =
@@ -44,23 +45,34 @@ function svgImageSource(title: string, subtitle: string, index: number, palette:
   const bandY = 128 + index * 18;
   const safeTitle = escapeSvgText(title);
   const safeSubtitle = escapeSvgText(subtitle);
+  const resolved = resolveSvgPalette(palette);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720">
-  <rect width="960" height="720" fill="${palette.background}"/>
-  <rect x="54" y="54" width="852" height="612" rx="34" fill="${palette.panel}" stroke="${palette.line}" stroke-width="2"/>
-  <rect x="92" y="92" width="776" height="72" rx="14" fill="${palette.background}" stroke="${palette.line}" stroke-width="2"/>
-  <rect x="120" y="112" width="184" height="12" rx="6" fill="${palette.accent}"/>
-  <rect x="120" y="138" width="352" height="10" rx="5" fill="${palette.line}"/>
-  <rect x="724" y="112" width="116" height="28" rx="14" fill="${palette.accent}"/>
-  <rect x="92" y="${bandY + 78}" width="776" height="326" rx="26" fill="${palette.background}" stroke="${palette.line}" stroke-width="2"/>
-  <path d="M118 ${bandY + 352} C230 ${bandY + 236}, 330 ${bandY + 420}, 438 ${bandY + 306} S650 ${bandY + 244}, 842 ${bandY + 346}" fill="none" stroke="${palette.accent}" stroke-width="16" stroke-linecap="round"/>
-  <path d="M132 ${bandY + 398} L290 ${bandY + 270} L438 ${bandY + 376} L566 ${bandY + 244} L830 ${bandY + 406}" fill="none" stroke="${palette.line}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="132" y="${bandY + 438}" width="218" height="14" rx="7" fill="${palette.accent}"/>
-  <rect x="132" y="${bandY + 470}" width="398" height="10" rx="5" fill="${palette.line}"/>
-  <rect x="132" y="${bandY + 496}" width="276" height="10" rx="5" fill="${palette.line}"/>
-  <text x="118" y="604" fill="${palette.ink}" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">${safeTitle}</text>
-  <text x="118" y="642" fill="${palette.ink}" font-family="Inter, Arial, sans-serif" font-size="18">${safeSubtitle}</text>
+  <rect width="960" height="720" fill="${resolved.background}"/>
+  <rect x="54" y="54" width="852" height="612" rx="34" fill="${resolved.panel}" stroke="${resolved.line}" stroke-width="2"/>
+  <rect x="92" y="92" width="776" height="72" rx="14" fill="${resolved.background}" stroke="${resolved.line}" stroke-width="2"/>
+  <rect x="120" y="112" width="184" height="12" rx="6" fill="${resolved.accent}"/>
+  <rect x="120" y="138" width="352" height="10" rx="5" fill="${resolved.line}"/>
+  <rect x="724" y="112" width="116" height="28" rx="14" fill="${resolved.accent}"/>
+  <rect x="92" y="${bandY + 78}" width="776" height="326" rx="26" fill="${resolved.background}" stroke="${resolved.line}" stroke-width="2"/>
+  <path d="M118 ${bandY + 352} C230 ${bandY + 236}, 330 ${bandY + 420}, 438 ${bandY + 306} S650 ${bandY + 244}, 842 ${bandY + 346}" fill="none" stroke="${resolved.accent}" stroke-width="16" stroke-linecap="round"/>
+  <path d="M132 ${bandY + 398} L290 ${bandY + 270} L438 ${bandY + 376} L566 ${bandY + 244} L830 ${bandY + 406}" fill="none" stroke="${resolved.line}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="132" y="${bandY + 438}" width="218" height="14" rx="7" fill="${resolved.accent}"/>
+  <rect x="132" y="${bandY + 470}" width="398" height="10" rx="5" fill="${resolved.line}"/>
+  <rect x="132" y="${bandY + 496}" width="276" height="10" rx="5" fill="${resolved.line}"/>
+  <text x="118" y="604" fill="${resolved.ink}" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">${safeTitle}</text>
+  <text x="118" y="642" fill="${resolved.ink}" font-family="Inter, Arial, sans-serif" font-size="18">${safeSubtitle}</text>
 </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+function resolveSvgPalette(palette: Palette): Palette {
+  return {
+    background: resolveGalleryColor(palette.background) || resolveGalleryColor('theme:bg') || palette.background,
+    panel: resolveGalleryColor(palette.panel) || resolveGalleryColor('theme:bg2') || palette.panel,
+    accent: resolveGalleryColor(palette.accent) || resolveGalleryColor('theme:accent') || palette.accent,
+    line: resolveGalleryColor(palette.line) || resolveGalleryColor('theme:rule') || palette.line,
+    ink: resolveGalleryColor(palette.ink) || resolveGalleryColor('theme:ink') || palette.ink,
+  };
 }
 
 export function makeSocialImageSet(post: NewsFeedPost = DEFAULT_SOCIAL_IMAGE_POST): SocialImageItem[] {
@@ -111,8 +123,6 @@ export function makeSocialImageSet(post: NewsFeedPost = DEFAULT_SOCIAL_IMAGE_POS
     },
   ];
 }
-
-export const DEFAULT_SOCIAL_IMAGES = makeSocialImageSet(DEFAULT_SOCIAL_IMAGE_POST);
 
 export function formatSocialCount(value: number): string {
   if (value >= 1_000_000) return `${trimDecimal(value / 1_000_000)}M`;

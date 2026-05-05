@@ -53,8 +53,8 @@ export function FractionChart(props: FractionChartProps) {
             <Graph.Path
               key={idx}
               d={personIcon(x, y, s)}
-              fill={icon.isFilled ? icon.color : '#3a2a1e'}
-              stroke={icon.isFilled ? icon.color : '#3a2a1e'}
+              fill={icon.isFilled ? icon.color : 'theme:rule'}
+              stroke={icon.isFilled ? icon.color : 'theme:rule'}
               strokeWidth={0.5}
             />
           );

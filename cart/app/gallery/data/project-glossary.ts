@@ -202,19 +202,19 @@ export const projectGlossaryMockData: GlossaryEntry[] = [
     term: 'data shape',
     aliases: ['shape', 'data shapes', 'shape file'],
     definition:
-      'A data shape is a TS type + JSON schema + mock rows + GalleryDataReference[] in cart/component-gallery/data/. Add via the gallery-component script.',
+      'A data shape is a TS type + JSON schema + mock rows + GalleryDataReference[] in cart/app/gallery/data/. Add via the gallery-component script.',
     scope: 'cart',
-    scopeRefs: ['cart/component-gallery/data/'],
+    scopeRefs: ['cart/app/gallery/data/'],
     canonicalReferences: [
       { kind: 'pattern', ref: 'scripts/gallery-component', relevance: 1.0 },
-      { kind: 'file', ref: 'cart/component-gallery/types.ts', relevance: 0.85 },
-      { kind: 'usage-example', ref: 'cart/component-gallery/data/goal.ts', relevance: 0.7 },
+      { kind: 'file', ref: 'cart/app/gallery/types.ts', relevance: 0.85 },
+      { kind: 'usage-example', ref: 'cart/app/gallery/data/goal.ts', relevance: 0.7 },
     ],
     autoAttach: {
       enabled: true,
       contextItems: [
-        { kind: 'file-content', ref: 'cart/component-gallery/types.ts', maxTokens: 1200 },
-        { kind: 'doc-link', ref: 'cart/component-gallery/README.md' },
+        { kind: 'file-content', ref: 'cart/app/gallery/types.ts', maxTokens: 1200 },
+        { kind: 'doc-link', ref: 'cart/app/gallery/README.md' },
       ],
       triggerThreshold: 0.8,
     },
@@ -316,14 +316,14 @@ export const projectGlossaryReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Project',
-    targetSource: 'cart/component-gallery/data/project.ts',
+    targetSource: 'cart/app/gallery/data/project.ts',
     sourceField: 'projectId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Interpretations (consume entries)',
-    targetSource: 'cart/component-gallery/data/interpretation.ts',
+    targetSource: 'cart/app/gallery/data/interpretation.ts',
     sourceField: 'id',
     targetField: 'outputs[].value (when targetEntityKind=reference-artifact, source=glossary-pick)',
     summary:
@@ -332,7 +332,7 @@ export const projectGlossaryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Disambiguation model',
-    targetSource: 'cart/component-gallery/data/model-route.ts',
+    targetSource: 'cart/app/gallery/data/model-route.ts',
     sourceField: '(none — routed via purpose=disambiguation)',
     targetField: 'purpose',
     summary:
@@ -341,7 +341,7 @@ export const projectGlossaryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Auto-attach feeds Goal.referenceArtifacts',
-    targetSource: 'cart/component-gallery/data/goal.ts',
+    targetSource: 'cart/app/gallery/data/goal.ts',
     sourceField: 'autoAttach.contextItems',
     targetField: 'referenceArtifacts[]',
     summary:

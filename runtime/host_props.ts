@@ -100,8 +100,6 @@ export type HostNodeProps = Partial<{
   staticSurfaceOverlay: boolean;
   /** Video file/URL — engine routes through framework/videos.zig. Or use `<Video src=…>`. */
   videoSrc: string;
-  /** Embedded cart binary path. Or use `<Cartridge src=…>`. */
-  cartridgeSrc: string;
 
   // ── Canvas / Graph ──────────────────────────────────────
   /** SVG path fill alpha multiplier for `<Canvas.Path>` / `<Graph.Path>`. */

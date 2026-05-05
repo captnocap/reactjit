@@ -14,7 +14,7 @@ export const rubricPanelSection = defineGallerySection({
     defineGalleryStory({
       id: "rubric-panel/default",
       title: "Rubric Panel",
-      source: "cart/component-gallery/components/rubric-panel/RubricPanel.tsx",
+      source: "cart/app/gallery/components/rubric-panel/RubricPanel.tsx",
       status: 'draft',
       tags: ["card", "panel"],
       variants: [

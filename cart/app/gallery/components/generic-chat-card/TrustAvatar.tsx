@@ -32,7 +32,7 @@ export function TrustThermometerAvatar({ value }: { value: string }) {
         height: 40,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#3d2a26',
+        backgroundColor: 'theme:paperRule',
         borderWidth: 2,
         borderColor: CHAT_CARD.orange,
         borderRadius: 4,

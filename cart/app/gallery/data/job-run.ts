@@ -229,18 +229,18 @@ export const jobRunSchema: JsonObject = {
 };
 
 export const jobRunReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Job', targetSource: 'cart/component-gallery/data/job.ts', sourceField: 'jobId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Job', targetSource: 'cart/app/gallery/data/job.ts', sourceField: 'jobId', targetField: 'id' },
   {
     kind: 'references',
     label: 'Worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Retry-of run',
-    targetSource: 'cart/component-gallery/data/job-run.ts',
+    targetSource: 'cart/app/gallery/data/job-run.ts',
     sourceField: 'retryOfRunId',
     targetField: 'id',
     summary: 'Forms a retry chain — each attempt is its own row, linked back to the previous one.',
@@ -248,7 +248,7 @@ export const jobRunReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Triggering event',
-    targetSource: 'cart/component-gallery/data/event.ts',
+    targetSource: 'cart/app/gallery/data/event.ts',
     sourceField: 'triggeredByEventId',
     targetField: 'id',
     summary: 'When triggeredBy=event, points at the Event row that fired the run.',
@@ -256,7 +256,7 @@ export const jobRunReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Lifecycle events',
-    targetSource: 'cart/component-gallery/data/event.ts',
+    targetSource: 'cart/app/gallery/data/event.ts',
     sourceField: 'id',
     targetField: 'subjectId (where subjectKind=\'job-run\')',
     summary:

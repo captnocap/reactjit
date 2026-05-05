@@ -8,7 +8,7 @@ export const ladderTrailSection = defineGallerySection({
     defineGalleryStory({
       id: "ladder-trail/default",
       title: "Ladder Trail",
-      source: "cart/component-gallery/components/controls-specimen/LadderTrail.tsx",
+      source: "cart/app/gallery/components/controls-specimen/LadderTrail.tsx",
       status: 'ready',
       summary: 'Vertical breadcrumb / chronology atom used in the mixed-axis specimen section.',
       tags: ['controls', 'breadcrumbs', 'trail', 'atom'],

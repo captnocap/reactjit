@@ -37,7 +37,7 @@ export function DexTableCell({
         borderRightWidth: 1,
         borderBottomWidth: 1,
         borderColor: DEX_COLORS.rule,
-        backgroundColor: selected ? '#14100d' : DEX_COLORS.bg,
+        backgroundColor: selected ? 'theme:bg1' : DEX_COLORS.bg,
       }}
     >
       <Text style={{ color: TONE_COLOR[tone], fontSize: 10 }}>{String(value)}</Text>

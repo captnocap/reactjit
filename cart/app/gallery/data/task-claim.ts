@@ -120,7 +120,7 @@ export const taskClaimReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Task',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'taskId',
     targetField: 'id',
     summary:
@@ -129,14 +129,14 @@ export const taskClaimReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Workstream',
-    targetSource: 'cart/component-gallery/data/workstream.ts',
+    targetSource: 'cart/app/gallery/data/workstream.ts',
     sourceField: 'workstreamId',
     targetField: 'id',
     summary:
@@ -145,7 +145,7 @@ export const taskClaimReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Superseding claim',
-    targetSource: 'cart/component-gallery/data/task-claim.ts',
+    targetSource: 'cart/app/gallery/data/task-claim.ts',
     sourceField: 'supersededByClaimId',
     targetField: 'id',
     summary: 'When a supervisor hands a task to a different worker, the old claim transitions to `superseded` pointing at the new one.',

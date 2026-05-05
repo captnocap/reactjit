@@ -607,6 +607,8 @@ pub const scene3d_wgsl =
     \\    _pad4: vec4f,
     \\};
     \\@group(0) @binding(0) var<uniform> u: SceneUniforms;
+    \\@group(1) @binding(0) var diffuse_tex: texture_2d<f32>;
+    \\@group(1) @binding(1) var diffuse_smp: sampler;
     \\
     \\// ── Vertex I/O ────────────────────────────────────────────────
     \\struct VertexInput {
@@ -633,7 +635,10 @@ pub const scene3d_wgsl =
     \\    return out;
     \\}
     \\
-    \\// ── Fragment shader (Blinn-Phong) ────────────────────────────
+    \\// ── Fragment shader (Blinn-Phong + diffuse texture) ──────────
+    \\// Meshes without an explicit texture get a 1×1 white default,
+    \\// so the multiply collapses to the uniform color and behavior
+    \\// matches the pre-texture pipeline.
     \\@fragment
     \\fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     \\    let N = normalize(in.world_normal);
@@ -647,7 +652,8 @@ pub const scene3d_wgsl =
     \\    let H = normalize(L + V);
     \\    let spec = pow(max(dot(N, H), 0.0), u.specular_power);
     \\
-    \\    let base = u.color.rgb;
+    \\    let tex_sample = textureSample(diffuse_tex, diffuse_smp, in.uv);
+    \\    let base = u.color.rgb * tex_sample.rgb;
     \\    let ambient = u.ambient_color * base;
     \\    let diffuse = u.light_color * base * diff;
     \\    let specular = u.light_color * spec * 0.4;
@@ -655,7 +661,7 @@ pub const scene3d_wgsl =
     \\    let fog_t = smoothstep(u.fog_near, u.fog_far, distance(u.camera_pos, in.world_pos));
     \\    let final_rgb = mix(lit, u.fog_color, fog_t);
     \\
-    \\    return vec4f(final_rgb, u.color.a);
+    \\    return vec4f(final_rgb, u.color.a * tex_sample.a);
     \\}
 ;
 

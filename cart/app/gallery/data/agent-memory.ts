@@ -168,7 +168,7 @@ export const agentMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'User',
-    targetSource: 'cart/component-gallery/data/user.ts',
+    targetSource: 'cart/app/gallery/data/user.ts',
     sourceField: 'memory.userId',
     targetField: 'id',
     summary: 'Each AgentMemory belongs to exactly one user.',
@@ -176,7 +176,7 @@ export const agentMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Memory entries',
-    targetSource: 'cart/component-gallery/data/agent-memory.ts',
+    targetSource: 'cart/app/gallery/data/agent-memory.ts',
     sourceField: 'memory.id',
     targetField: 'entries[].memoryId',
     summary:
@@ -185,7 +185,7 @@ export const agentMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Project (implicit)',
-    targetSource: 'cart/component-gallery/data/agent-memory.ts',
+    targetSource: 'cart/app/gallery/data/agent-memory.ts',
     sourceField: 'memory.projectSlug',
     targetField: '(external filesystem anchor)',
     summary:

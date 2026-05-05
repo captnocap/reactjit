@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
 import { ChevronDown, ChevronRight } from '@reactjit/runtime/icons/icons';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { MarkableLine } from './MarkableText';
 import { StepCardShell, TranscriptTurnShell } from './TranscriptFlow';
 import type { SignalHighlightProps } from './TripwireMenu';
@@ -135,14 +135,14 @@ export function ToolExecutionBlock({
         style={{
           gap: 7,
           padding: 8,
-          backgroundColor: '#0e0b09',
+          backgroundColor: 'theme:bg',
           borderWidth: 1,
-          borderColor: '#3a2a1e',
+          borderColor: 'theme:rule',
           borderRadius: 4,
         }}
       >
         <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#5a8bd6' }}>{block.title}</Text>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: 'theme:blue' }}>{block.title}</Text>
           <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>{block.meta}</Text>
         </Row>
         <Text style={{ fontFamily: 'monospace', fontSize: 9, color: CHAT_CARD.mint }}>{block.command}</Text>
@@ -163,9 +163,9 @@ export function DiffBlock({
       <Col
         style={{
           gap: 0,
-          backgroundColor: '#0e0b09',
+          backgroundColor: 'theme:bg',
           borderWidth: 1,
-          borderColor: '#3a2a1e',
+          borderColor: 'theme:rule',
           borderRadius: 4,
         }}
       >
@@ -177,10 +177,10 @@ export function DiffBlock({
             paddingRight: 8,
             paddingTop: 6,
             paddingBottom: 6,
-            backgroundColor: '#1a1511',
+            backgroundColor: 'theme:bg2',
           }}
         >
-          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: '#5a8bd6' }}>{block.title}</Text>
+          <Text style={{ fontFamily: 'monospace', fontSize: 8, color: 'theme:blue' }}>{block.title}</Text>
           <Text style={{ fontFamily: 'monospace', fontSize: 7, color: CHAT_CARD.faint }}>{block.meta}</Text>
         </Row>
         <Col style={{ gap: 0 }}>
@@ -195,11 +195,11 @@ export function DiffBlock({
                   paddingTop: 4,
                   paddingBottom: 4,
                   gap: 7,
-                  backgroundColor: line.prefix === '-' ? '#1a1511' : line.prefix === '+' ? '#1a1511' : '#0e0b09',
+                  backgroundColor: line.prefix === '-' ? 'theme:bg2' : line.prefix === '+' ? 'theme:bg2' : 'theme:bg',
                 }}
               >
                 <Text style={{ width: 8, fontFamily: 'monospace', fontSize: 9, color }}>{line.prefix}</Text>
-                <S.TypeCaption>{line.text}</S.TypeCaption>
+                <S.TypeCaption style={{ color }}>{line.text}</S.TypeCaption>
               </Row>
             );
           })}

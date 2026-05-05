@@ -8,7 +8,7 @@ export const keyValueBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'key-value-badge/default',
       title: 'Key Value Badge',
-      source: 'cart/component-gallery/components/controls-specimen/KeyValueBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/KeyValueBadge.tsx',
       status: 'ready',
       summary: 'Split badge with a solid key tab and inline value readout.',
       tags: ['controls', 'badge', 'atom'],

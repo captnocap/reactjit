@@ -156,6 +156,35 @@ pub fn hitTestHoverable(node: *Node, mx: f32, my: f32) ?*Node {
     return null;
 }
 
+// ── Content→Screen offset for a target node ─────────────────────────────
+//
+// Descendants of a scroll container have `computed.x/y` in CONTENT space
+// (the layout pass writes pre-scroll coordinates; hit-test compensates by
+// adding `scroll_x/y` to the mouse coords as it descends — see lines
+// ~114-117 above). Anything that wants the on-screen position of such a
+// node (tooltip, context menu, popover) must subtract the cumulative
+// scroll of every scroll-ancestor between root and the node.
+//
+// Returns (sx, sy) such that `screen_pos = computed_pos - (sx, sy)`.
+pub const ScrollOffset = struct { sx: f32, sy: f32 };
+
+pub fn cumulativeScrollOffset(root: *Node, target: *Node) ScrollOffset {
+    return findScroll(root, target, 0, 0) orelse ScrollOffset{ .sx = 0, .sy = 0 };
+}
+
+fn findScroll(node: *Node, target: *Node, sx_acc: f32, sy_acc: f32) ?ScrollOffset {
+    if (node == target) return ScrollOffset{ .sx = sx_acc, .sy = sy_acc };
+    const r = node.computed;
+    const ov = node.style.overflow;
+    const is_scroll = (ov == .scroll or (ov == .auto and node.content_height > r.h));
+    const add_x: f32 = if (is_scroll) node.scroll_x else 0;
+    const add_y: f32 = if (is_scroll) node.scroll_y else 0;
+    for (node.children) |*child| {
+        if (findScroll(child, target, sx_acc + add_x, sy_acc + add_y)) |hit| return hit;
+    }
+    return null;
+}
+
 // ── Text Hit Test (finds any text node, not just ones with handlers) ────
 
 /// Find the deepest text node containing (mx, my).

@@ -237,7 +237,7 @@ export const modelRouteReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary:
@@ -246,28 +246,28 @@ export const modelRouteReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Primary model',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'primaryModelId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Fallback models',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'fallbackChain[]',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Workspace / project scope',
-    targetSource: 'cart/component-gallery/data/workspace.ts',
+    targetSource: 'cart/app/gallery/data/workspace.ts',
     sourceField: 'appliesIf.workspaceId',
     targetField: 'id',
   },
   {
     kind: 'has-many',
     label: 'Inference requests (the route used)',
-    targetSource: 'cart/component-gallery/data/inference-request.ts',
+    targetSource: 'cart/app/gallery/data/inference-request.ts',
     sourceField: 'id',
     targetField: 'modelRouteId (to wire)',
     summary:

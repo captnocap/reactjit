@@ -13,7 +13,7 @@ export const proceduralMemorySection = defineGallerySection({
     defineGalleryDataStory({
       id: "procedural-memory/catalog",
       title: "Procedural Memory",
-      source: "cart/component-gallery/data/procedural-memory.ts",
+      source: "cart/app/gallery/data/procedural-memory.ts",
       format: 'data',
       status: 'draft',
       tags: ["memory", "playbook", "skill"],

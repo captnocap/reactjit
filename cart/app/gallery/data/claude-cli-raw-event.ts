@@ -342,7 +342,7 @@ export const claudeCliRawEventReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Normalized contract',
-    targetSource: 'cart/component-gallery/data/worker-event.ts',
+    targetSource: 'cart/app/gallery/data/worker-event.ts',
     sourceField: 'type / message.content[].type',
     targetField: 'type',
     summary:
@@ -351,7 +351,7 @@ export const claudeCliRawEventReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Connection kind',
-    targetSource: 'cart/component-gallery/data/event-adapter.ts',
+    targetSource: 'cart/app/gallery/data/event-adapter.ts',
     sourceField: 'type',
     targetField: 'connectionKind',
     summary:

@@ -8,7 +8,7 @@ export const donutBarChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'donut-bar-chart/default',
       title: 'Donut Bar Chart',
-      source: 'cart/component-gallery/components/donut-bar-chart/DonutBarChart.tsx',
+      source: 'cart/app/gallery/components/donut-bar-chart/DonutBarChart.tsx',
       status: 'draft',
       variants: [
         {

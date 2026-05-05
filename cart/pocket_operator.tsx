@@ -386,7 +386,7 @@ export default function App() {
           <Box style={{ width: 320, backgroundColor: '#0e0f10', borderRadius: 18, padding: 12, gap: 10, borderWidth: 1, borderColor: '#292a2d' }}>
             <Box style={{ flexDirection: 'row', justifyContent: 'spaceBetween', alignItems: 'center' }}>
               <Box>
-                <Text fontSize={20} color="#f2b03b">codex</Text>
+                <Text fontSize={20} color="#f2b03b">po</Text>
                 <Text fontSize={9} color="#d0d0d0">office // digital operator</Text>
               </Box>
               <Box style={{ alignItems: 'flexEnd' }}>
@@ -466,7 +466,7 @@ export default function App() {
               />
               <Box style={{ flexGrow: 1, gap: 6 }}>
                 <SmallButton label={`voice ${voiceLabel}`} onPress={cycleSelectedVoice} accent={selectedTrack.color} />
-                <SmallButton label={`bpm ${bpm}`} onPress={() => setBpm((v) => clamp(v + 4, 72, 180))} accent="#f2b03b" />
+                <SmallButton label={`bpm ${bpm}`} onPress={() => setBpm((v) => v >= 320 ? 72 : clamp(v + 4, 72, 320))} accent="#f2b03b" />
                 <SmallButton label={`delay ${delayMix.toFixed(2)}`} onPress={() => setDelayMix((v) => clamp(v + 0.04, 0, 0.7))} accent="#f2b03b" />
                 <SmallButton label={`swing ${Math.round(swing * 100)}%`} onPress={() => setSwing((v) => v >= 0.32 ? 0 : clamp(v + 0.04, 0, 0.32))} accent="#f2b03b" />
               </Box>

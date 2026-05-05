@@ -9,7 +9,7 @@ export const waterfallChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'waterfall-chart/default',
       title: 'Waterfall Chart',
-      source: 'cart/component-gallery/components/waterfall-chart/WaterfallChart.tsx',
+      source: 'cart/app/gallery/components/waterfall-chart/WaterfallChart.tsx',
       status: 'draft',
       variants: [
         {

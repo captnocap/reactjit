@@ -13,7 +13,7 @@ export const genericCardMetricBarSection = defineGallerySection({
     defineGalleryStory({
       id: "generic-card-metric-bar/default",
       title: "Generic Card Metric Bar",
-      source: "cart/component-gallery/components/generic-card/GenericCardMetricBar.tsx",
+      source: "cart/app/gallery/components/generic-card/GenericCardMetricBar.tsx",
       status: 'ready',
       summary: 'Single metric row with label, fill rail, and numeric readout.',
       tags: ['card', 'metric', 'atom'],
@@ -27,7 +27,7 @@ export const genericCardMetricBarSection = defineGallerySection({
           id: 'accent',
           name: 'Accent',
           render: () => (
-            <GenericCardMetricBar metric={{ label: 'Accent', value: '31%', fill: 0.31, color: '#d26a2a' }} />
+            <GenericCardMetricBar metric={{ label: 'Accent', value: '31%', fill: 0.31, color: 'theme:accent' }} />
           ),
         },
       ],

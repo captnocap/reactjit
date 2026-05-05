@@ -13,7 +13,7 @@ export const mergeProposalSection = defineGallerySection({
     defineGalleryDataStory({
       id: "merge-proposal/catalog",
       title: "Merge Proposal",
-      source: "cart/component-gallery/data/merge-proposal.ts",
+      source: "cart/app/gallery/data/merge-proposal.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

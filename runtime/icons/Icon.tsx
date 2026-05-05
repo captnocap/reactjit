@@ -115,7 +115,7 @@ export function Icon(props: {
   strokeWidth?: number;
 }) {
   const size = props.size ?? 16;
-  const color = props.color ?? '#ccc';
+  const color = props.color ?? 'theme:ink';
   const strokeWidth = props.strokeWidth ?? 2;
   const paths = resolvePaths(props.name, props.icon);
 

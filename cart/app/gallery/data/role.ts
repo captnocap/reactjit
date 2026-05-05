@@ -152,28 +152,28 @@ export const roleReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Default model',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'defaultModelId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Default preset',
-    targetSource: 'cart/component-gallery/data/inference-preset.ts',
+    targetSource: 'cart/app/gallery/data/inference-preset.ts',
     sourceField: 'defaultPresetId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Base system message',
-    targetSource: 'cart/component-gallery/data/system-message.ts',
+    targetSource: 'cart/app/gallery/data/system-message.ts',
     sourceField: 'baseSystemMessageId',
     targetField: 'id',
     summary:
@@ -182,7 +182,7 @@ export const roleReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Skills',
-    targetSource: 'cart/component-gallery/data/skill.ts',
+    targetSource: 'cart/app/gallery/data/skill.ts',
     sourceField: 'skills[]',
     targetField: 'id',
     summary:
@@ -191,7 +191,7 @@ export const roleReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Required capabilities',
-    targetSource: 'cart/component-gallery/data/capability.ts',
+    targetSource: 'cart/app/gallery/data/capability.ts',
     sourceField: 'requiredCapabilities[]',
     targetField: 'id',
     summary:
@@ -200,7 +200,7 @@ export const roleReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Assignments',
-    targetSource: 'cart/component-gallery/data/role-assignment.ts',
+    targetSource: 'cart/app/gallery/data/role-assignment.ts',
     sourceField: 'id',
     targetField: 'roleId',
     summary: 'Role assignments bind a role to a scope (session / workspace / worker / default).',

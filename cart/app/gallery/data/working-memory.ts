@@ -83,12 +83,12 @@ export const workingMemoryMockData: WorkingMemory[] = [
         pinned: false,
         insertedAt: '2026-04-24T09:10:20Z',
         touchedAt: '2026-04-24T09:10:40Z',
-        sourceRef: 'file:cart/component-gallery/data/working-memory.ts',
+        sourceRef: 'file:cart/app/gallery/data/working-memory.ts',
       },
       {
         id: 'slot_04',
         kind: 'tool_result',
-        content: 'ls -1 cart/component-gallery/data/ | wc -l → 29',
+        content: 'ls -1 cart/app/gallery/data/ | wc -l → 29',
         tokens: 14,
         relevanceScore: 0.41,
         pinned: false,
@@ -190,7 +190,7 @@ export const workingMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
     summary: 'One working-memory row per active worker. Dies with the worker.',
@@ -198,7 +198,7 @@ export const workingMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Source events / files (slot.sourceRef)',
-    targetSource: 'cart/component-gallery/data/worker-event.ts',
+    targetSource: 'cart/app/gallery/data/worker-event.ts',
     sourceField: 'slots[].sourceRef',
     targetField: '(polymorphic — worker-event / file / inference-request)',
     summary:
@@ -207,7 +207,7 @@ export const workingMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Consolidation target — episodic',
-    targetSource: 'cart/component-gallery/data/episodic-memory.ts',
+    targetSource: 'cart/app/gallery/data/episodic-memory.ts',
     sourceField: '(consolidation)',
     targetField: 'id',
     summary:

@@ -11,18 +11,18 @@ export const commandComposerPanelSection = defineGallerySection({
   },
   kind: "top-level",
   composedOf: [
-    "cart/component-gallery/components/command-composer/CommandComposerHeader.tsx",
-    "cart/component-gallery/components/command-composer/CommandComposerPromptLine.tsx",
-    "cart/component-gallery/components/command-composer/CommandComposerFooter.tsx",
-    "cart/component-gallery/components/command-composer/CommandComposerActionRail.tsx",
-    "cart/component-gallery/components/command-composer/CommandComposerChip.tsx",
-    "cart/component-gallery/components/command-composer/CommandComposerShortcut.tsx",
+    "cart/app/gallery/components/command-composer/CommandComposerHeader.tsx",
+    "cart/app/gallery/components/command-composer/CommandComposerPromptLine.tsx",
+    "cart/app/gallery/components/command-composer/CommandComposerFooter.tsx",
+    "cart/app/gallery/components/command-composer/CommandComposerActionRail.tsx",
+    "cart/app/gallery/components/command-composer/CommandComposerChip.tsx",
+    "cart/app/gallery/components/command-composer/CommandComposerShortcut.tsx",
   ],
   stories: [
     defineGalleryStory({
       id: "command-composer-panel/default",
       title: "Command Composer",
-      source: "cart/component-gallery/components/command-composer-panel/CommandComposerPanel.tsx",
+      source: "cart/app/gallery/components/command-composer-panel/CommandComposerPanel.tsx",
       status: 'ready',
       tags: ["input", "panel"],
       variants: [

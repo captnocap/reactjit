@@ -10,17 +10,17 @@ export const dexTableExplorerSection = defineGallerySection({
   },
   kind: "top-level",
   composedOf: [
-    "cart/component-gallery/components/dex-frame/DexFrame.tsx",
-    "cart/component-gallery/components/dex-search-bar/DexSearchBar.tsx",
-    "cart/component-gallery/components/dex-breadcrumbs/DexBreadcrumbs.tsx",
-    "cart/component-gallery/components/dex-table-cell/DexTableCell.tsx",
-    "cart/component-gallery/components/dex-spark-histogram/DexSparkHistogram.tsx",
+    "cart/app/gallery/components/dex-frame/DexFrame.tsx",
+    "cart/app/gallery/components/dex-search-bar/DexSearchBar.tsx",
+    "cart/app/gallery/components/dex-breadcrumbs/DexBreadcrumbs.tsx",
+    "cart/app/gallery/components/dex-table-cell/DexTableCell.tsx",
+    "cart/app/gallery/components/dex-spark-histogram/DexSparkHistogram.tsx",
   ],
   stories: [
     defineGalleryStory({
       id: "dex-table-explorer/default",
       title: "Dex Table Explorer",
-      source: "cart/component-gallery/components/dex-table-explorer/DexTableExplorer.tsx",
+      source: "cart/app/gallery/components/dex-table-explorer/DexTableExplorer.tsx",
       status: 'ready',
       summary: 'Table data explorer composed from frame, search, breadcrumbs, fixed cells, and column histograms.',
       tags: ["data-explorer", "table", "composition"],

@@ -13,7 +13,7 @@ export const basicWorkerCardSection = defineGallerySection({
     defineGalleryStory({
       id: "basic-worker-card/default",
       title: "Basic Worker Card",
-      source: "cart/component-gallery/components/basic-worker-card/BasicWorkerCard.tsx",
+      source: "cart/app/gallery/components/basic-worker-card/BasicWorkerCard.tsx",
       status: 'ready',
       tags: ["worker", "chat", "card"],
       variants: [

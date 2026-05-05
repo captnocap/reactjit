@@ -13,7 +13,7 @@ export const eventAdapterSection = defineGallerySection({
     defineGalleryDataStory({
       id: "event-adapter/catalog",
       title: "Event Adapter",
-      source: "cart/component-gallery/data/event-adapter.ts",
+      source: "cart/app/gallery/data/event-adapter.ts",
       format: 'data',
       status: 'draft',
       tags: ["adapter", "contract", "normalization"],

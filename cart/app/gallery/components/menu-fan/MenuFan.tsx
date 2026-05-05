@@ -51,13 +51,13 @@ export function MenuFan({ rows }: MenuFanProps) {
       <S.MenuRadialBox>
         <Box style={{ position: 'relative', width: W, height: H, flexShrink: 0 }}>
           <Graph style={{ width: W, height: H }}>
-            <Graph.Path d={outerArcPath()} fill="none" stroke="#3a342a" strokeWidth={2} />
+            <Graph.Path d={outerArcPath()} fill="none" stroke="theme:paperRule" strokeWidth={2} />
             {rows.map((_, i) => (
               <Graph.Path
                 key={`blade-${i}`}
                 d={bladePath(i, rows.length)}
-                fill={i === active ? '#241e12' : '#15120f'}
-                stroke={i === active ? '#d8b86a' : '#6e6353'}
+                fill={i === active ? 'theme:paperInk' : 'theme:bg1'}
+                stroke={i === active ? 'theme:warn' : 'theme:paperInkDim'}
                 strokeWidth={i === active ? 3 : 2}
               />
             ))}
@@ -76,7 +76,7 @@ export function MenuFan({ rows }: MenuFanProps) {
                   alignItems: 'center', justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontFamily: 'monospace', fontSize: 10, color: i === active ? '#d8b86a' : '#ece6da', letterSpacing: 1.4 }}>
+                <Text style={{ fontFamily: 'monospace', fontSize: 10, color: i === active ? 'theme:warn' : 'theme:ink', letterSpacing: 1.4 }}>
                   {entry.label.toUpperCase()}
                 </Text>
               </Pressable>

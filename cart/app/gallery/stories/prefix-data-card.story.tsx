@@ -8,7 +8,7 @@ export const prefixDataCardSection = defineGallerySection({
     defineGalleryStory({
       id: 'prefix-data-card/default',
       title: 'Prefix Data Card',
-      source: 'cart/component-gallery/components/controls-specimen/PrefixDataCard.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/PrefixDataCard.tsx',
       status: 'ready',
       summary: 'Card with a vertical prefix tab and horizontal metadata copy block.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

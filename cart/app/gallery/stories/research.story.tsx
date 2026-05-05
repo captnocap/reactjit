@@ -13,7 +13,7 @@ export const researchSection = defineGallerySection({
     defineGalleryDataStory({
       id: "research/catalog",
       title: "Research",
-      source: "cart/component-gallery/data/research.ts",
+      source: "cart/app/gallery/data/research.ts",
       format: 'data',
       status: 'draft',
       tags: ["research", "inquiry", "findings"],

@@ -19,7 +19,7 @@ export const modelCardSection = defineGallerySection({
     defineGalleryStory({
       id: 'model-card/default',
       title: 'Model Card',
-      source: 'cart/component-gallery/components/model-card/ModelCard.tsx',
+      source: 'cart/app/gallery/components/model-card/ModelCard.tsx',
       status: 'draft',
       variants: [
         {

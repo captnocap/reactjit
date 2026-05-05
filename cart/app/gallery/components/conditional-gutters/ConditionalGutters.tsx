@@ -46,14 +46,14 @@ export function ConditionalGutters({ preset = 'app-shell' }: { preset?: Conditio
         maxWidth: 1040,
         gap: 14,
         padding: 16,
-        backgroundColor: '#0d0b08',
+        backgroundColor: 'theme:bg',
       }}
     >
       <Row style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <GutterToggle active={gutters.nav} color="#6bd6d1" icon={PanelLeft} label="Nav" onPress={() => toggleGutter('nav')} />
-        <GutterToggle active={gutters.inspector} color="#d98cac" icon={PanelRight} label="Inspector" onPress={() => toggleGutter('inspector')} />
-        <GutterToggle active={gutters.console} color="#79d891" icon={PanelBottom} label="Console" onPress={() => toggleGutter('console')} />
-        <GutterToggle active={gutters.command} color="#f2b35d" icon={PanelTop} label="Command" onPress={() => toggleGutter('command')} />
+        <GutterToggle active={gutters.nav} color="theme:tool" icon={PanelLeft} label="Nav" onPress={() => toggleGutter('nav')} />
+        <GutterToggle active={gutters.inspector} color="theme:atch" icon={PanelRight} label="Inspector" onPress={() => toggleGutter('inspector')} />
+        <GutterToggle active={gutters.console} color="theme:pin" icon={PanelBottom} label="Console" onPress={() => toggleGutter('console')} />
+        <GutterToggle active={gutters.command} color="theme:warn" icon={PanelTop} label="Command" onPress={() => toggleGutter('command')} />
       </Row>
 
       <Box
@@ -61,8 +61,8 @@ export function ConditionalGutters({ preset = 'app-shell' }: { preset?: Conditio
           width: '100%',
           height: 560,
           borderWidth: 1,
-          borderColor: '#302821',
-          backgroundColor: '#090806',
+          borderColor: 'theme:paperRule',
+          backgroundColor: 'theme:bg',
           overflow: 'hidden',
         }}
       >

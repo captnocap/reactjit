@@ -13,7 +13,7 @@ export const commandComposerSection = defineGallerySection({
     defineGalleryDataStory({
       id: "command-composer/catalog",
       title: "Command Composer",
-      source: "cart/component-gallery/data/command-composer.ts",
+      source: "cart/app/gallery/data/command-composer.ts",
       format: 'data',
       status: 'draft',
       tags: ["input", "data"],

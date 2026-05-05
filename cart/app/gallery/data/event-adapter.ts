@@ -67,7 +67,7 @@ export type EventAdapter = {
 
 const claudeCliAdapter: EventAdapter = {
   connectionKind: 'claude-code-cli',
-  rawSourcePath: 'cart/component-gallery/data/claude-cli-raw-event.ts',
+  rawSourcePath: 'cart/app/gallery/data/claude-cli-raw-event.ts',
   summary:
     'Reduces `claude --output-format stream-json` NDJSON frames into the normalized WorkerEvent contract. Assistant frames are fanned out — one raw frame may produce multiple normalized events because `message.content[]` is an array of mixed blocks (text / thinking / tool_use).',
   rules: [
@@ -156,7 +156,7 @@ const claudeCliAdapter: EventAdapter = {
 
 const codexAdapter: EventAdapter = {
   connectionKind: 'openai-api-key',
-  rawSourcePath: 'cart/component-gallery/data/codex-raw-event.ts',
+  rawSourcePath: 'cart/app/gallery/data/codex-raw-event.ts',
   summary:
     'Reduces OpenAI-compatible SSE `chat.completion.chunk` frames into the normalized WorkerEvent contract. Text streams as token deltas, tool-call arguments stream as partial JSON strings that must be accumulated by call index before parse. Maximally different from the Anthropic CLI shape — this is what the contract was designed to absorb.',
   rules: [
@@ -310,7 +310,7 @@ export const eventAdapterReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Normalized contract',
-    targetSource: 'cart/component-gallery/data/worker-event.ts',
+    targetSource: 'cart/app/gallery/data/worker-event.ts',
     sourceField: 'rules[].normalizedType / synthesized[]',
     targetField: 'type',
     summary:
@@ -319,7 +319,7 @@ export const eventAdapterReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Raw event (claude-cli)',
-    targetSource: 'cart/component-gallery/data/claude-cli-raw-event.ts',
+    targetSource: 'cart/app/gallery/data/claude-cli-raw-event.ts',
     sourceField: 'rules[].rawSelector / rules[].fieldMap',
     targetField: 'type / message.content[]',
     summary:
@@ -328,7 +328,7 @@ export const eventAdapterReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Connection kind',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'connectionKind',
     targetField: 'kind',
     summary:

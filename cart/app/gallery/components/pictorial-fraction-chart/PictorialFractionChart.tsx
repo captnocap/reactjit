@@ -62,9 +62,9 @@ export function PictorialFractionChart(props: PictorialFractionChartProps) {
             <Graph.Path
               key={i}
               d={personPath(x, y, 1.2)}
-              fill={isFilled ? color : isPartial ? PALETTE.pinkLight : '#3a2a1e'}
+              fill={isFilled ? color : isPartial ? PALETTE.pinkLight : 'theme:rule'}
               fillOpacity={isPartial ? partial : 1}
-              stroke={isFilled || isPartial ? color : '#3a2a1e'}
+              stroke={isFilled || isPartial ? color : 'theme:rule'}
               strokeWidth={1}
             />
           );

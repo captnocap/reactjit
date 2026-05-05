@@ -18,40 +18,40 @@ import type { PanelSize } from '../matrix-scaling-dashboard/matrixScalingModel';
 const CASCADE_SIZES = [16, 32, 64, 128, 512] as const;
 const BRAILLE_CHANNEL_IDS: ChannelId[] = ['plasma', 'ripple', 'sweep', 'life', 'orbit', 'grid'];
 const MATRIX_THEME = {
-  pageBackground: '#080503',
-  pageBorder: '#3a2a1e',
-  glowPrimary: '#2a160a',
-  glowSecondary: '#1a0d07',
-  headerRule: '#3a2a1e',
-  titleText: '#f2e8dc',
-  subtitleText: '#d26a2a',
-  bodyText: '#7a6e5d',
-  chipBackground: '#1a120d',
-  chipBorder: '#4c2d19',
-  chipText: '#d9a15d',
-  glyphOn: '#f2b26b',
-  glyphOff: '#4c2d19',
-  glyphBorder: '#6a3e22',
-  labelBackground: '#1f130c',
-  labelBackgroundNative: '#3a2414',
-  labelBorder: '#6a3e22',
-  labelBorderNative: '#d26a2a',
-  labelText: '#d9a15d',
-  labelTextNative: '#ffd8a3',
-  deviceText: '#7a6e5d',
-  panelBackground: '#080503',
-  panelBorder: '#3a2a1e',
-  panelBorderNative: '#d26a2a',
-  footerText: '#7a6e5d',
-  scanlineColor: '#f2e8dc',
+  pageBackground: 'theme:bg',
+  pageBorder: 'theme:rule',
+  glowPrimary: 'theme:paperInk',
+  glowSecondary: 'theme:bg1',
+  headerRule: 'theme:rule',
+  titleText: 'theme:ink',
+  subtitleText: 'theme:accent',
+  bodyText: 'theme:inkDimmer',
+  chipBackground: 'theme:bg2',
+  chipBorder: 'theme:paperRule',
+  chipText: 'theme:warn',
+  glyphOn: 'theme:warn',
+  glyphOff: 'theme:paperRule',
+  glyphBorder: 'theme:paperRuleBright',
+  labelBackground: 'theme:bg2',
+  labelBackgroundNative: 'theme:paperRule',
+  labelBorder: 'theme:paperRuleBright',
+  labelBorderNative: 'theme:accent',
+  labelText: 'theme:warn',
+  labelTextNative: 'theme:paper',
+  deviceText: 'theme:inkDimmer',
+  panelBackground: 'theme:bg',
+  panelBorder: 'theme:rule',
+  panelBorderNative: 'theme:accent',
+  footerText: 'theme:inkDimmer',
+  scanlineColor: 'theme:ink',
   scanlineOpacity: 0.08,
   scanlineShade: 0.92,
   heatStops: [
-    [0.0, [8, 4, 2]],
-    [0.3, [48, 20, 8]],
-    [0.6, [138, 74, 32]],
-    [0.82, [210, 106, 42]],
-    [1.0, [255, 210, 140]],
+    [0.0, 'theme:bg'],
+    [0.3, 'theme:bg2'],
+    [0.6, 'theme:ruleBright'],
+    [0.82, 'theme:accent'],
+    [1.0, 'theme:ink'],
   ] as const,
 } as const;
 
@@ -100,7 +100,7 @@ function RowLabel({
         style={{
           fontFamily: 'monospace',
           fontSize: 8,
-          color: '#7a6e5d',
+          color: 'theme:inkDimmer',
           textTransform: 'uppercase',
           letterSpacing: 1,
         }}
@@ -131,7 +131,7 @@ function ProjectionRow({
         gap: 12,
         paddingBottom: 18,
         borderBottomWidth: 1,
-        borderBottomColor: '#3a2a1e',
+        borderBottomColor: 'theme:rule',
       }}
     >
       <RowLabel title={title} detail={detail} accent={accent} />
@@ -173,7 +173,7 @@ function BrailleCascadeRow({ channelId }: { channelId: ChannelId }) {
     <ProjectionRow
       title={channel.label}
       detail={channel.sub}
-      accent="#d26a2a"
+      accent="theme:accent"
       small={CASCADE_SIZES.filter((size) => size !== 512).map((size) => (
         <BrailleProjectionSurface
           key={`braille:${channelId}:${size}`}
@@ -209,7 +209,7 @@ function MatrixCascadeRow() {
     <ProjectionRow
       title="matrix"
       detail="heat map"
-      accent="#d26a2a"
+      accent="theme:accent"
       small={CASCADE_SIZES.filter((size) => size !== 512).map((size) => (
         <MatrixProjectionSurface key={`matrix:${size}`} size={size as PanelSize} theme={MATRIX_THEME} />
       ))}
@@ -222,14 +222,14 @@ export function ProjectionSurfaceWall() {
   return (
     <Col style={{ width: '100%', gap: 18 }}>
       <Col style={{ gap: 6 }}>
-        <Text style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', color: '#f2e8dc' }}>
+        <Text style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold', color: 'theme:ink' }}>
           Projection Surface
         </Text>
         <Text
           style={{
             fontFamily: 'monospace',
             fontSize: 9,
-            color: '#7a6e5d',
+            color: 'theme:inkDimmer',
             textTransform: 'uppercase',
             letterSpacing: 1,
           }}

@@ -1,4 +1,4 @@
-// Entity → bucket mapping. The 87 data shapes in cart/app/gallery/data/
+// Entity → bucket mapping. The data shapes in cart/app/gallery/data/
 // each route to exactly one bucket. Keep alphabetical within bucket so
 // it's obvious where a new shape lands.
 //
@@ -30,7 +30,8 @@ export const ENTITY_TO_BUCKET: Record<string, BucketId> = {
   'user-manifest': 'user',
   'workspace': 'user',
 
-  // ── assistant (31) ────────────────────────────────────────────────
+  // ── assistant (33) ────────────────────────────────────────────────
+  'assistant': 'assistant',
   'capability': 'assistant',
   'character': 'assistant',
   'character-archetype': 'assistant',
@@ -61,6 +62,7 @@ export const ENTITY_TO_BUCKET: Record<string, BucketId> = {
   'retrieval-strategy': 'assistant',
   'role': 'assistant',
   'skill': 'assistant',
+  'supervisor': 'assistant',
   'system-message': 'assistant',
 
   // ── embeddings (8) ────────────────────────────────────────────────

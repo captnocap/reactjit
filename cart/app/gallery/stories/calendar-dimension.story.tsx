@@ -17,7 +17,7 @@ export const calendarDimensionSection = defineGallerySection({
     defineGalleryDataStory({
       id: 'calendar-dimension/catalog',
       title: 'Calendar Dimension',
-      source: 'cart/component-gallery/data/calendar-dimension.ts',
+      source: 'cart/app/gallery/data/calendar-dimension.ts',
       format: 'data',
       status: 'draft',
       summary:

@@ -8,7 +8,7 @@ export const glyphStackBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'glyph-stack-badge/default',
       title: 'Glyph Stack Badge',
-      source: 'cart/component-gallery/components/controls-specimen/GlyphStackBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/GlyphStackBadge.tsx',
       status: 'ready',
       summary: 'Vertical badge that stacks glyphs upright with optional separator rules.',
       tags: ['controls', 'badge', 'mixed-axis', 'atom'],

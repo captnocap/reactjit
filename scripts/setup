@@ -1,0 +1,32 @@
+#!/bin/bash
+# setup — one-shot bootstrap for a fresh clone.
+#
+# Runs every fetcher needed to build reactjit from source:
+#   - tools/zig/         (380 MB, from ziglang.org)
+#   - deps/v8-prebuilt/  (116 MB, from lightpanda-io/zig-v8-fork releases)
+#
+# End users never run this — they install the prebuilt binary from
+# reactjit.com/install instead. This script is for contributors.
+#
+# Usage:
+#   scripts/setup           # fetch everything missing
+#   scripts/setup --force   # re-fetch even if already present
+
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+FORCE=""
+if [[ "${1:-}" == "--force" ]]; then
+    FORCE=1
+    rm -rf tools/zig deps/v8-prebuilt
+fi
+
+echo "[setup] reactjit dev bootstrap"
+echo "[setup] this fetches ~500 MB of build deps. one-time."
+echo
+
+scripts/fetch-zig.sh
+scripts/fetch-v8-prebuilt.sh
+
+echo
+echo "[setup] done. try: ./scripts/ship hello"

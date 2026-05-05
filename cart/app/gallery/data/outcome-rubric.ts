@@ -375,7 +375,7 @@ export const outcomeRubricReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Scope target (Goal / Plan / Task)',
-    targetSource: 'cart/component-gallery/data/(goal|plan|task).ts',
+    targetSource: 'cart/app/gallery/data/(goal|plan|task).ts',
     sourceField: '(scopeKind, scopeTargetId)',
     targetField: 'id',
     summary: 'Polymorphic FK. The scoped entity references back via outcomeRubricId.',
@@ -383,7 +383,7 @@ export const outcomeRubricReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Derived from interpretation',
-    targetSource: 'cart/component-gallery/data/interpretation.ts',
+    targetSource: 'cart/app/gallery/data/interpretation.ts',
     sourceField: 'derivedFromInterpretationId',
     targetField: 'id',
     summary:
@@ -392,7 +392,7 @@ export const outcomeRubricReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Episode-learned dimensions',
-    targetSource: 'cart/component-gallery/data/episodic-memory.ts',
+    targetSource: 'cart/app/gallery/data/episodic-memory.ts',
     sourceField: 'dimensions[].derivedFromEpisodeId',
     targetField: 'id',
     summary: 'Dimensions promoted from past lessons trace back to the episode that taught them.',
@@ -400,7 +400,7 @@ export const outcomeRubricReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Automated-check skills',
-    targetSource: 'cart/component-gallery/data/skill.ts',
+    targetSource: 'cart/app/gallery/data/skill.ts',
     sourceField: 'dimensions[].automatedCheckSkillId',
     targetField: 'id',
     summary: 'Dimensions that can be machine-evaluated point at the Skill that scores them.',

@@ -30,6 +30,7 @@ const claude_sdk = @import("claude_sdk/mod.zig");
 const kimi_wire_sdk = @import("kimi_wire_sdk.zig");
 const local_ai_runtime = @import("local_ai_runtime.zig");
 const codex_sdk = @import("codex_sdk.zig");
+const openai_compat_sdk = @import("openai_compat_sdk.zig");
 
 const Backend = worker_contract.Backend;
 
@@ -132,33 +133,297 @@ const CodexSession = struct {
 
 // ── Per-backend session container ───────────────────────────────────────
 
-const KimiSession = struct {
-    inner: kimi_wire_sdk.Session,
+// ── Streaming-backend sessions (claude / kimi / local) ─────────────────
+//
+// Same shape across all three: a heap-allocated wrapper that owns the
+// SDK Session plus a worker thread which drives init, send, and poll
+// off the JS thread. JS-side __worker_start returns immediately;
+// __worker_send pushes into a mutex'd queue; __worker_poll drains the
+// mutex'd inbox of raw SDK messages and ingests each through the
+// matching WorkerStore.ingest* fn on the JS thread.
+//
+// Codex uses its own variant (input-driven turn lifecycle); these three
+// are continuous-stream backends.
 
-    pub fn deinit(self: *KimiSession) void {
+const ClaudeSession = struct {
+    allocator: std.mem.Allocator,
+    inner: claude_sdk.Session,
+
+    pending: std.ArrayList([]u8) = .{},
+    pending_mutex: std.Thread.Mutex = .{},
+
+    inbox: std.ArrayList(claude_sdk.OwnedMessage) = .{},
+    inbox_mutex: std.Thread.Mutex = .{},
+
+    worker: ?std.Thread = null,
+    stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+
+    pub fn destroy(self: *ClaudeSession) void {
+        self.stop.store(true, .seq_cst);
+        if (self.worker) |t| {
+            t.join();
+            self.worker = null;
+        }
+        self.pending_mutex.lock();
+        for (self.pending.items) |p| self.allocator.free(p);
+        self.pending.deinit(self.allocator);
+        self.pending_mutex.unlock();
+        self.inbox_mutex.lock();
+        for (self.inbox.items) |*m| m.deinit();
+        self.inbox.deinit(self.allocator);
+        self.inbox_mutex.unlock();
         self.inner.close() catch {};
         self.inner.deinit();
+        const allocator = self.allocator;
+        allocator.destroy(self);
+    }
+
+    pub fn enqueue(self: *ClaudeSession, text: []const u8) !void {
+        const dup = try self.allocator.dupe(u8, text);
+        errdefer self.allocator.free(dup);
+        self.pending_mutex.lock();
+        defer self.pending_mutex.unlock();
+        try self.pending.append(self.allocator, dup);
+    }
+
+    pub fn drainInbox(self: *ClaudeSession) ![]claude_sdk.OwnedMessage {
+        self.inbox_mutex.lock();
+        defer self.inbox_mutex.unlock();
+        return self.inbox.toOwnedSlice(self.allocator);
+    }
+
+    fn workerEntry(self: *ClaudeSession) void {
+        // claude_sdk.Session.init already spawns the CLI; no separate
+        // initialize handshake. Start polling immediately.
+        while (!self.stop.load(.seq_cst)) {
+            var any = false;
+            while (true) {
+                const maybe = self.inner.poll() catch break;
+                const owned = maybe orelse break;
+                self.inbox_mutex.lock();
+                self.inbox.append(self.allocator, owned) catch {
+                    var o = owned;
+                    o.deinit();
+                };
+                self.inbox_mutex.unlock();
+                any = true;
+            }
+            self.pending_mutex.lock();
+            const text_opt: ?[]u8 = if (self.pending.items.len > 0)
+                self.pending.orderedRemove(0)
+            else
+                null;
+            self.pending_mutex.unlock();
+            if (text_opt) |text| {
+                defer self.allocator.free(text);
+                self.inner.send(text) catch {};
+                any = true;
+            }
+            if (!any) std.Thread.sleep(2 * std.time.ns_per_ms);
+        }
+    }
+};
+
+const KimiSession = struct {
+    allocator: std.mem.Allocator,
+    inner: kimi_wire_sdk.Session,
+
+    pending: std.ArrayList([]u8) = .{},
+    pending_mutex: std.Thread.Mutex = .{},
+
+    inbox: std.ArrayList(kimi_wire_sdk.OwnedInbound) = .{},
+    inbox_mutex: std.Thread.Mutex = .{},
+
+    worker: ?std.Thread = null,
+    stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+
+    pub fn destroy(self: *KimiSession) void {
+        self.stop.store(true, .seq_cst);
+        if (self.worker) |t| {
+            t.join();
+            self.worker = null;
+        }
+        self.pending_mutex.lock();
+        for (self.pending.items) |p| self.allocator.free(p);
+        self.pending.deinit(self.allocator);
+        self.pending_mutex.unlock();
+        self.inbox_mutex.lock();
+        for (self.inbox.items) |*m| m.deinit();
+        self.inbox.deinit(self.allocator);
+        self.inbox_mutex.unlock();
+        self.inner.close() catch {};
+        self.inner.deinit();
+        const allocator = self.allocator;
+        allocator.destroy(self);
+    }
+
+    pub fn enqueue(self: *KimiSession, text: []const u8) !void {
+        const dup = try self.allocator.dupe(u8, text);
+        errdefer self.allocator.free(dup);
+        self.pending_mutex.lock();
+        defer self.pending_mutex.unlock();
+        try self.pending.append(self.allocator, dup);
+    }
+
+    pub fn drainInbox(self: *KimiSession) ![]kimi_wire_sdk.OwnedInbound {
+        self.inbox_mutex.lock();
+        defer self.inbox_mutex.unlock();
+        return self.inbox.toOwnedSlice(self.allocator);
+    }
+
+    fn workerEntry(self: *KimiSession) void {
+        // kimi --wire requires an initialize handshake before any prompt.
+        // Run it here so the JS thread isn't stuck waiting.
+        var init_result = self.inner.initialize(.{}) catch {
+            self.stop.store(true, .seq_cst);
+            return;
+        };
+        init_result.deinit();
+
+        while (!self.stop.load(.seq_cst)) {
+            var any = false;
+            while (true) {
+                const maybe = self.inner.poll() catch break;
+                const owned = maybe orelse break;
+                self.inbox_mutex.lock();
+                self.inbox.append(self.allocator, owned) catch {
+                    var o = owned;
+                    o.deinit();
+                };
+                self.inbox_mutex.unlock();
+                any = true;
+            }
+            self.pending_mutex.lock();
+            const text_opt: ?[]u8 = if (self.pending.items.len > 0)
+                self.pending.orderedRemove(0)
+            else
+                null;
+            self.pending_mutex.unlock();
+            if (text_opt) |text| {
+                defer self.allocator.free(text);
+                var token = self.inner.prompt(.{ .text = text }) catch continue;
+                token.deinit();
+                any = true;
+            }
+            if (!any) std.Thread.sleep(2 * std.time.ns_per_ms);
+        }
+    }
+};
+
+const LocalAiSession = struct {
+    allocator: std.mem.Allocator,
+    inner: *local_ai_runtime.Session,
+
+    pending: std.ArrayList([]u8) = .{},
+    pending_mutex: std.Thread.Mutex = .{},
+
+    inbox: std.ArrayList(local_ai_runtime.OwnedEvent) = .{},
+    inbox_mutex: std.Thread.Mutex = .{},
+
+    worker: ?std.Thread = null,
+    stop: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+
+    pub fn destroy(self: *LocalAiSession) void {
+        self.stop.store(true, .seq_cst);
+        if (self.worker) |t| {
+            t.join();
+            self.worker = null;
+        }
+        self.pending_mutex.lock();
+        for (self.pending.items) |p| self.allocator.free(p);
+        self.pending.deinit(self.allocator);
+        self.pending_mutex.unlock();
+        self.inbox_mutex.lock();
+        for (self.inbox.items) |*e| e.deinit();
+        self.inbox.deinit(self.allocator);
+        self.inbox_mutex.unlock();
+        self.inner.close();
+        self.inner.destroy();
+        const allocator = self.allocator;
+        allocator.destroy(self);
+    }
+
+    pub fn enqueue(self: *LocalAiSession, text: []const u8) !void {
+        const dup = try self.allocator.dupe(u8, text);
+        errdefer self.allocator.free(dup);
+        self.pending_mutex.lock();
+        defer self.pending_mutex.unlock();
+        try self.pending.append(self.allocator, dup);
+    }
+
+    pub fn drainInbox(self: *LocalAiSession) ![]local_ai_runtime.OwnedEvent {
+        self.inbox_mutex.lock();
+        defer self.inbox_mutex.unlock();
+        return self.inbox.toOwnedSlice(self.allocator);
+    }
+
+    fn workerEntry(self: *LocalAiSession) void {
+        while (!self.stop.load(.seq_cst)) {
+            var any = false;
+            while (true) {
+                const owned = self.inner.poll() orelse break;
+                self.inbox_mutex.lock();
+                self.inbox.append(self.allocator, owned) catch {
+                    var o = owned;
+                    o.deinit();
+                };
+                self.inbox_mutex.unlock();
+                any = true;
+            }
+            self.pending_mutex.lock();
+            const text_opt: ?[]u8 = if (self.pending.items.len > 0)
+                self.pending.orderedRemove(0)
+            else
+                null;
+            self.pending_mutex.unlock();
+            if (text_opt) |text| {
+                defer self.allocator.free(text);
+                self.inner.submit(.{ .text = text }) catch {};
+                any = true;
+            }
+            if (!any) std.Thread.sleep(2 * std.time.ns_per_ms);
+        }
+    }
+};
+
+// HTTP-based — no persistent subprocess and no per-session worker thread.
+// HTTP runs on net_http's worker pool; chunks are dispatched on the JS
+// main thread by v8_bindings_sdk.tickDrain into our inner SDK's inbox.
+// Both enqueue and drainInbox are main-thread only; no mutex needed.
+
+const OpenAiSession = struct {
+    allocator: std.mem.Allocator,
+    inner: *openai_compat_sdk.Session,
+
+    pub fn destroy(self: *OpenAiSession) void {
+        self.inner.deinit();
+        const allocator = self.allocator;
+        allocator.destroy(self);
+    }
+
+    pub fn enqueue(self: *OpenAiSession, text: []const u8) !void {
+        try self.inner.enqueue(text);
+    }
+
+    pub fn drainInbox(self: *OpenAiSession) ![]openai_compat_sdk.Event {
+        return self.inner.drainInbox();
     }
 };
 
 const BackendSession = union(Backend) {
-    claude_code: claude_sdk.Session,
+    claude_code: *ClaudeSession,
     codex_app_server: *CodexSession,
-    kimi_cli_wire: KimiSession,
-    local_ai: *local_ai_runtime.Session,
+    kimi_cli_wire: *KimiSession,
+    local_ai: *LocalAiSession,
+    openai_compat: *OpenAiSession,
 
     pub fn deinit(self: *BackendSession) void {
         switch (self.*) {
-            .claude_code => {
-                self.claude_code.close() catch {};
-                self.claude_code.deinit();
-            },
+            .claude_code => self.claude_code.destroy(),
             .codex_app_server => self.codex_app_server.destroy(),
-            .kimi_cli_wire => self.kimi_cli_wire.deinit(),
-            .local_ai => {
-                self.local_ai.close();
-                self.local_ai.destroy();
-            },
+            .kimi_cli_wire => self.kimi_cli_wire.destroy(),
+            .local_ai => self.local_ai.destroy(),
+            .openai_compat => self.openai_compat.destroy(),
         }
     }
 };
@@ -202,6 +467,7 @@ fn parseBackend(name: []const u8) ?Backend {
     if (std.mem.eql(u8, name, "codex_app_server")) return .codex_app_server;
     if (std.mem.eql(u8, name, "kimi_cli_wire")) return .kimi_cli_wire;
     if (std.mem.eql(u8, name, "local_ai")) return .local_ai;
+    if (std.mem.eql(u8, name, "openai_compat")) return .openai_compat;
     return null;
 }
 
@@ -211,6 +477,7 @@ fn backendName(b: Backend) []const u8 {
         .codex_app_server => "codex_app_server",
         .kimi_cli_wire => "kimi_cli_wire",
         .local_ai => "local_ai",
+        .openai_compat => "openai_compat",
     };
 }
 
@@ -360,9 +627,20 @@ fn hostWorkerStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
                 .permission_mode = .bypass_permissions,
                 .inherit_stderr = true,
             };
-            const sess = claude_sdk.Session.init(std.heap.c_allocator, opts) catch
+            const inner = claude_sdk.Session.init(std.heap.c_allocator, opts) catch
                 return setReturnString(info, cx.iso, "");
-            break :blk .{ .claude_code = sess };
+            const cs = std.heap.c_allocator.create(ClaudeSession) catch {
+                var s = inner;
+                s.close() catch {};
+                s.deinit();
+                return setReturnString(info, cx.iso, "");
+            };
+            cs.* = .{ .allocator = std.heap.c_allocator, .inner = inner };
+            cs.worker = std.Thread.spawn(.{}, ClaudeSession.workerEntry, .{cs}) catch {
+                cs.destroy();
+                return setReturnString(info, cx.iso, "");
+            };
+            break :blk .{ .claude_code = cs };
         },
         .kimi_cli_wire => blk: {
             const cwd = cwd_opt orelse return setReturnString(info, cx.iso, "");
@@ -373,14 +651,20 @@ fn hostWorkerStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
                 .yolo = jsonBoolField(parsed.value, "yolo") orelse true,
                 .inherit_stderr = true,
             };
-            var sess = kimi_wire_sdk.Session.init(std.heap.c_allocator, k_opts) catch
+            const inner = kimi_wire_sdk.Session.init(std.heap.c_allocator, k_opts) catch
                 return setReturnString(info, cx.iso, "");
-            var init_result = sess.initialize(.{}) catch {
-                sess.deinit();
+            const ks = std.heap.c_allocator.create(KimiSession) catch {
+                var s = inner;
+                s.close() catch {};
+                s.deinit();
                 return setReturnString(info, cx.iso, "");
             };
-            init_result.deinit();
-            break :blk .{ .kimi_cli_wire = .{ .inner = sess } };
+            ks.* = .{ .allocator = std.heap.c_allocator, .inner = inner };
+            ks.worker = std.Thread.spawn(.{}, KimiSession.workerEntry, .{ks}) catch {
+                ks.destroy();
+                return setReturnString(info, cx.iso, "");
+            };
+            break :blk .{ .kimi_cli_wire = ks };
         },
         .codex_app_server => blk: {
             const cs = std.heap.c_allocator.create(CodexSession) catch
@@ -420,9 +704,37 @@ fn hostWorkerStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
                 .n_ctx = n_ctx,
                 .verbose = false,
             };
-            const sess = local_ai_runtime.Session.create(std.heap.c_allocator, opts) catch
+            const inner = local_ai_runtime.Session.create(std.heap.c_allocator, opts) catch
                 return setReturnString(info, cx.iso, "");
-            break :blk .{ .local_ai = sess };
+            const ls = std.heap.c_allocator.create(LocalAiSession) catch {
+                inner.close();
+                inner.destroy();
+                return setReturnString(info, cx.iso, "");
+            };
+            ls.* = .{ .allocator = std.heap.c_allocator, .inner = inner };
+            ls.worker = std.Thread.spawn(.{}, LocalAiSession.workerEntry, .{ls}) catch {
+                ls.destroy();
+                return setReturnString(info, cx.iso, "");
+            };
+            break :blk .{ .local_ai = ls };
+        },
+        .openai_compat => blk: {
+            const base_url = jsonStrField(parsed.value, "base_url") orelse return setReturnString(info, cx.iso, "");
+            const model_id = model orelse return setReturnString(info, cx.iso, "");
+            const api_key = jsonStrField(parsed.value, "api_key");
+            const system_prompt = jsonStrField(parsed.value, "system_prompt");
+            const inner = openai_compat_sdk.Session.init(std.heap.c_allocator, .{
+                .base_url = base_url,
+                .api_key = api_key,
+                .model = model_id,
+                .system_prompt = system_prompt,
+            }) catch return setReturnString(info, cx.iso, "");
+            const os = std.heap.c_allocator.create(OpenAiSession) catch {
+                inner.deinit();
+                return setReturnString(info, cx.iso, "");
+            };
+            os.* = .{ .allocator = std.heap.c_allocator, .inner = inner };
+            break :blk .{ .openai_compat = os };
         },
     };
 
@@ -486,20 +798,11 @@ fn hostWorkerSend(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
     const entry = lookup(id) orelse return setReturnBool(info, cx.iso, false);
 
     switch (entry.session) {
-        .claude_code => {
-            entry.session.claude_code.send(text) catch return setReturnBool(info, cx.iso, false);
-        },
-        .kimi_cli_wire => {
-            var token = entry.session.kimi_cli_wire.inner.prompt(.{ .text = text }) catch
-                return setReturnBool(info, cx.iso, false);
-            token.deinit();
-        },
-        .local_ai => {
-            entry.session.local_ai.submit(.{ .text = text }) catch return setReturnBool(info, cx.iso, false);
-        },
-        .codex_app_server => {
-            entry.session.codex_app_server.enqueue(text) catch return setReturnBool(info, cx.iso, false);
-        },
+        .claude_code => entry.session.claude_code.enqueue(text) catch return setReturnBool(info, cx.iso, false),
+        .kimi_cli_wire => entry.session.kimi_cli_wire.enqueue(text) catch return setReturnBool(info, cx.iso, false),
+        .local_ai => entry.session.local_ai.enqueue(text) catch return setReturnBool(info, cx.iso, false),
+        .codex_app_server => entry.session.codex_app_server.enqueue(text) catch return setReturnBool(info, cx.iso, false),
+        .openai_compat => entry.session.openai_compat.enqueue(text) catch return setReturnBool(info, cx.iso, false),
     }
     setReturnBool(info, cx.iso, true);
 }
@@ -516,37 +819,61 @@ fn hostWorkerPoll(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
 
     const entry = lookup(id) orelse return setReturnUndefined(info, cx.iso);
 
-    // Drain inbound from the SDK Session into the WorkerStore. Bounded
-    // per call to keep latency predictable; subsequent polls drain more.
-    var pulled: usize = 0;
-    while (pulled < 32) : (pulled += 1) {
-        switch (entry.session) {
-            .claude_code => {
-                var owned = (entry.session.claude_code.poll() catch break) orelse break;
-                defer owned.deinit();
-                entry.store.ingestClaudeMessage(owned.msg) catch {};
-            },
-            .kimi_cli_wire => {
-                var owned = (entry.session.kimi_cli_wire.inner.poll() catch break) orelse break;
-                defer owned.deinit();
-                entry.store.ingestKimiWireMessage(&owned.msg) catch {};
-            },
-            .local_ai => {
-                var owned = entry.session.local_ai.poll() orelse break;
-                defer owned.deinit();
-                entry.store.ingestLocalAiEvent(&owned) catch {};
-            },
-            .codex_app_server => {
-                const drained = entry.session.codex_app_server.drainInbox() catch break;
+    // Drain the worker thread's inbox into the WorkerStore. The worker
+    // thread populates the inbox from its SDK in the background; we
+    // dispatch on the JS thread so each ingest fn can use the store
+    // without locking it.
+    switch (entry.session) {
+        .claude_code => {
+            if (entry.session.claude_code.drainInbox()) |drained| {
                 defer std.heap.c_allocator.free(drained);
-                if (drained.len == 0) break;
+                for (drained) |item| {
+                    var owned = item;
+                    entry.store.ingestClaudeMessage(owned.msg) catch {};
+                    owned.deinit();
+                }
+            } else |_| {}
+        },
+        .kimi_cli_wire => {
+            if (entry.session.kimi_cli_wire.drainInbox()) |drained| {
+                defer std.heap.c_allocator.free(drained);
+                for (drained) |item| {
+                    var owned = item;
+                    entry.store.ingestKimiWireMessage(&owned.msg) catch {};
+                    owned.deinit();
+                }
+            } else |_| {}
+        },
+        .local_ai => {
+            if (entry.session.local_ai.drainInbox()) |drained| {
+                defer std.heap.c_allocator.free(drained);
+                for (drained) |item| {
+                    var owned = item;
+                    entry.store.ingestLocalAiEvent(&owned) catch {};
+                    owned.deinit();
+                }
+            } else |_| {}
+        },
+        .codex_app_server => {
+            if (entry.session.codex_app_server.drainInbox()) |drained| {
+                defer std.heap.c_allocator.free(drained);
                 for (drained) |notification| {
                     var n = notification;
                     entry.store.ingestCodexNotification(&n) catch {};
                     n.deinit();
                 }
-            },
-        }
+            } else |_| {}
+        },
+        .openai_compat => {
+            if (entry.session.openai_compat.drainInbox()) |drained| {
+                defer std.heap.c_allocator.free(drained);
+                for (drained) |item| {
+                    var ev = item;
+                    entry.store.ingestOpenAiEvent(&ev) catch {};
+                    ev.deinit();
+                }
+            } else |_| {}
+        },
     }
 
     const events = entry.store.events.items;

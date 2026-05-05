@@ -79,7 +79,7 @@ export const workerSessionReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Worker Events',
-    targetSource: 'cart/component-gallery/data/worker-event.ts',
+    targetSource: 'cart/app/gallery/data/worker-event.ts',
     sourceField: 'id',
     targetField: 'session_id',
     summary:

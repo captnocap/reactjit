@@ -8,7 +8,7 @@ export const filledRailSliderSection = defineGallerySection({
     defineGalleryStory({
       id: 'filled-rail-slider/default',
       title: 'Filled Rail Slider',
-      source: 'cart/component-gallery/components/controls-specimen/FilledRailSlider.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/FilledRailSlider.tsx',
       status: 'ready',
       summary: 'Horizontal slider with a filled rail and tall bar thumb.',
       tags: ['controls', 'slider', 'atom'],

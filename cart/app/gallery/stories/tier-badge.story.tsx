@@ -8,7 +8,7 @@ export const tierBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'tier-badge/default',
       title: 'Tier Badge',
-      source: 'cart/component-gallery/components/controls-specimen/TierBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/TierBadge.tsx',
       status: 'ready',
       summary: 'Flat tier chip for severity, queue rank, and incident priority labels.',
       tags: ['controls', 'badge', 'atom'],

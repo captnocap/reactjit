@@ -8,7 +8,7 @@ export const cautionBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'caution-badge/default',
       title: 'Caution Badge',
-      source: 'cart/component-gallery/components/controls-specimen/CautionBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/CautionBadge.tsx',
       status: 'ready',
       summary: 'Solid caution stripe badge for hazard, restriction, and escalation states.',
       tags: ['controls', 'badge', 'atom'],

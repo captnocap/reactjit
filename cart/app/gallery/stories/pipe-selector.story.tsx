@@ -8,7 +8,7 @@ export const pipeSelectorSection = defineGallerySection({
     defineGalleryStory({
       id: 'pipe-selector/default',
       title: 'Pipe Selector',
-      source: 'cart/component-gallery/components/controls-specimen/PipeSelector.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/PipeSelector.tsx',
       status: 'ready',
       summary: 'Vertical selector with pipe spine, active tick, and compact status pip.',
       tags: ['controls', 'selection', 'atom'],

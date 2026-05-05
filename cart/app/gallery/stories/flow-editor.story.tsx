@@ -3,21 +3,14 @@ import { defineGallerySection, defineGalleryStory } from '../types';
 import { FlowEditor } from '../components/flow-editor/FlowEditor';
 import { useFlowEditorState } from '../components/flow-editor/useFlowEditorState';
 import { FLOW_EDITOR_DEFAULT_THEME } from '../components/flow-editor/flowEditorTheme';
-import type { FlowNode } from '../components/flow-editor/types';
+import { FLOW_EDITOR_DEMO_EDGES, FLOW_EDITOR_DEMO_NODES } from '../components/flow-editor/demoFlow';
 
-const SEED_NODES: FlowNode[] = [
-  { id: 'trigger', label: 'Trigger', x: -260, y: -40 },
-  { id: 'transform', label: 'Transform', x: 0, y: -40 },
-  { id: 'http', label: 'HTTP Out', x: 260, y: -40 },
-];
-const SEED_EDGES = [
-  { id: 'e1', from: 'trigger', to: 'transform' },
-  { id: 'e2', from: 'transform', to: 'http' },
-];
+const SEED_NODES = FLOW_EDITOR_DEMO_NODES;
+const SEED_EDGES = FLOW_EDITOR_DEMO_EDGES;
 
 function DefaultExample() {
   return (
-    <Box style={{ width: 720, height: 420, borderWidth: 1, borderColor: FLOW_EDITOR_DEFAULT_THEME.tileBorder }}>
+    <Box style={{ width: 1120, height: 720, borderWidth: 1, borderColor: FLOW_EDITOR_DEFAULT_THEME.tileBorder }}>
       <FlowEditor initialNodes={SEED_NODES} initialEdges={SEED_EDGES} />
     </Box>
   );
@@ -28,7 +21,7 @@ function WithToolbarExample() {
   const flow = useFlowEditorState({ initialNodes: SEED_NODES, initialEdges: SEED_EDGES });
   const theme = FLOW_EDITOR_DEFAULT_THEME;
   return (
-    <Box style={{ width: 720, height: 420, borderWidth: 1, borderColor: theme.tileBorder }}>
+    <Box style={{ width: 1120, height: 720, borderWidth: 1, borderColor: theme.tileBorder }}>
       <Row
         style={{
           paddingLeft: 12,
@@ -39,7 +32,7 @@ function WithToolbarExample() {
           alignItems: 'center',
           borderBottomWidth: 1,
           borderColor: theme.tileBorder,
-          backgroundColor: '#0b1118',
+          backgroundColor: 'theme:bg1',
         }}
       >
         <Pressable
@@ -53,7 +46,7 @@ function WithToolbarExample() {
             backgroundColor: theme.edgeColor,
           }}
         >
-          <Text fontSize={11} color="#06121f" style={{ fontWeight: 'bold' }}>+ Add node</Text>
+          <Text fontSize={11} color="theme:bg1" style={{ fontWeight: 'bold' }}>+ Add node</Text>
         </Pressable>
         <Pressable
           onPress={flow.clearAll}
@@ -89,12 +82,12 @@ function WithToolbarExample() {
 function CustomTileExample() {
   const theme = FLOW_EDITOR_DEFAULT_THEME;
   return (
-    <Box style={{ width: 720, height: 420, borderWidth: 1, borderColor: theme.tileBorder }}>
+    <Box style={{ width: 880, height: 440, borderWidth: 1, borderColor: theme.tileBorder }}>
       <FlowEditor
         initialNodes={[
-          { id: 'a', label: 'Input', x: -240, y: -30, data: { kind: 'source' } },
-          { id: 'b', label: 'Filter', x: 0, y: -30, data: { kind: 'op' } },
-          { id: 'c', label: 'Sink', x: 240, y: -30, data: { kind: 'target' } },
+          { id: 'a', label: 'Input', x: -260, y: -30, data: { kind: 'trigger', state: 'ok' } },
+          { id: 'b', label: 'Filter', x: 0, y: -30, data: { kind: 'action', state: 'run' } },
+          { id: 'c', label: 'Sink', x: 260, y: -30, data: { kind: 'end', state: 'idle' } },
         ]}
         initialEdges={[
           { id: 'e1', from: 'a', to: 'b' },
@@ -121,26 +114,26 @@ function CustomTileExample() {
 // Re-skinned theme override — warm palette, denser grid, no delete button.
 function CustomThemeExample() {
   return (
-    <Box style={{ width: 720, height: 420, borderWidth: 1, borderColor: '#3a2418' }}>
+    <Box style={{ width: 1120, height: 720, borderWidth: 1, borderColor: 'theme:paperRule' }}>
       <FlowEditor
         initialNodes={SEED_NODES}
         initialEdges={SEED_EDGES}
         allowDelete={false}
         theme={{
-          bg: '#0f0a07',
-          tileBg: '#1c1410',
-          tileBgSelected: '#2a1d14',
-          tileBorder: '#3a2418',
-          tileBorderSelected: '#f08a4a',
-          edgeColor: '#f08a4a',
-          portIn: '#3a2418',
-          portOut: '#f08a4a',
-          gridColor: '#1c1410',
-          gridMajorColor: '#2a1d14',
+          bg: 'theme:bg',
+          tileBg: 'theme:bg2',
+          tileBgSelected: 'theme:paperInk',
+          tileBorder: 'theme:paperRule',
+          tileBorderSelected: 'theme:warn',
+          edgeColor: 'theme:warn',
+          portIn: 'theme:paperRule',
+          portOut: 'theme:warn',
+          gridColor: 'theme:bg2',
+          gridMajorColor: 'theme:paperInk',
           gridStep: 30,
           gridMajorEvery: 4,
-          textBright: '#f4e2cd',
-          textDim: '#a08266',
+          textBright: 'theme:paperAlt',
+          textDim: 'theme:paperInkDim',
         }}
       />
     </Box>
@@ -153,17 +146,18 @@ export const flowEditorSection = defineGallerySection({
   group: { id: 'compositions', title: 'Compositions' },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/flow-editor/FlowTile.tsx',
-    'cart/component-gallery/components/flow-editor/useFlowEditorState.ts',
-    'cart/component-gallery/components/flow-editor/bezier.ts',
-    'cart/component-gallery/components/flow-editor/flowEditorTheme.ts',
-    'cart/component-gallery/components/flow-editor/types.ts',
+    'cart/app/gallery/components/flow-editor/FlowTile.tsx',
+    'cart/app/gallery/components/flow-editor/useFlowEditorState.ts',
+    'cart/app/gallery/components/flow-editor/bezier.ts',
+    'cart/app/gallery/components/flow-editor/demoFlow.ts',
+    'cart/app/gallery/components/flow-editor/flowEditorTheme.ts',
+    'cart/app/gallery/components/flow-editor/types.ts',
   ],
   stories: [
     defineGalleryStory({
       id: 'flow-editor/default',
       title: 'Flow Editor',
-      source: 'cart/component-gallery/components/flow-editor/FlowEditor.tsx',
+      source: 'cart/app/gallery/components/flow-editor/FlowEditor.tsx',
       status: 'ready',
       tags: ['canvas', 'graph', 'flow', 'wiring', 'n8n'],
       variants: [

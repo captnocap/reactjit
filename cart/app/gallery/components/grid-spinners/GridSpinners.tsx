@@ -1,20 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { Box, Col, Row, Text } from '@reactjit/runtime/primitives';
+import { useAnimationsDisabled } from '../../lib/useSpring';
 
 const PALETTE = {
-  bg:      '#e8dcc4',
-  ink:     '#1a1511',
-  ink2:    '#4a4238',
-  rule:    '#b8a890',
-  card:    '#eadfca',
-  accent:  '#d26a2a',
-  accent2: '#5a8bd6',
-  accent3: '#6aa390',
-  cellOff: '#f2e8dc',
-  inkDim1: 'rgba(42,39,34,0.22)',
-  inkDim2: 'rgba(42,39,34,0.12)',
-  inkDim3: 'rgba(42,39,34,0.05)',
-  ruleSoft:'#b8a890',
+  bg:      'theme:paper',
+  ink:     'theme:bg2',
+  ink2:    'theme:inkGhost',
+  rule:    'theme:inkDim',
+  card:    'theme:paperAlt',
+  accent:  'theme:accent',
+  accent2: 'theme:blue',
+  accent3: 'theme:ok',
+  cellOff: 'theme:ink',
+  inkDim1: 'theme:paperRule',
+  inkDim2: 'theme:paperRule',
+  inkDim3: 'theme:paperAlt',
+  ruleSoft:'theme:inkDim',
 };
 
 const SIZE = 108;
@@ -48,11 +49,13 @@ type CellSpec = {
 };
 
 function useTick(ms: number): number {
+  const animationsDisabled = useAnimationsDisabled();
   const [t, setT] = useState(0);
   useEffect(() => {
+    if (animationsDisabled) return;
     const id = setInterval(() => setT((x: number) => x + 1), ms);
     return () => clearInterval(id);
-  }, [ms]);
+  }, [ms, animationsDisabled]);
   return t;
 }
 
@@ -221,10 +224,10 @@ function MinesSpinner() {
   const order = [0, 1, 2, 3, 4, 6, 7, 8, 5];
   const neighbors = [0, 2, 1, 3, 0, 2, 1, 3, 0];
   const labels = ['', '1', '2', '1', '', '1', '2', '1', ''];
-  const numColors = ['', '#5a8bd6', '#6aa390', PALETTE.accent];
+  const numColors = ['', 'theme:blue', 'theme:ok', PALETTE.accent];
   const cells = emptyCells();
   for (let i = 0; i < 9; i++) {
-    cells[i] = { active: false, accent: false, bg: 'transparent', border: '#b8a890' };
+    cells[i] = { active: false, accent: false, bg: 'theme:transparent', border: 'theme:inkDim' };
   }
   if (frame < 9) {
     for (let i = 0; i <= frame; i++) {
@@ -232,8 +235,8 @@ function MinesSpinner() {
       cells[idx] = {
         active: true,
         accent: false,
-        bg: 'transparent',
-        border: '#b8a890',
+        bg: 'theme:transparent',
+        border: 'theme:inkDim',
         label: labels[idx] || undefined,
         fg: numColors[neighbors[idx]] || PALETTE.ink,
       };
@@ -244,8 +247,8 @@ function MinesSpinner() {
       cells[idx] = {
         active: true,
         accent: false,
-        bg: 'transparent',
-        border: '#b8a890',
+        bg: 'theme:transparent',
+        border: 'theme:inkDim',
         label: labels[idx] || undefined,
         fg: numColors[neighbors[idx]] || PALETTE.ink,
       };
@@ -272,14 +275,14 @@ function TicTacToeSpinner() {
   const winning = frame >= sequence.length;
   const cells = emptyCells();
   for (let i = 0; i < 9; i++) {
-    cells[i] = { active: false, accent: false, bg: 'transparent', border: PALETTE.rule };
+    cells[i] = { active: false, accent: false, bg: 'theme:transparent', border: PALETTE.rule };
   }
   for (let i = 0; i < steps; i++) {
     const m = sequence[i];
     cells[m.idx] = {
       active: true,
       accent: m.mark === 'o',
-      bg: 'transparent',
+      bg: 'theme:transparent',
       border: PALETTE.rule,
       label: m.mark === 'x' ? '╳' : '◯',
       fg: m.mark === 'x' ? PALETTE.ink : PALETTE.accent,
@@ -302,7 +305,7 @@ function TetrisSpinner() {
   const pieces = [
     { shape: [[1, 1, 0], [0, 1, 0]], color: PALETTE.ink },
     { shape: [[1, 0, 0], [1, 1, 0]], color: PALETTE.accent },
-    { shape: [[1, 1, 0], [1, 1, 0]], color: '#7a6e5d' },
+    { shape: [[1, 1, 0], [1, 1, 0]], color: 'theme:inkDimmer' },
   ];
   const framesPerDrop = 4;
   const cycle = pieces.length * framesPerDrop + 2;
@@ -338,7 +341,7 @@ function PulseSpinner() {
   const tickTiny = useTick(TIMING_MS.tiny);
   const ring = t % 3;
   const layers = [[4], [1, 3, 5, 7], [0, 2, 6, 8]];
-  const colors = [PALETTE.ink, '#7a6e5d', PALETTE.accent];
+  const colors = [PALETTE.ink, 'theme:inkDimmer', PALETTE.accent];
   const cells = emptyCells();
   layers[ring].forEach((i) => {
     cells[i] = { active: true, accent: ring === 2, bg: colors[ring] };
@@ -356,11 +359,11 @@ function OrbitSpinner() {
   const b = perim[(t + 4) % 8];
   const trailA = perim[(t - 1 + 8) % 8];
   const trailB = perim[(t + 3) % 8];
-  cells[trailA] = { active: true, accent: false, bg: '#b8a890' };
-  cells[trailB] = { active: true, accent: false, bg: '#b8a890' };
+  cells[trailA] = { active: true, accent: false, bg: 'theme:inkDim' };
+  cells[trailB] = { active: true, accent: false, bg: 'theme:inkDim' };
   cells[a] = { active: true, accent: false, bg: PALETTE.ink };
   cells[b] = { active: true, accent: true, bg: PALETTE.accent };
-  if (t % 2 === 0) cells[4] = { active: true, accent: false, bg: '#b8a890' };
+  if (t % 2 === 0) cells[4] = { active: true, accent: false, bg: 'theme:inkDim' };
   return <MiniGrid cells={cells} gap={5} tick={tickTiny} />;
 }
 
@@ -400,12 +403,14 @@ function LifeSpinner() {
 
 // 9. SORT
 function SortSpinner() {
+  const animationsDisabled = useAnimationsDisabled();
   const [bars, setBars] = useState<number[]>(() => [3, 7, 1, 8, 4, 6, 2, 9, 5]);
   const [active, setActive] = useState<number>(-1);
   const iRef = useRef(0);
   const tickTiny = useTick(220);
 
   useEffect(() => {
+    if (animationsDisabled) return;
     const id = setInterval(() => {
       setBars((prev: number[]) => {
         const next = [...prev];
@@ -478,12 +483,14 @@ function PositionedTile(props: { tileId: number; pos: number; cell: number; gap:
 
 // 10. SLIDE
 function SlideSpinner() {
+  const animationsDisabled = useAnimationsDisabled();
   const [layout, setLayout] = useState<number[]>(() => [0, 1, 2, 3, 4, 5, 6, 7, -1]);
   const emptyRef = useRef(8);
   const lastMoveRef = useRef(-1);
   const tickTiny = useTick(TIMING_MS.tiny);
 
   useEffect(() => {
+    if (animationsDisabled) return;
     const id = setInterval(() => {
       setLayout((prev: number[]) => {
         const safePrev = Array.isArray(prev) ? prev : [0, 1, 2, 3, 4, 5, 6, 7, -1];
@@ -524,6 +531,7 @@ function SlideSpinner() {
 
 // 11. ROTATE
 function RotateSpinner() {
+  const animationsDisabled = useAnimationsDisabled();
   const [positions, setPositions] = useState<number[]>(() => Array.from({ length: 9 }, (_, i) => i));
   const [corner, setCorner] = useState(0);
   const cornerRef = useRef(0);
@@ -532,6 +540,7 @@ function RotateSpinner() {
   const blocks = [[0, 1, 3, 4], [1, 2, 4, 5], [3, 4, 6, 7], [4, 5, 7, 8]];
 
   useEffect(() => {
+    if (animationsDisabled) return;
     const id = setInterval(() => {
       setPositions((prev: number[]) => {
         const next = [...prev];
@@ -572,6 +581,7 @@ function RotateSpinner() {
 
 // 12. SHUFFLE
 function ShuffleSpinner() {
+  const animationsDisabled = useAnimationsDisabled();
   const [positions, setPositions] = useState<number[]>(() => Array.from({ length: 9 }, (_, i) => i));
   const [activePair, setActivePair] = useState<[number, number]>([0, 1]);
   const swapsRef = useRef(0);
@@ -584,6 +594,7 @@ function ShuffleSpinner() {
   ];
 
   useEffect(() => {
+    if (animationsDisabled) return;
     const id = setInterval(() => {
       setPositions((prev: number[]) => {
         const next = [...prev];

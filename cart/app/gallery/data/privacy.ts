@@ -174,7 +174,7 @@ export const privacyReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary: 'Each Privacy row is owned by one Settings profile.',
@@ -182,7 +182,7 @@ export const privacyReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Inference requests (snapshot)',
-    targetSource: 'cart/component-gallery/data/inference-request.ts',
+    targetSource: 'cart/app/gallery/data/inference-request.ts',
     sourceField: 'id',
     targetField: 'privacySnapshot.privacyId',
     summary:

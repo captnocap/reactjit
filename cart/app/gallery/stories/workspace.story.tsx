@@ -13,7 +13,7 @@ export const workspaceSection = defineGallerySection({
     defineGalleryDataStory({
       id: "workspace/catalog",
       title: "Workspace",
-      source: "cart/component-gallery/data/workspace.ts",
+      source: "cart/app/gallery/data/workspace.ts",
       format: 'data',
       status: 'draft',
       tags: ["workspace", "scope", "root"],

@@ -11,7 +11,7 @@ export function ProgressMeter({ progress, label }: { progress: number; label: st
 
   return (
     <Row style={{ alignItems: 'center', gap: 7 }}>
-      <Box style={{ width: 96, height: 6, backgroundColor: '#333956', borderRadius: 3 }}>
+      <Box style={{ width: 96, height: 6, backgroundColor: 'theme:inkGhost', borderRadius: 3 }}>
         <Box style={{ width: fill, height: 6, backgroundColor: CHAT_CARD.orange, borderRadius: 3 }} />
       </Box>
       <Text style={{ fontFamily: 'monospace', fontSize: 8, fontWeight: 'bold', color: CHAT_CARD.orange }}>{label}</Text>

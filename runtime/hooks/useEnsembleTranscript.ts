@@ -23,7 +23,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useVoiceInput, type VoiceInputOptions } from './useVoiceInput';
+import {
+  useVoiceInput,
+  subscribePreview,
+  subscribeSpeechStart,
+  type VoiceInputOptions,
+} from './useVoiceInput';
 import { transcribe } from './whisper';
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -68,6 +73,18 @@ export interface UseEnsembleTranscriptOptions extends VoiceInputOptions {
   /** Vote count below which an ensemble word triggers escalation.
    *  Default 2 (so any word only one model said triggers). */
   escalationThreshold?: number;
+  /** Run a fast model on rolling in-flight snapshots WHILE the user is
+   *  still speaking, surfacing the result as `livePreview`. Independent
+   *  of the post-utterance ensemble flow — at speech-end, the ensemble
+   *  still re-transcribes the full clip from scratch. Set to null to
+   *  disable; defaults to `models[0]` (typically tiny — fastest, no
+   *  model-swap penalty when the ensemble starts). Override to `base`
+   *  for higher live-preview accuracy at the cost of one extra swap.
+   *  Note: whisper's encoder runs a fixed 30s context regardless of
+   *  clip length, so previews don't gain from sub-clipping — `base`
+   *  on a 1s clip costs the same wallclock as base on the full
+   *  utterance. */
+  livePreviewModel?: EnsembleModel | null;
 }
 
 export interface UseEnsembleTranscriptResult {
@@ -84,6 +101,14 @@ export interface UseEnsembleTranscriptResult {
   isEscalating: boolean;
   /** Names of escalation models that ran for the current utterance. */
   escalatedWith: string[];
+  /** Live, in-flight transcript: the `livePreviewModel` running on rolling
+   *  snapshots of the current utterance WHILE the user is still speaking.
+   *  Cleared on each new speech-start. Empty when the live preview is
+   *  disabled or no chunk has come back yet. */
+  livePreview: string;
+  /** Name of the live-preview model (so the cart can label it). Empty when
+   *  the live preview is disabled. */
+  livePreviewModelName: string;
   /** Pass-through from useVoiceInput so cart can render mic state. */
   isListening: boolean;
   isSpeaking: boolean;
@@ -218,10 +243,17 @@ export function ensembleVote(
 // ── The hook ─────────────────────────────────────────────────────────
 
 export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEnsembleTranscriptResult {
-  const { models, escalateTo, escalationThreshold, ...voiceOpts } = opts;
+  const { models, escalateTo, escalationThreshold, livePreviewModel, ...voiceOpts } = opts;
   // We manage the buffer lifetime ourselves — multiple transcribes need
   // the PCM to survive past the first call, so override autoRelease.
   const v = useVoiceInput({ ...voiceOpts, autoRelease: false });
+
+  // Live-preview model: explicit null disables; `undefined` defaults to the
+  // first ensemble model (no swap penalty when the ensemble starts).
+  const livePreviewResolved: EnsembleModel | null =
+    livePreviewModel === null
+      ? null
+      : livePreviewModel ?? (models[0] ?? null);
 
   const [partial, setPartial] = useState('');
   const [individual, setIndividual] = useState<Record<string, string>>({});
@@ -229,6 +261,7 @@ export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEn
   const [isProcessing, setProcessing] = useState(false);
   const [isEscalating, setEscalating] = useState(false);
   const [escalatedWith, setEscalatedWith] = useState<string[]>([]);
+  const [livePreview, setLivePreview] = useState('');
 
   const lastIdRef = useRef(0);
   const modelsRef = useRef(models);
@@ -237,6 +270,17 @@ export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEn
   escalateRef.current = escalateTo;
   const thresholdRef = useRef(escalationThreshold ?? 2);
   thresholdRef.current = escalationThreshold ?? 2;
+  const liveModelRef = useRef(livePreviewResolved);
+  liveModelRef.current = livePreviewResolved;
+  // Single in-flight preview at a time. Whisper's worker is sequential, so
+  // queueing more would stall ensemble jobs without producing fresher
+  // text — Zig keeps firing PreviewReady events; we just drop the ones
+  // that arrive while the previous transcribe is still running.
+  const previewBusyRef = useRef(false);
+  // Generation token: when speech-start fires we bump this so any in-flight
+  // preview from a prior utterance discards its result instead of
+  // overwriting state for the new one.
+  const previewGenRef = useRef(0);
 
   useEffect(() => {
     if (v.utteranceId === 0 || v.utteranceId === lastIdRef.current) return;
@@ -319,6 +363,61 @@ export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEn
     })();
   }, [v.utteranceId]);
 
+  // Live-preview pipeline. Two subscriptions:
+  //   - speech-start clears the previous utterance's livePreview so the
+  //     new utterance starts blank instead of showing stale text until
+  //     the first chunk lands;
+  //   - preview-ready kicks off a transcribe with the live model on the
+  //     in-flight snapshot, dropping the event if a prior preview is
+  //     still running.
+  // Both are no-ops when livePreviewModel is null.
+  useEffect(() => {
+    if (liveModelRef.current === null) return;
+    const G = globalThis as any;
+
+    const offStart = subscribeSpeechStart(() => {
+      previewGenRef.current += 1;
+      setLivePreview('');
+    });
+
+    const offPreview = subscribePreview(({ id }) => {
+      const liveModel = liveModelRef.current;
+      if (liveModel === null) {
+        const rel = G.__voice_release_buffer;
+        if (typeof rel === 'function') rel(id);
+        return;
+      }
+      if (previewBusyRef.current) {
+        // Already running a preview — drop this snapshot to avoid
+        // queueing behind the worker. The next stride will fire another.
+        const rel = G.__voice_release_buffer;
+        if (typeof rel === 'function') rel(id);
+        return;
+      }
+      previewBusyRef.current = true;
+      const myGen = previewGenRef.current;
+      transcribe(id, liveModel.path)
+        .then((r) => {
+          // Discard if a new utterance started while this was running.
+          if (myGen === previewGenRef.current) {
+            const text = (r.text || '').trim();
+            if (text) setLivePreview(text);
+          }
+        })
+        .catch(() => { /* swallow — live preview is best-effort */ })
+        .finally(() => {
+          const rel = G.__voice_release_buffer;
+          if (typeof rel === 'function') rel(id);
+          previewBusyRef.current = false;
+        });
+    });
+
+    return () => {
+      offStart();
+      offPreview();
+    };
+  }, [livePreviewResolved?.path ?? '']);
+
   return {
     partial,
     individual,
@@ -326,6 +425,8 @@ export function useEnsembleTranscript(opts: UseEnsembleTranscriptOptions): UseEn
     isProcessing,
     isEscalating,
     escalatedWith,
+    livePreview,
+    livePreviewModelName: livePreviewResolved?.name ?? '',
     isListening: v.isListening,
     isSpeaking: v.isSpeaking,
     level: v.level,

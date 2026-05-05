@@ -5,12 +5,16 @@ const layout = @import("../layout.zig");
 fn mockMeasure(
     text: []const u8,
     font_size: u16,
+    font_family_id: u8,
     max_width: f32,
     letter_spacing: f32,
     line_height: f32,
     max_lines: u16,
     no_wrap: bool,
+    bold: bool,
 ) layout.TextMetrics {
+    _ = font_family_id;
+    _ = bold;
     _ = letter_spacing;
     _ = max_lines;
 

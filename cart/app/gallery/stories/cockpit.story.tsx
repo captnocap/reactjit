@@ -13,7 +13,7 @@ export const cockpitSection = defineGallerySection({
     defineGalleryThemeStory({
       id: "cockpit/theme-system",
       title: "Cockpit",
-      source: "cart/component-gallery/themes/cockpit/CockpitThemeSystem.ts",
+      source: "cart/app/gallery/themes/cockpit/CockpitThemeSystem.ts",
       format: 'theme',
       status: 'ready',
       tags: ["theme-system", "theme", "classifier"],

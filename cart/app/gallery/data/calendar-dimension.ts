@@ -112,7 +112,7 @@ export const calendarDimensionReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Chart Demo Data',
-    targetSource: 'cart/component-gallery/data/chart-demo-data.ts',
+    targetSource: 'cart/app/gallery/data/chart-demo-data.ts',
     sourceField: 'months.id / quarters.id / days.id',
     targetField: 'months[] / quarters[] / days[]',
     summary:

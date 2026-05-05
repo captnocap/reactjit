@@ -179,7 +179,10 @@ function getViewport(): TooltipViewport {
 }
 
 function tooltipPreset(variant?: TooltipVariant): TooltipPreset {
-  return PRESETS[variant || 'sweatshop-ui'];
+  // Unknown variants (e.g. legacy "gallery") slip through the type system at
+  // runtime — fall back to the default preset rather than returning undefined
+  // and crashing estimateSize() on `.minWidth`.
+  return PRESETS[variant as TooltipVariant] || PRESETS['sweatshop-ui'];
 }
 
 function estimateSize(content: TooltipPopupProps): { width: number; height: number } {

@@ -13,7 +13,7 @@ export const budgetLedgerSection = defineGallerySection({
     defineGalleryDataStory({
       id: "budget-ledger/catalog",
       title: "Budget Ledger",
-      source: "cart/component-gallery/data/budget-ledger.ts",
+      source: "cart/app/gallery/data/budget-ledger.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

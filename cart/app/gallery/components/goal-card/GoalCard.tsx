@@ -1,6 +1,6 @@
 // GoalCard — gallery component bound to the `Goal` data shape.
 //
-// Source of truth: cart/component-gallery/data/goal.ts
+// Source of truth: cart/app/gallery/data/goal.ts
 //
 // Top-level fields on `Goal`:
 //   id: string
@@ -50,8 +50,8 @@ export type GoalCardProps = {
 export function GoalCard({ row }: GoalCardProps) {
   return (
     <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>Goal Card</Text>
-      <Text style={{ fontSize: 12, color: '#657185' }}>Goal: {String((row as { id?: unknown }).id ?? '—')}</Text>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'theme:bg2' }}>Goal Card</Text>
+      <Text style={{ fontSize: 12, color: 'theme:paperInkDim' }}>Goal: {String((row as { id?: unknown }).id ?? '—')}</Text>
     </Col>
   );
 }

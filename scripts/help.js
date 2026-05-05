@@ -51,7 +51,6 @@ const SUBCOMMAND_DOC = {
     summary: 'build a cart into a single self-extracting binary',
     usage: [
       'rjit ship <cart-name>          # release, self-extracting',
-      'rjit ship <cart-name> -d       # debug build, raw ELF',
     ],
     detail: [
       'Pipeline:',

@@ -1,6 +1,6 @@
 import { Box, Col } from '@reactjit/runtime/primitives';
 import { Bot, Braces, CircleHelp, Terminal, User } from '@reactjit/runtime/icons/icons';
-import { Icon, type IconData } from '../../../sweatshop/components/icons';
+import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import { RailBadge, type RailBadgeName } from './RailBadge';
 import { CHAT_CARD, type ChatTone } from './tokens';
 import { classifiers as S } from '@reactjit/core';
@@ -40,7 +40,7 @@ export function TurnBadge({ tone }: { tone: ChatTone }) {
         height: TURN_BADGE_SIZE,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#29304a',
+        backgroundColor: 'theme:inkGhost',
         borderWidth: 1,
         borderColor: color,
         borderRadius: 3,

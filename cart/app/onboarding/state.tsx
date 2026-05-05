@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { useCRUD } from '@reactjit/runtime/hooks';
+import { useCRUD } from '../db';
 import { callHost } from '@reactjit/runtime/ffi';
 import { traitsToAccommodations, accommodationsToTraits } from './traits';
+import { fetchModelsFor, upsertRows } from '../settings/lib/fetch';
 
 export const TOTAL_STEPS = 5;
 
@@ -215,6 +216,7 @@ export function OnboardingProvider({ children }) {
   const connectionStore = useCRUD('connection', passthrough, { namespace: NS });
   const goalStore       = useCRUD('goal',       passthrough, { namespace: NS });
   const workspaceStore  = useCRUD('workspace',  passthrough, { namespace: NS });
+  const modelStore      = useCRUD('model',      passthrough, { namespace: NS });
 
   // ── In-memory optimistic cache ──────────────────────────────────────
   // Same shape state.jsx had pre-lock-in. Step components keep their
@@ -543,6 +545,23 @@ export function OnboardingProvider({ children }) {
         defaultEffort: nextEffort,
         updatedAt: ts,
       });
+
+      // Populate the model catalog so Settings → Models isn't empty.
+      // Same probe path the Settings UI uses; keeps onboarding's
+      // "I picked a model" mental model consistent with what the user
+      // sees post-onboarding. Failures are non-fatal — the user can
+      // always re-fetch from Settings.
+      try {
+        const conn = await connectionStore.get(connId);
+        if (conn) {
+          const result = await fetchModelsFor(conn);
+          if (result.ok && result.rows.length > 0) {
+            await upsertRows(modelStore, result.rows);
+          }
+        }
+      } catch (e) {
+        console.log('[onboarding] model catalog fetch failed: ' + (e && e.message ? e.message : String(e)));
+      }
     } catch (e) {
       console.log('[onboarding] commitConnection failed: ' + (e && e.message ? e.message : String(e)));
     }

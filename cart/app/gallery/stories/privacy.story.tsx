@@ -13,7 +13,7 @@ export const privacySection = defineGallerySection({
     defineGalleryDataStory({
       id: "privacy/catalog",
       title: "Privacy",
-      source: "cart/component-gallery/data/privacy.ts",
+      source: "cart/app/gallery/data/privacy.ts",
       format: 'data',
       status: 'draft',
       tags: ["privacy", "policy", "security"],

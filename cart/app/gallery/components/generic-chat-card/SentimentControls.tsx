@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { Box, Pressable, Row } from '@reactjit/runtime/primitives';
 import { Frown, Meh, Smile, ThumbsDown, ThumbsUp } from '@reactjit/runtime/icons/icons';
-import { Icon, type IconData } from '../../../sweatshop/components/icons';
+import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import { CHAT_CARD } from './tokens';
 
 const SCORES = ['--', '-', '|', '+', '++'];
 
 function sentimentColor(score: string, selected: boolean): { bg: string; border: string; text: string } {
-  if (!selected) return { bg: 'transparent', border: 'transparent', text: CHAT_CARD.faint };
-  if (score.includes('-')) return { bg: '#3a2a1e', border: CHAT_CARD.pink, text: CHAT_CARD.pink };
-  if (score.includes('+')) return { bg: '#1a1511', border: CHAT_CARD.green, text: CHAT_CARD.green };
-  return { bg: '#4a4238', border: CHAT_CARD.border, text: CHAT_CARD.text };
+  if (!selected) return { bg: 'theme:transparent', border: 'theme:transparent', text: CHAT_CARD.faint };
+  if (score.includes('-')) return { bg: 'theme:rule', border: CHAT_CARD.pink, text: CHAT_CARD.pink };
+  if (score.includes('+')) return { bg: 'theme:bg2', border: CHAT_CARD.green, text: CHAT_CARD.green };
+  return { bg: 'theme:inkGhost', border: CHAT_CARD.border, text: CHAT_CARD.text };
 }
 
 function sentimentIcon(score: string): IconData {
@@ -49,10 +49,11 @@ export function SentimentControls({ initial = '-' }: { initial?: string }) {
   return (
     <Box
       style={{
+        flexShrink: 0,
         padding: 2,
-        backgroundColor: '#0e0b09',
+        backgroundColor: 'theme:bg',
         borderWidth: 1,
-        borderColor: '#4a4238',
+        borderColor: 'theme:inkGhost',
         borderRadius: 4,
       }}
     >

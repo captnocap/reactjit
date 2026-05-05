@@ -13,7 +13,7 @@ export const taskDependencySection = defineGallerySection({
     defineGalleryDataStory({
       id: "task-dependency/catalog",
       title: "Task Dependency",
-      source: "cart/component-gallery/data/task-dependency.ts",
+      source: "cart/app/gallery/data/task-dependency.ts",
       format: 'data',
       status: 'draft',
       tags: ["task", "dependency", "graph"],

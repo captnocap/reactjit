@@ -99,7 +99,7 @@ export function WaterfallChart(props: WaterfallChartProps) {
 
       {data.map((d, i) => (
         <Box key={d.label} style={{ position: 'absolute', left: xScale(i + 0.5) - 12, top: plot.y + plot.h + 4, width: 24, alignItems: 'center' }}>
-          <Text fontSize={8} color="#7a6e5d">{d.label}</Text>
+          <Text fontSize={8} color="theme:inkDimmer">{d.label}</Text>
         </Box>
       ))}
     </Box>

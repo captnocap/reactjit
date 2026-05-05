@@ -1,6 +1,6 @@
 // PresetCard — gallery component bound to the `InferencePreset` data shape.
 //
-// Source of truth: cart/component-gallery/data/inference-preset.ts
+// Source of truth: cart/app/gallery/data/inference-preset.ts
 //
 // Top-level fields on `InferencePreset`:
 //   id: string
@@ -42,8 +42,8 @@ export type PresetCardProps = {
 export function PresetCard({ row }: PresetCardProps) {
   return (
     <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>Preset Card</Text>
-      <Text style={{ fontSize: 12, color: '#657185' }}>InferencePreset: {String((row as { id?: unknown }).id ?? '—')}</Text>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'theme:bg2' }}>Preset Card</Text>
+      <Text style={{ fontSize: 12, color: 'theme:paperInkDim' }}>InferencePreset: {String((row as { id?: unknown }).id ?? '—')}</Text>
     </Col>
   );
 }

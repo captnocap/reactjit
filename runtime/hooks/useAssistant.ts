@@ -27,7 +27,8 @@ export type AssistantBackend =
   | 'claude_code'
   | 'codex_app_server'
   | 'kimi_cli_wire'
-  | 'local_ai';
+  | 'local_ai'
+  | 'openai_compat';
 
 export type WorkerEventKind =
   | 'lifecycle'
@@ -86,6 +87,9 @@ export interface UseAssistantOpts {
   yolo?: boolean;         // kimi_cli_wire only
   modelPath?: string;     // local_ai (absolute path to .gguf)
   nCtx?: number;          // local_ai (KV-cache size; default 2048)
+  baseUrl?: string;       // openai_compat (e.g. http://localhost:1234/v1)
+  apiKey?: string;        // openai_compat (Bearer token)
+  systemPrompt?: string;  // openai_compat (initial system message)
   pollMs?: number;
   /** When true, the worker stays alive across unmount (dev hot-reload). */
   persistAcrossUnmount?: boolean;
@@ -115,6 +119,9 @@ function buildOptsJson(opts: UseAssistantOpts): string {
   if (opts.yolo !== undefined) out.yolo = opts.yolo;
   if (opts.modelPath) out.model_path = opts.modelPath;
   if (opts.nCtx !== undefined) out.n_ctx = opts.nCtx;
+  if (opts.baseUrl) out.base_url = opts.baseUrl;
+  if (opts.apiKey) out.api_key = opts.apiKey;
+  if (opts.systemPrompt) out.system_prompt = opts.systemPrompt;
   return JSON.stringify(out);
 }
 
@@ -147,8 +154,19 @@ export function useAssistant(opts: UseAssistantOpts): UseAssistantResult {
     // render usually has empty backend/cwd/model. We re-run on opts
     // change and start the worker once required fields arrive.
     if (!startedRef.current) {
-      if (!opts.backend || !opts.cwd) return;
-      if (!opts.model && !opts.modelPath) return;
+      if (!opts.backend) return;
+      // openai_compat is HTTP — needs base_url + model, no cwd.
+      // Every other backend is subprocess-driven and needs cwd.
+      if (opts.backend === 'openai_compat') {
+        if (!opts.baseUrl || !opts.model) return;
+      } else {
+        if (!opts.cwd) return;
+        // codex_app_server / kimi_cli_wire resolve their own model from
+        // their CLI configs; claude_code / local_ai need an explicit
+        // model or modelPath.
+        const needsModel = opts.backend === 'claude_code' || opts.backend === 'local_ai';
+        if (needsModel && !opts.model && !opts.modelPath) return;
+      }
 
       if (!hasHost('__worker_start')) {
         setError('worker host bindings not registered (framework/worker_bindings.zig)');
@@ -203,7 +221,7 @@ export function useAssistant(opts: UseAssistantOpts): UseAssistantResult {
         setWorkerId(null);
       }
     };
-  }, [opts.backend, opts.cwd, opts.model, opts.modelPath, opts.nCtx, opts.configDir, opts.resumeSession, opts.sessionId, opts.yolo, opts.pollMs]);
+  }, [opts.backend, opts.cwd, opts.model, opts.modelPath, opts.nCtx, opts.configDir, opts.resumeSession, opts.sessionId, opts.yolo, opts.baseUrl, opts.apiKey, opts.systemPrompt, opts.pollMs]);
 
   const ask = (text: string): boolean => {
     const wid = workerIdRef.current;

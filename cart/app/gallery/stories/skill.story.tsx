@@ -13,7 +13,7 @@ export const skillSection = defineGallerySection({
     defineGalleryDataStory({
       id: "skill/catalog",
       title: "Skill",
-      source: "cart/component-gallery/data/skill.ts",
+      source: "cart/app/gallery/data/skill.ts",
       format: 'data',
       status: 'draft',
       tags: ["skill", "capability", "prompt"],

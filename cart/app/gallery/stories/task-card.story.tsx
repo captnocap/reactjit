@@ -14,7 +14,7 @@ export const taskCardSection = defineGallerySection({
     defineGalleryStory({
       id: "task-card/default",
       title: "Task Card",
-      source: "cart/component-gallery/components/task-card/TaskCard.tsx",
+      source: "cart/app/gallery/components/task-card/TaskCard.tsx",
       status: 'draft',
       tags: ["card"],
       variants: [

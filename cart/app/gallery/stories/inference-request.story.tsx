@@ -13,7 +13,7 @@ export const inferenceRequestSection = defineGallerySection({
     defineGalleryDataStory({
       id: "inference-request/catalog",
       title: "Inference Request",
-      source: "cart/component-gallery/data/inference-request.ts",
+      source: "cart/app/gallery/data/inference-request.ts",
       format: 'data',
       status: 'draft',
       tags: ["inference", "audit", "worker"],

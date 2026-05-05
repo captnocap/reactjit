@@ -168,12 +168,12 @@ function ChartCatalogTile({ item }: { item: ChartCatalogItem }) {
         gap: 8,
         padding: 8,
         borderRadius: 8,
-        backgroundColor: '#eadfca', // theme: paper.paperAlt
+        backgroundColor: 'theme:paperAlt', // theme: paper.paperAlt
         borderWidth: 1,
-        borderColor: '#b9794c',     // tinted paper border (no token yet)
+        borderColor: 'theme:accent',     // tinted paper border (no token yet)
       }}
     >
-      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#2a1f14' }}>{item.name}</Text>
+      <Text style={{ fontSize: 12, fontWeight: 'bold', color: 'theme:paperInk' }}>{item.name}</Text>
       <Box
         style={{
           width: '100%',
@@ -223,7 +223,7 @@ export const chartSection = defineGallerySection({
     defineGalleryStory({
       id: 'chart/all-methods',
       title: 'Chart',
-      source: 'cart/component-gallery/components/chart/Chart.tsx',
+      source: 'cart/app/gallery/components/chart/Chart.tsx',
       status: 'draft',
       summary: 'Unified chart component with method-specific data props for the gallery chart renderers.',
       tags: ['chart', 'graph', 'data'],

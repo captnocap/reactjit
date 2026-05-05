@@ -13,7 +13,7 @@ export const workingMemorySection = defineGallerySection({
     defineGalleryDataStory({
       id: "working-memory/catalog",
       title: "Working Memory",
-      source: "cart/component-gallery/data/working-memory.ts",
+      source: "cart/app/gallery/data/working-memory.ts",
       format: 'data',
       status: 'draft',
       tags: ["memory", "attention", "worker"],

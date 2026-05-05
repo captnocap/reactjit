@@ -8,7 +8,7 @@ export const stackSelectorSection = defineGallerySection({
     defineGalleryStory({
       id: 'stack-selector/default',
       title: 'Stack Selector',
-      source: 'cart/component-gallery/components/controls-specimen/StackSelector.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/StackSelector.tsx',
       status: 'ready',
       summary: 'Stacked card selector with inline radio marker and trailing cost readout.',
       tags: ['controls', 'selection', 'atom'],

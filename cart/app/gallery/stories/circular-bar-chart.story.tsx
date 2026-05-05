@@ -9,7 +9,7 @@ export const circularBarChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'circular-bar-chart/default',
       title: 'Circular Bar Chart',
-      source: 'cart/component-gallery/components/circular-bar-chart/CircularBarChart.tsx',
+      source: 'cart/app/gallery/components/circular-bar-chart/CircularBarChart.tsx',
       status: 'draft',
       variants: [
         {

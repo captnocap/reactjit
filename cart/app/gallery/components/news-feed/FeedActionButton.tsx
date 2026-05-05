@@ -11,8 +11,8 @@ export type FeedActionButtonProps = {
 };
 
 const COLORS = {
-  idle: '#8c7d68',
-  activeBg: '#271912',
+  idle: 'theme:paperInkDim',
+  activeBg: 'theme:paperInk',
 };
 
 function formatCount(value: number | undefined): string {
@@ -26,7 +26,7 @@ export function FeedActionButton({
   label,
   count,
   active = false,
-  color = '#d26a2a',
+  color = 'theme:accent',
   onPress,
 }: FeedActionButtonProps) {
   const fg = active ? color : COLORS.idle;
@@ -42,7 +42,7 @@ export function FeedActionButton({
           paddingLeft: 10,
           paddingRight: 10,
           borderRadius: 6,
-          backgroundColor: active ? COLORS.activeBg : 'transparent',
+          backgroundColor: active ? COLORS.activeBg : 'theme:transparent',
         }}
       >
         <Box style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

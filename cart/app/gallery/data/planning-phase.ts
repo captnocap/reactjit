@@ -64,7 +64,7 @@ export const planningPhaseMockData: PlanningPhase[] = [
     status: 'completed',
     gate: { description: 'Gallery script exists and story registry works.', met: true },
     taskGraphId: 'tg_phase_foundations',
-    outputArtifactRefs: ['cart/component-gallery/data/{provider,model,connection,user,settings,privacy,budget,inference-request}.ts'],
+    outputArtifactRefs: ['cart/app/gallery/data/{provider,model,connection,user,settings,privacy,budget,inference-request}.ts'],
     startedAt: '2026-04-24T08:00:00Z',
     endedAt: '2026-04-24T08:45:00Z',
     actualDurationMs: 2_700_000,
@@ -82,7 +82,7 @@ export const planningPhaseMockData: PlanningPhase[] = [
     gate: { description: 'Foundations phase complete.', met: true },
     taskGraphId: 'tg_phase_role_skill',
     outputArtifactRefs: [
-      'cart/component-gallery/data/{capability,system-message,prompt-template,skill,role,role-assignment}.ts',
+      'cart/app/gallery/data/{capability,system-message,prompt-template,skill,role,role-assignment}.ts',
     ],
     startedAt: '2026-04-24T08:45:00Z',
     endedAt: '2026-04-24T09:00:00Z',
@@ -227,11 +227,11 @@ export const planningPhaseSchema: JsonObject = {
 };
 
 export const planningPhaseReferences: GalleryDataReference[] = [
-  { kind: 'belongs-to', label: 'Plan', targetSource: 'cart/component-gallery/data/plan.ts', sourceField: 'planId', targetField: 'id' },
+  { kind: 'belongs-to', label: 'Plan', targetSource: 'cart/app/gallery/data/plan.ts', sourceField: 'planId', targetField: 'id' },
   {
     kind: 'references',
     label: 'Task graph (execution)',
-    targetSource: 'cart/component-gallery/data/task-graph.ts',
+    targetSource: 'cart/app/gallery/data/task-graph.ts',
     sourceField: 'taskGraphId',
     targetField: 'id',
     summary: 'Each phase produces at most one TaskGraph. Graph is the "how" of the phase.',
@@ -239,7 +239,7 @@ export const planningPhaseReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Research sessions',
-    targetSource: 'cart/component-gallery/data/research.ts',
+    targetSource: 'cart/app/gallery/data/research.ts',
     sourceField: 'relatedResearchIds[]',
     targetField: 'id',
     summary: 'Discovery phases often have a Research row attached; implementation phases may cite one for rationale.',

@@ -13,7 +13,7 @@ export const hSection = defineGallerySection({
     defineGalleryStory({
       id: "h/default",
       title: "H",
-      source: "cart/component-gallery/components/h/H.tsx",
+      source: "cart/app/gallery/components/h/H.tsx",
       status: 'draft',
       variants: [
         {

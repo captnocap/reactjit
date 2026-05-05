@@ -13,7 +13,7 @@ export const jobRunSection = defineGallerySection({
     defineGalleryDataStory({
       id: "job-run/catalog",
       title: "Job Run",
-      source: "cart/component-gallery/data/job-run.ts",
+      source: "cart/app/gallery/data/job-run.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

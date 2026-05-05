@@ -1,6 +1,6 @@
 // SyntaxHighlighter — gallery atom bound to the `CodeLine` data shape.
 //
-// Source of truth: cart/component-gallery/data/code-line.ts
+// Source of truth: cart/app/gallery/data/code-line.ts
 
 import { classifiers as S } from '@reactjit/core';
 import { Box, Text } from '@reactjit/runtime/primitives';

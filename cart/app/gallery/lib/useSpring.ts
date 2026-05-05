@@ -6,6 +6,10 @@ export function ChartAnimationProvider({ disabled, children }: { disabled?: bool
   return createElement(ChartAnimationDisabledContext.Provider, { value: !!disabled }, children);
 }
 
+export function useAnimationsDisabled(): boolean {
+  return useContext(ChartAnimationDisabledContext);
+}
+
 export interface SpringConfig {
   stiffness?: number;
   damping?: number;

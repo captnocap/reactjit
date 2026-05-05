@@ -30,7 +30,7 @@ export function DivergingChart(props: DivergingChartProps) {
   return (
     <Box style={{ width, height }}>
       <S.BareGraph>
-        <Graph.Path d={`M ${zeroX} ${plot.y} L ${zeroX} ${plot.y + plot.h}`} stroke="#4a4238" strokeWidth={1} />
+        <Graph.Path d={`M ${zeroX} ${plot.y} L ${zeroX} ${plot.y + plot.h}`} stroke="theme:inkGhost" strokeWidth={1} />
         {data.map((v, i) => {
           const y = plot.y + i * bandH + (bandH - barH) / 2;
           const vx = sx(v * grow);

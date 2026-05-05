@@ -14,7 +14,7 @@ export const gitLaneFrameSection = defineGallerySection({
     defineGalleryStory({
       id: "git-lane-frame/default",
       title: "Git Lane Frame",
-      source: "cart/component-gallery/components/git-lanes/GitLaneFrame.tsx",
+      source: "cart/app/gallery/components/git-lanes/GitLaneFrame.tsx",
       status: 'ready',
       summary: 'Reusable terminal frame atom with topbar, live indicator, search fallback, and keyboard hint footer.',
       tags: ["card", "panel"],

@@ -508,7 +508,7 @@ export const chartDemoDataReferences: GalleryDataReference[] = [
   {
     kind: 'dimension',
     label: 'Calendar Dimension',
-    targetSource: 'cart/component-gallery/data/calendar-dimension.ts',
+    targetSource: 'cart/app/gallery/data/calendar-dimension.ts',
     sourceField: 'months / quarters / days',
     targetField: 'months.id / quarters.id / days.id',
     summary:

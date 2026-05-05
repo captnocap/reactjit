@@ -2,9 +2,7 @@ import { Box } from '@reactjit/runtime/primitives';
 import { defineGallerySection, defineGalleryStory } from '../types';
 import { SocialImageGallery } from '../components/social-image-gallery/SocialImageGallery';
 import {
-  DEFAULT_SOCIAL_IMAGES,
   DEFAULT_SOCIAL_IMAGE_POST,
-  makeSocialImageSet,
 } from '../components/social-image-gallery/socialImageGalleryShared';
 import { newsFeedPostMockData } from '../data/news-feed-post';
 
@@ -17,17 +15,17 @@ export const socialImageGallerySection = defineGallerySection({
   },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/social-image-gallery/SocialImageAuthor.tsx',
-    'cart/component-gallery/components/social-image-gallery/SocialImageStage.tsx',
-    'cart/component-gallery/components/social-image-gallery/SocialImageActions.tsx',
-    'cart/component-gallery/components/social-image-gallery/SocialImageComments.tsx',
-    'cart/component-gallery/components/social-image-gallery/socialImageGalleryShared.ts',
+    'cart/app/gallery/components/social-image-gallery/SocialImageAuthor.tsx',
+    'cart/app/gallery/components/social-image-gallery/SocialImageStage.tsx',
+    'cart/app/gallery/components/social-image-gallery/SocialImageActions.tsx',
+    'cart/app/gallery/components/social-image-gallery/SocialImageComments.tsx',
+    'cart/app/gallery/components/social-image-gallery/socialImageGalleryShared.ts',
   ],
   stories: [
     defineGalleryStory({
       id: 'social-image-gallery/default',
       title: 'Social Image Gallery',
-      source: 'cart/component-gallery/components/social-image-gallery/SocialImageGallery.tsx',
+      source: 'cart/app/gallery/components/social-image-gallery/SocialImageGallery.tsx',
       status: 'draft',
       tags: ['image', 'gallery', 'social', 'feed'],
       variants: [
@@ -36,7 +34,7 @@ export const socialImageGallerySection = defineGallerySection({
           name: 'Feed post',
           render: () => (
             <Box style={{ width: 860, height: 540 }}>
-              <SocialImageGallery post={DEFAULT_SOCIAL_IMAGE_POST} images={DEFAULT_SOCIAL_IMAGES} />
+              <SocialImageGallery post={DEFAULT_SOCIAL_IMAGE_POST} />
             </Box>
           ),
         },
@@ -45,7 +43,7 @@ export const socialImageGallerySection = defineGallerySection({
           name: 'Narrow viewer',
           render: () => (
             <Box style={{ width: 620, height: 620 }}>
-              <SocialImageGallery post={DEFAULT_SOCIAL_IMAGE_POST} images={DEFAULT_SOCIAL_IMAGES} initialIndex={1} />
+              <SocialImageGallery post={DEFAULT_SOCIAL_IMAGE_POST} initialIndex={1} />
             </Box>
           ),
         },
@@ -56,7 +54,6 @@ export const socialImageGallerySection = defineGallerySection({
             <Box style={{ width: 860, height: 540 }}>
               <SocialImageGallery
                 post={newsFeedPostMockData[2]}
-                images={makeSocialImageSet(newsFeedPostMockData[2])}
                 initialIndex={2}
               />
             </Box>

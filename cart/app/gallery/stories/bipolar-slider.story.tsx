@@ -8,7 +8,7 @@ export const bipolarSliderSection = defineGallerySection({
     defineGalleryStory({
       id: 'bipolar-slider/default',
       title: 'Bipolar Slider',
-      source: 'cart/component-gallery/components/controls-specimen/BipolarSlider.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/BipolarSlider.tsx',
       status: 'ready',
       summary: 'Centered horizontal slider that fills positive and negative ranges from zero.',
       tags: ['controls', 'slider', 'atom'],

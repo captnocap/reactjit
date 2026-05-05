@@ -14,7 +14,7 @@ export const genericCardShellSection = defineGallerySection({
     defineGalleryStory({
       id: "generic-card-shell/default",
       title: "Generic Card Shell",
-      source: "cart/component-gallery/components/generic-card/GenericCardShell.tsx",
+      source: "cart/app/gallery/components/generic-card/GenericCardShell.tsx",
       status: 'ready',
       summary: 'Outer chrome for the card, including the accent strip and animated inset frame.',
       tags: ['card', 'shell', 'atom'],
@@ -30,10 +30,10 @@ export const genericCardShellSection = defineGallerySection({
                   justifyContent: 'center',
                   alignItems: 'center',
                   borderWidth: 1,
-                  borderColor: '#5a8bd6',
+                  borderColor: 'theme:blue',
                 }}
               >
-                <Text style={{ color: '#f2e8dc', fontFamily: 'monospace', fontSize: 11 }}>shell content</Text>
+                <Text style={{ color: 'theme:ink', fontFamily: 'monospace', fontSize: 11 }}>shell content</Text>
               </Box>
             </GenericCardShell>
           ),

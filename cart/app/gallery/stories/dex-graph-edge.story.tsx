@@ -15,7 +15,7 @@ export const dexGraphEdgeSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-graph-edge/default",
       title: "Dex Graph Edge",
-      source: "cart/component-gallery/components/dex-graph-edge/DexGraphEdge.tsx",
+      source: "cart/app/gallery/components/dex-graph-edge/DexGraphEdge.tsx",
       status: 'ready',
       summary: 'Graph primitive edge atom for similarity and spatial-link surfaces.',
       tags: ["data-explorer", "graph", "atom"],
@@ -24,7 +24,7 @@ export const dexGraphEdgeSection = defineGallerySection({
           id: 'default',
           name: 'Default',
           render: () => (
-            <Box style={{ width: 180, height: 110, backgroundColor: '#0e0b09' }}>
+            <Box style={{ width: 180, height: 110, backgroundColor: 'theme:bg' }}>
               <S.BareGraph>
                 <DexGraphEdge x1={24} y1={72} x2={148} y2={34} weight={0.78} hot />
               </S.BareGraph>

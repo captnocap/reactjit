@@ -41,7 +41,7 @@ export function BarChart(props: BarChartProps) {
             <Graph.Path
               key={`grid-${t}`}
               d={`M ${plotX} ${y} L ${plotX + plotW} ${y}`}
-              stroke="#b8a890"
+              stroke="theme:inkDim"
               strokeWidth={1}
             />
           );
@@ -104,7 +104,7 @@ export function BarChart(props: BarChartProps) {
         const y = plotY + plotH * (1 - t) - 6;
         return (
           <Box key={`y-${t}`} style={{ position: 'absolute', left: 0, top: y, width: margin.left - 4, alignItems: 'flex-end' }}>
-            <Text fontSize={9} color="#7a6e5d">{val}</Text>
+            <Text fontSize={9} color="theme:inkDimmer">{val}</Text>
           </Box>
         );
       })}
@@ -113,7 +113,7 @@ export function BarChart(props: BarChartProps) {
         const x = plotX + i * (plotW / data.length) + gap / 2 + barW / 2 - 8;
         return (
           <Box key={`x-${d.label}`} style={{ position: 'absolute', left: x, top: plotY + plotH + 6, width: 16, alignItems: 'center' }}>
-            <Text fontSize={9} color="#7a6e5d">{d.label}</Text>
+            <Text fontSize={9} color="theme:inkDimmer">{d.label}</Text>
           </Box>
         );
       })}

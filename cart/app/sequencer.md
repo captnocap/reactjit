@@ -41,3 +41,12 @@ pointers into the rest.
 The split was made when the design was stable enough to formalize.
 The corpus is the durable form; this file is the breadcrumb back
 to it.
+
+## Sibling corpus
+
+- [`docs/character/README.md`](docs/character/README.md) — the
+  Character Creator + Personality Survey design corpus. Shell-
+  level system parallel to (not part of) the sweatshop cartridge
+  corpus above. Spine: "The Character is the assistant's voice.
+  The Manifest is the assistant's read of the user. The Quiz is
+  how the read updates."

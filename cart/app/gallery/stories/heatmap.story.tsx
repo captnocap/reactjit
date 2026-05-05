@@ -9,7 +9,7 @@ export const heatmapSection = defineGallerySection({
     defineGalleryStory({
       id: 'heatmap/default',
       title: 'Heatmap',
-      source: 'cart/component-gallery/components/heatmap/Heatmap.tsx',
+      source: 'cart/app/gallery/components/heatmap/Heatmap.tsx',
       status: 'draft',
       variants: [
         {

@@ -39,7 +39,7 @@ export function Progress(props: ProgressProps) {
           const color = b.color ?? (i === 0 ? PALETTE.pink : i === 1 ? PALETTE.cyan : PALETTE.blue);
           return (
             <Fragment key={i}>
-              <Graph.Path d={`M ${startX} ${y} L ${startX + barW} ${y} L ${startX + barW} ${y + barH} L ${startX} ${y + barH} Z`} fill="#3a2a1e" stroke="none" />
+              <Graph.Path d={`M ${startX} ${y} L ${startX + barW} ${y} L ${startX + barW} ${y + barH} L ${startX} ${y + barH} Z`} fill="theme:rule" stroke="none" />
               <Graph.Path d={`M ${startX} ${y} L ${startX + fillW} ${y} L ${startX + fillW} ${y + barH} L ${startX} ${y + barH} Z`} fill={color} fillOpacity={0.9} stroke="none" />
               <Graph.Path d={`M ${startX + fillW - 4} ${y} A 4 4 0 0 1 ${startX + fillW} ${y + 4} L ${startX + fillW} ${y + barH - 4} A 4 4 0 0 1 ${startX + fillW - 4} ${y + barH} Z`} fill={color} stroke="none" />
             </Fragment>

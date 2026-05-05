@@ -1,6 +1,6 @@
 // ConstraintBadge — gallery component bound to the `Constraint` data shape.
 //
-// Source of truth: cart/component-gallery/data/constraint.ts
+// Source of truth: cart/app/gallery/data/constraint.ts
 //
 // Top-level fields on `Constraint`:
 //   id: string
@@ -42,8 +42,8 @@ export type ConstraintBadgeProps = {
 export function ConstraintBadge({ row }: ConstraintBadgeProps) {
   return (
     <Col style={{ alignItems: 'center', justifyContent: 'center', gap: 8, padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#18202f' }}>Constraint Badge</Text>
-      <Text style={{ fontSize: 12, color: '#657185' }}>Constraint: {String((row as { id?: unknown }).id ?? '—')}</Text>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: 'theme:bg2' }}>Constraint Badge</Text>
+      <Text style={{ fontSize: 12, color: 'theme:paperInkDim' }}>Constraint: {String((row as { id?: unknown }).id ?? '—')}</Text>
     </Col>
   );
 }

@@ -8,7 +8,7 @@ export const groupedBarChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'grouped-bar-chart/default',
       title: 'Grouped Bar Chart',
-      source: 'cart/component-gallery/components/grouped-bar-chart/GroupedBarChart.tsx',
+      source: 'cart/app/gallery/components/grouped-bar-chart/GroupedBarChart.tsx',
       status: 'draft',
       variants: [
         {

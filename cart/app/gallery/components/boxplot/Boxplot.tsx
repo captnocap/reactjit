@@ -86,7 +86,7 @@ export function Boxplot(props: BoxplotProps) {
 
       {data.map((d, i) => (
         <Box key={d.label} style={{ position: 'absolute', left: xScale(i + 0.5) - 8, top: plot.y + plot.h + 4, width: 16, alignItems: 'center' }}>
-          <Text fontSize={9} color="#7a6e5d">{d.label}</Text>
+          <Text fontSize={9} color="theme:inkDimmer">{d.label}</Text>
         </Box>
       ))}
     </Box>

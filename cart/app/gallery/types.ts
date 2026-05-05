@@ -31,6 +31,11 @@ export type GalleryVariant = {
   name: string;
   render: () => ReactNode;
   summary?: string;
+  // Override the per-category preview canvas for this variant. Useful when
+  // one variant of a story has very different intrinsic dimensions from
+  // its siblings (e.g. a wide dashboard variant inside an otherwise small
+  // panel story).
+  previewCanvas?: { width: number; height: number };
 };
 
 export type GalleryStoryBase = {
@@ -41,6 +46,12 @@ export type GalleryStoryBase = {
   owner?: string;
   status?: GalleryStoryStatus;
   tags?: string[];
+  // Override the per-category preview canvas for the entire story. Stories
+  // whose intrinsic size doesn't match the category default (massive
+  // components, tiny atoms) should declare their own logical canvas so
+  // the grid scale-to-fit math sees the right dimensions. Variant-level
+  // overrides win over story-level when present.
+  previewCanvas?: { width: number; height: number };
 };
 
 export type GalleryComponentStory = GalleryStoryBase & {

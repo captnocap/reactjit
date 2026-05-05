@@ -8,7 +8,7 @@ export const networkSchemeSection = defineGallerySection({
     defineGalleryStory({
       id: 'network-scheme/default',
       title: 'Network Scheme',
-      source: 'cart/component-gallery/components/network-scheme/NetworkScheme.tsx',
+      source: 'cart/app/gallery/components/network-scheme/NetworkScheme.tsx',
       status: 'draft',
       variants: [
         {

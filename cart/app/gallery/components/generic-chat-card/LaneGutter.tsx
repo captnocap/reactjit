@@ -8,12 +8,12 @@ export type LaneToken = {
 };
 
 const TONE_BORDER = {
-  warm: '#e8501c',
-  amber: '#d26a2a',
-  cool: '#5a8bd6',
-  cyan: '#5a8bd6',
+  warm: 'theme:accentHot',
+  amber: 'theme:accent',
+  cool: 'theme:blue',
+  cyan: 'theme:blue',
   soft: CHAT_CARD.violet,
-  danger: '#e14a2a',
+  danger: 'theme:flag',
 };
 
 function LaneTokenCell({ token }: { token: LaneToken }) {
@@ -33,7 +33,7 @@ function LaneTokenCell({ token }: { token: LaneToken }) {
         borderRadius: 3,
       }}
     >
-      <Text style={{ fontFamily: 'monospace', fontSize: 8, color: token.active ? '#0e0b09' : CHAT_CARD.muted }}>{token.label}</Text>
+      <Text style={{ fontFamily: 'monospace', fontSize: 8, color: token.active ? 'theme:bg' : CHAT_CARD.muted }}>{token.label}</Text>
     </Box>
   );
 }
@@ -44,7 +44,7 @@ export function LaneGutter({ tokens }: { tokens: LaneToken[] }) {
       style={{
         alignItems: 'center',
         gap: 4,
-        backgroundColor: 'transparent',
+        backgroundColor: 'theme:transparent',
       }}
     >
       {tokens.map((token, index) => (

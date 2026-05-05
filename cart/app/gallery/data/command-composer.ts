@@ -38,9 +38,9 @@ export type CommandComposerShortcut = {
 
 export type CommandComposer = {
   id: string;
-  routingLabel: string;
-  route: CommandComposerChip;
-  target: CommandComposerChip;
+  routingLabel?: string;
+  route?: CommandComposerChip;
+  target?: CommandComposerChip;
   attachLabel: string;
   attachments: CommandComposerChip[];
   prompt: CommandComposerPromptSegment[];
@@ -150,9 +150,6 @@ export const commandComposerSchema: JsonObject = {
     additionalProperties: false,
     required: [
       'id',
-      'routingLabel',
-      'route',
-      'target',
       'attachLabel',
       'attachments',
       'prompt',
@@ -217,13 +214,13 @@ export const commandComposerReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Prompt fragments',
-    targetSource: 'cart/component-gallery/data/prompt-fragment.ts',
+    targetSource: 'cart/app/gallery/data/prompt-fragment.ts',
     summary: 'Inline prompt references can be backed by file, variable, or command prompt fragments.',
   },
   {
     kind: 'references',
     label: 'Model route',
-    targetSource: 'cart/component-gallery/data/model-route.ts',
+    targetSource: 'cart/app/gallery/data/model-route.ts',
     summary: 'The route chip mirrors the model dispatch selected for this turn.',
   },
 ];

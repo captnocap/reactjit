@@ -13,7 +13,7 @@ export const promptFragmentSection = defineGallerySection({
     defineGalleryDataStory({
       id: "prompt-fragment/catalog",
       title: "Prompt Fragment",
-      source: "cart/component-gallery/data/prompt-fragment.ts",
+      source: "cart/app/gallery/data/prompt-fragment.ts",
       format: 'data',
       status: 'draft',
       tags: ["input", "data"],

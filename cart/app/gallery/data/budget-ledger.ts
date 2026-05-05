@@ -145,7 +145,7 @@ export const budgetLedgerReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Budget',
-    targetSource: 'cart/component-gallery/data/budget.ts',
+    targetSource: 'cart/app/gallery/data/budget.ts',
     sourceField: 'budgetId',
     targetField: 'id',
     summary:
@@ -154,7 +154,7 @@ export const budgetLedgerReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Inference request',
-    targetSource: 'cart/component-gallery/data/inference-request.ts',
+    targetSource: 'cart/app/gallery/data/inference-request.ts',
     sourceField: 'inferenceRequestId',
     targetField: 'id',
     summary: 'The request that triggered this charge.',
@@ -162,7 +162,7 @@ export const budgetLedgerReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
     summary: 'For workload accounting — "which worker has burned the most spend this week."',
@@ -170,7 +170,7 @@ export const budgetLedgerReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Reservation finalization',
-    targetSource: 'cart/component-gallery/data/budget-ledger.ts',
+    targetSource: 'cart/app/gallery/data/budget-ledger.ts',
     sourceField: 'finalizedById / reservationOfId',
     targetField: 'id',
     summary:

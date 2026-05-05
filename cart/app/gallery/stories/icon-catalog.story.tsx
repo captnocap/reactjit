@@ -13,7 +13,7 @@ export const iconCatalogSection = defineGallerySection({
     defineGalleryStory({
       id: 'icon-catalog/default',
       title: 'Icon Catalog',
-      source: 'cart/component-gallery/components/icon-catalog/IconCatalog.tsx',
+      source: 'cart/app/gallery/components/icon-catalog/IconCatalog.tsx',
       status: 'ready',
       summary: 'Registered runtime icon inventory grouped into the atom gallery for fast scanning.',
       tags: ['panel'],

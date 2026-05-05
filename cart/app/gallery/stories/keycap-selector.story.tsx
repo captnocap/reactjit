@@ -8,7 +8,7 @@ export const keycapSelectorSection = defineGallerySection({
     defineGalleryStory({
       id: 'keycap-selector/default',
       title: 'Keycap Selector',
-      source: 'cart/component-gallery/components/controls-specimen/KeycapSelector.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/KeycapSelector.tsx',
       status: 'ready',
       summary: 'Compact keycap-like token selector for multipliers and size presets.',
       tags: ['controls', 'selection', 'atom'],

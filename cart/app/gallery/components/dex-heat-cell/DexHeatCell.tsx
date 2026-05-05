@@ -10,8 +10,8 @@ export type DexHeatCellProps = {
 function heatColor(value: number): string {
   if (value > 0.76) return DEX_COLORS.accent;
   if (value > 0.62) return DEX_COLORS.warn;
-  if (value > 0.48) return '#8a4a20';
-  if (value > 0.28) return '#1a1511';
+  if (value > 0.48) return 'theme:ruleBright';
+  if (value > 0.28) return 'theme:bg2';
   return DEX_COLORS.bg1;
 }
 

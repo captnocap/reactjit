@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Box, Effect } from '@reactjit/runtime/primitives';
+import { parseGalleryColor } from '../../theme-color';
 import { AST_SAMPLE_FILES } from './sampleContract';
 
 export type AstContractNodeArrays = {
@@ -111,22 +112,8 @@ function isPreparedFile(file: AstFingerprintInputFile): file is AstFingerprintFi
 }
 
 function parseHexColor(color?: string): Rgb | null {
-  if (!color || color[0] !== '#') return null;
-  if (color.length === 7) {
-    return {
-      r: parseInt(color.slice(1, 3), 16) || 0,
-      g: parseInt(color.slice(3, 5), 16) || 0,
-      b: parseInt(color.slice(5, 7), 16) || 0,
-    };
-  }
-  if (color.length === 4) {
-    return {
-      r: parseInt(color[1] + color[1], 16) || 0,
-      g: parseInt(color[2] + color[2], 16) || 0,
-      b: parseInt(color[3] + color[3], 16) || 0,
-    };
-  }
-  return null;
+  const rgb = parseGalleryColor(color);
+  return rgb ? { r: rgb[0], g: rgb[1], b: rgb[2] } : null;
 }
 
 function hashLabel(label: string): number {

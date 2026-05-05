@@ -2,7 +2,7 @@ import { Box, Col } from '@reactjit/runtime/primitives';
 import { CHAT_CARD } from './tokens';
 
 function ContextCliffSegment({ active, danger }: { active: boolean; danger: boolean }) {
-  const color = danger ? CHAT_CARD.orange : '#6ac3d6';
+  const color = danger ? CHAT_CARD.orange : 'theme:tool';
 
   return (
     <Box
@@ -11,7 +11,7 @@ function ContextCliffSegment({ active, danger }: { active: boolean; danger: bool
         height: 17,
         backgroundColor: active ? color : CHAT_CARD.panelDeep,
         borderWidth: 1,
-        borderColor: active ? color : '#4a4238',
+        borderColor: active ? color : 'theme:inkGhost',
         borderRadius: 2,
       }}
     />
@@ -28,7 +28,7 @@ export function ContextCliffGutter({ fill = 0.84, slots = 18 }: { fill?: number;
       style={{
         alignItems: 'center',
         gap: 5,
-        backgroundColor: 'transparent',
+        backgroundColor: 'theme:transparent',
       }}
     >
       {segments.map((slot) => (

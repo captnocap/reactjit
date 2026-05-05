@@ -8,7 +8,7 @@ export const easingsSection = defineGallerySection({
     defineGalleryStory({
       id: 'easings/default',
       title: 'Easings',
-      source: 'cart/component-gallery/components/easings/Easings.tsx',
+      source: 'cart/app/gallery/components/easings/Easings.tsx',
       status: 'draft',
       tags: ['hooks', 'animation'],
       variants: [

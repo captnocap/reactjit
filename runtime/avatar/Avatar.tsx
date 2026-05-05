@@ -63,6 +63,13 @@ export interface AvatarProps {
    * via width/height in this style object.
    */
   style?: Record<string, any>;
+
+  /**
+   * Extra Scene3D children rendered inside the same Scene3D as the
+   * avatar parts (e.g. <BlockFace3D> attaching block-pixel cubes
+   * to the head sphere).
+   */
+  children?: any;
 }
 
 function renderPart(part: AvatarPart): any {
@@ -97,6 +104,7 @@ export function Avatar(props: AvatarProps): any {
     directionalIntensity = DEFAULT_DIRECTIONAL_INTENSITY,
     backgroundColor = DEFAULT_BACKGROUND,
     style,
+    children,
   } = props;
 
   return (
@@ -109,6 +117,7 @@ export function Avatar(props: AvatarProps): any {
         intensity={directionalIntensity}
       />
       {avatar.parts.map(renderPart)}
+      {children}
     </Scene3D>
   );
 }

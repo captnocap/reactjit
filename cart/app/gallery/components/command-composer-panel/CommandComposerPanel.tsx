@@ -1,6 +1,6 @@
 // CommandComposerPanel — gallery component bound to the `CommandComposer` data shape.
 //
-// Source of truth: cart/component-gallery/data/command-composer.ts
+// Source of truth: cart/app/gallery/data/command-composer.ts
 //
 // Top-level fields on `CommandComposer`:
 //   id: string

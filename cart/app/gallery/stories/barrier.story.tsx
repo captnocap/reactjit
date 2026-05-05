@@ -13,7 +13,7 @@ export const barrierSection = defineGallerySection({
     defineGalleryDataStory({
       id: "barrier/catalog",
       title: "Barrier",
-      source: "cart/component-gallery/data/barrier.ts",
+      source: "cart/app/gallery/data/barrier.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

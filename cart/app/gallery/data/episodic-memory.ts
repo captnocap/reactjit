@@ -69,7 +69,7 @@ export const episodicMemoryMockData: EpisodicMemory[] = [
       'Forward references (system-message.ts, prompt-template.ts, connection.ts, worker.ts) are fine — call them out as "to wire" and close them when the target lands.',
     ],
     relatedRequestIds: ['req_001', 'req_002'],
-    artifactRefs: ['cart/component-gallery/data/'],
+    artifactRefs: ['cart/app/gallery/data/'],
     durationMs: 5_700_000,
     costUsd: 2.41,
     startedAt: '2026-04-24T08:00:00Z',
@@ -161,35 +161,35 @@ export const episodicMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Worker',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
   },
   {
     kind: 'belongs-to',
     label: 'Workspace',
-    targetSource: 'cart/component-gallery/data/workspace.ts',
+    targetSource: 'cart/app/gallery/data/workspace.ts',
     sourceField: 'workspaceId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Project',
-    targetSource: 'cart/component-gallery/data/project.ts',
+    targetSource: 'cart/app/gallery/data/project.ts',
     sourceField: 'projectId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Session',
-    targetSource: 'cart/component-gallery/data/worker-session.ts',
+    targetSource: 'cart/app/gallery/data/worker-session.ts',
     sourceField: 'sessionId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Inference requests',
-    targetSource: 'cart/component-gallery/data/inference-request.ts',
+    targetSource: 'cart/app/gallery/data/inference-request.ts',
     sourceField: 'relatedRequestIds[]',
     targetField: 'id',
     summary: 'The requests that made up the episode — useful for cost / replay.',
@@ -197,7 +197,7 @@ export const episodicMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Consolidation feed (from working-memory)',
-    targetSource: 'cart/component-gallery/data/working-memory.ts',
+    targetSource: 'cart/app/gallery/data/working-memory.ts',
     sourceField: '(consolidation)',
     targetField: 'id',
     summary:
@@ -206,7 +206,7 @@ export const episodicMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Feeds semantic memory',
-    targetSource: 'cart/component-gallery/data/semantic-memory.ts',
+    targetSource: 'cart/app/gallery/data/semantic-memory.ts',
     sourceField: 'lessons[]',
     targetField: 'body (via consolidation)',
     summary:

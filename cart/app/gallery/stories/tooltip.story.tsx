@@ -23,15 +23,15 @@ export const tooltipSection = defineGallerySection({
   },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/tooltip-frame/TooltipFrame.tsx',
-    'cart/component-gallery/components/tooltip-header/TooltipHeader.tsx',
-    'cart/component-gallery/components/tooltip-data-row/TooltipDataRow.tsx',
+    'cart/app/gallery/components/tooltip-frame/TooltipFrame.tsx',
+    'cart/app/gallery/components/tooltip-header/TooltipHeader.tsx',
+    'cart/app/gallery/components/tooltip-data-row/TooltipDataRow.tsx',
   ],
   stories: [
     defineGalleryStory({
       id: 'tooltip/default',
       title: 'Tooltip',
-      source: 'cart/component-gallery/components/tooltip/Tooltip.tsx',
+      source: 'cart/app/gallery/components/tooltip/Tooltip.tsx',
       status: 'ready',
       summary: 'Unified basic and rich tooltip composition driven by type, method, and data.',
       tags: ['panel', 'data'],

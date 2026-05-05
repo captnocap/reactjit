@@ -8,7 +8,7 @@ export const sideSpineCrumbsSection = defineGallerySection({
     defineGalleryStory({
       id: 'side-spine-crumbs/default',
       title: 'Side Spine Crumbs',
-      source: 'cart/component-gallery/components/controls-specimen/SideSpineCrumbs.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/SideSpineCrumbs.tsx',
       status: 'ready',
       summary: 'Nested breadcrumb card with a rotated spine label and typographic path markers.',
       tags: ['controls', 'mixed-axis', 'atom'],

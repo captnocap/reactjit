@@ -1,5 +1,5 @@
 import { Box, Col, Pressable, Row, Text } from '@reactjit/runtime/primitives';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import {
   getRegisteredIconNames,
   getAliasesForName,
@@ -14,14 +14,14 @@ const PROVIDER_IDS = Object.keys(PROVIDER_ICONS);
 
 // Warm palette for demonstrating vector icons render in arbitrary colors.
 const COLOR_PALETTE = [
-  '#f2e8dc', // parchment
-  '#d26a2a', // sand
-  '#d48aa7', // mauve
-  '#6aa390', // mint
-  '#e8501c', // coral
-  '#d26a2a', // tan
-  '#6ac3d6', // sky
-  '#8a7fd4', // lavender
+  'theme:ink', // parchment
+  'theme:accent', // sand
+  'theme:atch', // mauve
+  'theme:ok', // mint
+  'theme:accentHot', // coral
+  'theme:accent', // tan
+  'theme:tool', // sky
+  'theme:lilac', // lavender
 ];
 
 function iconColor(name: string): string {
@@ -59,9 +59,9 @@ function VectorIconItem({ name }: { name: string }) {
           alignItems: 'center',
           justifyContent: 'center',
           borderRadius: 8,
-          backgroundColor: '#14100d',
+          backgroundColor: 'theme:bg1',
           borderWidth: 1,
-          borderColor: '#3a2a1e',
+          borderColor: 'theme:rule',
         }}
       >
         <Icon name={name} size={20} color={iconColor(name)} />
@@ -83,9 +83,9 @@ function ProviderIconItem({ providerId }: { providerId: string }) {
           alignItems: 'center',
           justifyContent: 'center',
           borderRadius: 8,
-          backgroundColor: '#14100d',
+          backgroundColor: 'theme:bg1',
           borderWidth: 1,
-          borderColor: '#3a2a1e',
+          borderColor: 'theme:rule',
         }}
       >
         <ProviderIcon providerId={providerId} size={24} />
@@ -101,9 +101,9 @@ export function IconCatalog() {
         width: '100%',
         gap: 20,
         padding: 20,
-        backgroundColor: '#0e0b09',
+        backgroundColor: 'theme:bg',
         borderWidth: 1,
-        borderColor: '#3a2a1e',
+        borderColor: 'theme:rule',
         borderRadius: 14,
       }}
     >
@@ -115,13 +115,13 @@ export function IconCatalog() {
           gap: 12,
           paddingBottom: 4,
           borderBottomWidth: 1,
-          borderBottomColor: '#3a2a1e',
+          borderBottomColor: 'theme:rule',
         }}
       >
-        <Text style={{ fontSize: 14, fontFamily: 'monospace', color: '#f2e8dc' }}>
+        <Text style={{ fontSize: 14, fontFamily: 'monospace', color: 'theme:ink' }}>
           ICON CATALOG
         </Text>
-        <Text style={{ fontSize: 10, fontFamily: 'monospace', color: '#7a6e5d' }}>
+        <Text style={{ fontSize: 10, fontFamily: 'monospace', color: 'theme:inkDimmer' }}>
           {CANONICAL_NAMES.length} vector icons · {PROVIDER_IDS.length} provider icons
         </Text>
       </Row>

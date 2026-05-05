@@ -13,7 +13,7 @@ export const workstreamSection = defineGallerySection({
     defineGalleryDataStory({
       id: "workstream/catalog",
       title: "Workstream",
-      source: "cart/component-gallery/data/workstream.ts",
+      source: "cart/app/gallery/data/workstream.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

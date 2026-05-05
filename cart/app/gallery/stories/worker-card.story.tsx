@@ -14,7 +14,7 @@ export const workerCardSection = defineGallerySection({
     defineGalleryStory({
       id: "worker-card/default",
       title: "Worker Card",
-      source: "cart/component-gallery/components/worker-card/WorkerCard.tsx",
+      source: "cart/app/gallery/components/worker-card/WorkerCard.tsx",
       status: 'draft',
       tags: ["card", "data"],
       variants: [

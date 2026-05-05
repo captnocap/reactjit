@@ -14,7 +14,7 @@ export const dexCanvasRingSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-canvas-ring/default",
       title: "Dex Canvas Ring",
-      source: "cart/component-gallery/components/dex-canvas-ring/DexCanvasRing.tsx",
+      source: "cart/app/gallery/components/dex-canvas-ring/DexCanvasRing.tsx",
       status: 'ready',
       summary: 'Canvas path ring atom for pannable spatial maps.',
       tags: ["card", "graph", "data", "motion"],
@@ -23,7 +23,7 @@ export const dexCanvasRingSection = defineGallerySection({
           id: 'default',
           name: 'Default',
           render: () => (
-            <Canvas style={{ width: 220, height: 150, backgroundColor: '#0e0b09' }}>
+            <Canvas style={{ width: 220, height: 150, backgroundColor: 'theme:bg' }}>
               <DexCanvasRing x={110} y={76} r={58} />
               <DexCanvasRing x={110} y={76} r={28} hot dashed />
             </Canvas>

@@ -8,7 +8,7 @@ export const sweatshopMatrixDisplaySection = defineGallerySection({
     defineGalleryStory({
       id: 'sweatshop-matrix-display/default',
       title: 'Projection Surface',
-      source: 'cart/component-gallery/components/sweatshop-matrix-display/ProjectionSurfaceWall.tsx',
+      source: 'cart/app/gallery/components/sweatshop-matrix-display/ProjectionSurfaceWall.tsx',
       status: 'ready',
       summary: 'Single comparison wall showing each effect type as a cascading size row, with the matrix projection surface folded into the same screen.',
       tags: ['effect', 'matrix', 'braille', 'projection', 'surface'],

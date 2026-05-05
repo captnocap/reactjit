@@ -1,6 +1,6 @@
 // BlockFaces — pixel-grid worker portraits.
 //
-// Source of truth: cart/component-gallery/data/worker.ts
+// Source of truth: cart/app/gallery/data/worker.ts
 //
 // Each face is a 16×16 grid of 1:1 cells. Specs are arrays of strings;
 // one char = one palette key. Animation = swap between named frames
@@ -15,85 +15,88 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Box, Col, Row, Text } from '../../../../runtime/primitives';
 import type { Worker, WorkerLifecycle } from '../../data/worker';
+import { useAnimationsDisabled } from '../../lib/useSpring';
 
 // ───────────────────────── PALETTE ─────────────────────────
 // 1 char per key keeps the face specs readable. '.' / ' ' = transparent.
 // Per-seed variation is layered on top via FaceGrid's `palette` override —
 // see SKIN_TONES / HAIR_COLORS below.
+const TRANSPARENT = 'theme:transparent';
+
 const PAL: Record<string, string> = {
-  '.': 'transparent',
-  ' ': 'transparent',
-  s: '#c79a72',
-  S: '#a47a55',
-  L: '#e2bd96',
-  h: '#3a2a1e',
-  H: '#5a3a26',
-  w: '#f2e8dc',
-  i: '#5a8bd6',
-  I: '#6aa390',
-  p: '#0e0b09',
-  m: '#7a3a2a',
-  M: '#d26a2a',
-  k: '#3a2a1e',
-  K: '#1a1511',
-  g: '#7a6e5d',
-  G: '#b8a890',
-  W: '#f2e8dc',
-  r: '#e14a2a',
-  o: '#d26a2a',
-  y: '#d6a54a',
-  c: '#6aa390',
-  b: '#5a8bd6',
-  l: '#8a7fd4',
-  z: '#7a8a55',
-  Z: '#556b3a',
-  v: '#b8c87a',
-  q: '#c44848',
-  Q: '#8a2828',
-  e: '#c8b8a0',
-  E: '#7a6e5d',
-  x: '#0e0b09',
-  X: '#3a2a1e',
-  a: '#5f7f6a',
-  A: '#9fb28a',
-  n: '#36594f',
-  N: '#1f3738',
-  d: '#8b6d55',
-  D: '#4e3829',
-  u: '#e2b887',
-  U: '#9a6b4b',
-  t: '#6f456f',
-  T: '#3e294b',
-  f: '#8a6e42',
-  F: '#4f3a24',
-  j: '#c99b5a',
-  J: '#7e5230',
-  P: '#c27f70',
-  V: '#31616d',
-  C: '#6f5e9b',
-  B: '#58736c',
-  Y: '#d2bd7c',
-  R: '#41515a',
+  '.': TRANSPARENT,
+  ' ': TRANSPARENT,
+  s: 'theme:inkDim',
+  S: 'theme:paperInkDim',
+  L: 'theme:inkDim',
+  h: 'theme:rule',
+  H: 'theme:inkGhost',
+  w: 'theme:ink',
+  i: 'theme:blue',
+  I: 'theme:ok',
+  p: 'theme:bg',
+  m: 'theme:paperRuleBright',
+  M: 'theme:accent',
+  k: 'theme:rule',
+  K: 'theme:bg2',
+  g: 'theme:inkDimmer',
+  G: 'theme:inkDim',
+  W: 'theme:ink',
+  r: 'theme:flag',
+  o: 'theme:accent',
+  y: 'theme:warn',
+  c: 'theme:ok',
+  b: 'theme:blue',
+  l: 'theme:lilac',
+  z: 'theme:paperInkDim',
+  Z: 'theme:inkGhost',
+  v: 'theme:inkDim',
+  q: 'theme:flag',
+  Q: 'theme:paperRuleBright',
+  e: 'theme:inkDim',
+  E: 'theme:inkDimmer',
+  x: 'theme:bg',
+  X: 'theme:rule',
+  a: 'theme:paperInkDim',
+  A: 'theme:inkDim',
+  n: 'theme:inkGhost',
+  N: 'theme:paperRule',
+  d: 'theme:paperInkDim',
+  D: 'theme:inkGhost',
+  u: 'theme:inkDim',
+  U: 'theme:paperInkDim',
+  t: 'theme:paperInkDim',
+  T: 'theme:inkGhost',
+  f: 'theme:paperInkDim',
+  F: 'theme:inkGhost',
+  j: 'theme:warn',
+  J: 'theme:paperRuleBright',
+  P: 'theme:inkDim',
+  V: 'theme:inkGhost',
+  C: 'theme:paperInkDim',
+  B: 'theme:paperInkDim',
+  Y: 'theme:inkDim',
+  R: 'theme:inkGhost',
 };
 PAL.O = PAL.W;
 
 // Skin tones swap the s/S/L tuple per-face. Tuples kept warm so they
 // stay coherent with the cockpit's paper-black palette.
 const SKIN_TONES: Array<Record<string, string>> = [
-  { L: '#e2bd96', s: '#c79a72', S: '#a47a55' }, // amber (default)
-  { L: '#f0d4ae', s: '#dbb38a', S: '#b8916a' }, // light wheat
-  { L: '#cba274', s: '#a47a55', S: '#7a5a3e' }, // honey
-  { L: '#a5825e', s: '#856241', S: '#604632' }, // walnut
-  { L: '#785738', s: '#5a4126', S: '#3d2c1a' }, // espresso
+  { L: 'theme:inkDim', s: 'theme:inkDim', S: 'theme:paperInkDim' }, // amber (default)
+  { L: 'theme:paper', s: 'theme:inkDim', S: 'theme:inkDim' }, // light wheat
+  { L: 'theme:inkDim', s: 'theme:paperInkDim', S: 'theme:paperInkDim' }, // honey
+  { L: 'theme:paperInkDim', s: 'theme:paperInkDim', S: 'theme:inkGhost' }, // walnut
+  { L: 'theme:paperRuleBright', s: 'theme:inkGhost', S: 'theme:paperRule' }, // espresso
 ];
 
 const HAIR_COLORS: Array<Record<string, string>> = [
-  { h: '#3a2a1e', H: '#5a3a26' }, // dark brown (default)
-  { h: '#1a1511', H: '#3a2a1e' }, // black
-  { h: '#7a4a26', H: '#a06a3a' }, // chestnut
-  { h: '#c08838', H: '#e0a85c' }, // blonde
-  { h: '#9a3818', H: '#c04a26' }, // auburn
-  { h: '#7a6e5d', H: '#a89880' }, // gray
+  { h: 'theme:rule', H: 'theme:inkGhost' }, // dark brown (default)
+  { h: 'theme:bg2', H: 'theme:rule' }, // black
+  { h: 'theme:paperRuleBright', H: 'theme:paperRuleBright' }, // chestnut
+  { h: 'theme:accent', H: 'theme:warn' }, // blonde
+  { h: 'theme:paperRuleBright', H: 'theme:flag' }, // auburn
+  { h: 'theme:inkDimmer', H: 'theme:inkDim' }, // gray
 ];
 
 // ───────────────────────── FRAMES ─────────────────────────
@@ -1235,29 +1238,29 @@ type ArchetypeSpec = { frames: FrameMap; label: string; glow: string | null };
 const ARCHETYPES: Record<ArchetypeKey, ArchetypeSpec> = {
   human:    { frames: HUMAN,    label: 'human',    glow: null },
   humanFem: { frames: HUMAN_FEM, label: 'humanFem', glow: null },
-  robot:    { frames: ROBOT,    label: 'robot',    glow: '#5a8bd6' },
-  zombie:   { frames: ZOMBIE,   label: 'zombie',   glow: '#7a8a55' },
+  robot:    { frames: ROBOT,    label: 'robot',    glow: 'theme:blue' },
+  zombie:   { frames: ZOMBIE,   label: 'zombie',   glow: 'theme:paperInkDim' },
   cyclops:  { frames: CYCLOPS,  label: 'cyclops',  glow: null },
-  ghost:    { frames: GHOST,    label: 'ghost',    glow: '#7a6e5d' },
+  ghost:    { frames: GHOST,    label: 'ghost',    glow: 'theme:inkDimmer' },
   visor:    { frames: VISOR,    label: 'visor',    glow: null },
-  skull:    { frames: SKULL,    label: 'skull',    glow: '#e14a2a' },
+  skull:    { frames: SKULL,    label: 'skull',    glow: 'theme:flag' },
   blockBuilder:     { frames: BLOCK_BUILDER,     label: 'blockBuilder',     glow: null },
-  greenHisser:   { frames: GREEN_HISSER,   label: 'greenHisser',   glow: '#74a643' },
-  voidWalker:  { frames: VOID_WALKER,  label: 'voidWalker',  glow: '#8a7fd4' },
+  greenHisser:   { frames: GREEN_HISSER,   label: 'greenHisser',   glow: 'theme:pin' },
+  voidWalker:  { frames: VOID_WALKER,  label: 'voidWalker',  glow: 'theme:lilac' },
   panda:     { frames: PANDA,     label: 'panda',     glow: null },
   bear:      { frames: BEAR,      label: 'bear',      glow: null },
-  cat:       { frames: CAT,       label: 'cat',       glow: '#d26a2a' },
+  cat:       { frames: CAT,       label: 'cat',       glow: 'theme:accent' },
   dog:       { frames: DOG,       label: 'dog',       glow: null },
-  parrot:    { frames: PARROT,    label: 'parrot',    glow: '#e14a2a' },
-  bird:      { frames: BIRD,      label: 'bird',      glow: '#d6a54a' },
+  parrot:    { frames: PARROT,    label: 'parrot',    glow: 'theme:flag' },
+  bird:      { frames: BIRD,      label: 'bird',      glow: 'theme:warn' },
   skeleton:  { frames: SKELETON,  label: 'skeleton',  glow: null },
-  witch:     { frames: WITCH,     label: 'witch',     glow: '#5b2c7d' },
-  italianMan:     { frames: ITALIAN_MAN,     label: 'italianMan',     glow: '#e43d30' },
-  webHero: { frames: WEB_HERO, label: 'webHero', glow: '#e43d30' },
+  witch:     { frames: WITCH,     label: 'witch',     glow: 'theme:inkGhost' },
+  italianMan:     { frames: ITALIAN_MAN,     label: 'italianMan',     glow: 'theme:flag' },
+  webHero: { frames: WEB_HERO, label: 'webHero', glow: 'theme:flag' },
   nightCowl:    { frames: NIGHT_COWL,    label: 'nightCowl',    glow: null },
-  metalBro:   { frames: METAL_BRO,   label: 'metalBro',   glow: '#16a6a0' },
+  metalBro:   { frames: METAL_BRO,   label: 'metalBro',   glow: 'theme:ok' },
   grinningMask: { frames: GRINNING_MASK, label: 'grinningMask', glow: null },
-  greenFrog:      { frames: GREEN_FROG,      label: 'greenFrog',      glow: '#74a643' },
+  greenFrog:      { frames: GREEN_FROG,      label: 'greenFrog',      glow: 'theme:pin' },
   robedTeacher:     { frames: ROBED_TEACHER,     label: 'robedTeacher',     glow: null },
 };
 
@@ -1763,7 +1766,7 @@ function hairPoolFor(archetype: ArchetypeKey): HairShape[] | null {
   return null;
 }
 
-function variantSpec(archetype: ArchetypeKey, seed: string | undefined): VariantSpec {
+export function variantSpec(archetype: ArchetypeKey, seed: string | undefined): VariantSpec {
   const arch = ARCHETYPES[archetype];
   if (!seed) {
     return {
@@ -1892,32 +1895,32 @@ export function archetypeForWorker(row: Worker): ArchetypeKey {
 }
 
 const STATE_FROM_LIFECYCLE: Record<WorkerLifecycle, { lbl: string; color: string }> = {
-  spawning:    { lbl: 'BOOT',  color: '#5a8bd6' },
-  active:      { lbl: 'OK',    color: '#6aa390' },
-  idle:        { lbl: 'IDLE',  color: '#7a6e5d' },
-  streaming:   { lbl: 'TALK',  color: '#d26a2a' },
-  suspended:   { lbl: 'STUCK', color: '#d6a54a' },
-  terminating: { lbl: 'EXIT',  color: '#d6a54a' },
-  terminated:  { lbl: 'GONE',  color: '#7a6e5d' },
-  crashed:     { lbl: 'RAT',   color: '#e14a2a' },
+  spawning:    { lbl: 'BOOT',  color: 'theme:blue' },
+  active:      { lbl: 'OK',    color: 'theme:ok' },
+  idle:        { lbl: 'IDLE',  color: 'theme:inkDimmer' },
+  streaming:   { lbl: 'TALK',  color: 'theme:accent' },
+  suspended:   { lbl: 'STUCK', color: 'theme:warn' },
+  terminating: { lbl: 'EXIT',  color: 'theme:warn' },
+  terminated:  { lbl: 'GONE',  color: 'theme:inkDimmer' },
+  crashed:     { lbl: 'RAT',   color: 'theme:flag' },
 };
 
 // ───────────────────────── FACE GRID ─────────────────────────
 const COLORS = {
-  bg: '#0e0b09',
-  bg1: '#14100d',
-  bg2: '#1a1511',
-  rule: '#3a2a1e',
-  ruleBright: '#4a4238',
-  ink: '#f2e8dc',
-  inkDim: '#b8a890',
-  inkDimmer: '#7a6e5d',
-  accent: '#d26a2a',
-  ok: '#6aa390',
-  warn: '#d6a54a',
-  flag: '#e14a2a',
-  blue: '#5a8bd6',
-  lilac: '#8a7fd4',
+  bg: 'theme:bg',
+  bg1: 'theme:bg1',
+  bg2: 'theme:bg2',
+  rule: 'theme:rule',
+  ruleBright: 'theme:inkGhost',
+  ink: 'theme:ink',
+  inkDim: 'theme:inkDim',
+  inkDimmer: 'theme:inkDimmer',
+  accent: 'theme:accent',
+  ok: 'theme:ok',
+  warn: 'theme:warn',
+  flag: 'theme:flag',
+  blue: 'theme:blue',
+  lilac: 'theme:lilac',
 };
 
 const SIZE = 16;
@@ -1937,7 +1940,7 @@ function FaceGrid({ frame, scale = 6, palette }: FaceGridProps) {
     for (let x = 0; x < SIZE; x++) {
       const ch = row[x] || '.';
       const c = (palette && palette[ch]) || PAL[ch];
-      if (!c || c === 'transparent') continue;
+      if (!c || c === TRANSPARENT) continue;
       cells.push(
         <Box
           key={`${x}-${y}`}
@@ -1970,13 +1973,15 @@ type AnimFaceProps = {
 };
 
 function AnimFace({ frames, schedule, scale = 6, paused, palette }: AnimFaceProps) {
+  const animationsDisabled = useAnimationsDisabled();
+  const effectivePaused = paused || animationsDisabled;
   const [step, setStep] = useState(0);
   useEffect(() => {
-    if (paused) return;
+    if (effectivePaused) return;
     const cur = schedule[step % schedule.length];
     const t = setTimeout(() => setStep((s) => s + 1), cur.ms);
     return () => clearTimeout(t);
-  }, [step, schedule, paused]);
+  }, [step, schedule, effectivePaused]);
   const cur = schedule[step % schedule.length];
   const frame = frames[cur.name] || frames.idle;
   return <FaceGrid frame={frame} scale={scale} palette={palette} />;

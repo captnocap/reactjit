@@ -13,7 +13,7 @@ export const dexBreadcrumbsSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-breadcrumbs/default",
       title: "Dex Breadcrumbs",
-      source: "cart/component-gallery/components/dex-breadcrumbs/DexBreadcrumbs.tsx",
+      source: "cart/app/gallery/components/dex-breadcrumbs/DexBreadcrumbs.tsx",
       status: 'ready',
       summary: 'Compact path crumb row for selected data locations.',
       tags: ["data-explorer", "atom"],

@@ -8,7 +8,7 @@ export const bubbleScatterplotSection = defineGallerySection({
     defineGalleryStory({
       id: 'bubble-scatterplot/default',
       title: 'Bubble Scatterplot',
-      source: 'cart/component-gallery/components/bubble-scatterplot/BubbleScatterplot.tsx',
+      source: 'cart/app/gallery/components/bubble-scatterplot/BubbleScatterplot.tsx',
       status: 'draft',
       variants: [
         {

@@ -58,7 +58,7 @@ function entry(id: string, title: string, source: string, render: () => any, tag
 export const menuListBasicSection = entry(
   'menu-list-basic',
   'Menu · A1 · List with caret',
-  'cart/component-gallery/components/menu-list-basic/MenuListBasic.tsx',
+  'cart/app/gallery/components/menu-list-basic/MenuListBasic.tsx',
   () => <MenuListBasic rows={menuEntryMockData} />,
   TAGS_LIST,
 );
@@ -66,7 +66,7 @@ export const menuListBasicSection = entry(
 export const menuListKeyedSection = entry(
   'menu-list-keyed',
   'Menu · A3 · Keyed list',
-  'cart/component-gallery/components/menu-list-keyed/MenuListKeyed.tsx',
+  'cart/app/gallery/components/menu-list-keyed/MenuListKeyed.tsx',
   () => <MenuListKeyed rows={menuEntryMockData} />,
   TAGS_LIST,
 );
@@ -74,7 +74,7 @@ export const menuListKeyedSection = entry(
 export const menuListMarkerSection = entry(
   'menu-list-marker',
   'Menu · A5 · Sliding marker',
-  'cart/component-gallery/components/menu-list-marker/MenuListMarker.tsx',
+  'cart/app/gallery/components/menu-list-marker/MenuListMarker.tsx',
   () => <MenuListMarker rows={menuEntryMockData} />,
   TAGS_LIST,
 );
@@ -83,7 +83,7 @@ export const menuListMarkerSection = entry(
 export const menuPieSection = entry(
   'menu-pie',
   'Menu · B2 · Pie wedges',
-  'cart/component-gallery/components/menu-pie/MenuPie.tsx',
+  'cart/app/gallery/components/menu-pie/MenuPie.tsx',
   () => <MenuPie rows={menuEntryMockData} />,
   TAGS_RADIAL,
 );
@@ -91,7 +91,7 @@ export const menuPieSection = entry(
 export const menuFanSection = entry(
   'menu-fan',
   'Menu · B4 · Fan',
-  'cart/component-gallery/components/menu-fan/MenuFan.tsx',
+  'cart/app/gallery/components/menu-fan/MenuFan.tsx',
   () => <MenuFan rows={menuEntryMockData} />,
   TAGS_RADIAL,
 );
@@ -100,7 +100,7 @@ export const menuFanSection = entry(
 export const menuGridSquareSection = entry(
   'menu-grid-square',
   'Menu · C1 · 4-up tiles',
-  'cart/component-gallery/components/menu-grid-square/MenuGridSquare.tsx',
+  'cart/app/gallery/components/menu-grid-square/MenuGridSquare.tsx',
   () => <MenuGridSquare rows={menuEntryMockData} />,
   TAGS_GRID,
 );
@@ -108,7 +108,7 @@ export const menuGridSquareSection = entry(
 export const menuBrickSection = entry(
   'menu-brick',
   'Menu · C3 · Brick',
-  'cart/component-gallery/components/menu-brick/MenuBrick.tsx',
+  'cart/app/gallery/components/menu-brick/MenuBrick.tsx',
   () => <MenuBrick rows={menuEntryMockData} />,
   TAGS_GRID,
 );
@@ -116,7 +116,7 @@ export const menuBrickSection = entry(
 export const menuMasonrySection = entry(
   'menu-masonry',
   'Menu · C5 · Masonry',
-  'cart/component-gallery/components/menu-masonry/MenuMasonry.tsx',
+  'cart/app/gallery/components/menu-masonry/MenuMasonry.tsx',
   () => <MenuMasonry rows={menuEntryMockData} />,
   TAGS_GRID,
 );
@@ -125,7 +125,7 @@ export const menuMasonrySection = entry(
 export const menuSpineLeftSection = entry(
   'menu-spine-left',
   'Menu · D1 · Left rail + preview',
-  'cart/component-gallery/components/menu-spine-left/MenuSpineLeft.tsx',
+  'cart/app/gallery/components/menu-spine-left/MenuSpineLeft.tsx',
   () => <MenuSpineLeft rows={menuEntryMockData} />,
   TAGS_RAIL,
 );
@@ -133,7 +133,7 @@ export const menuSpineLeftSection = entry(
 export const menuRibbonSection = entry(
   'menu-ribbon',
   'Menu · D2 · Ribbon tabs',
-  'cart/component-gallery/components/menu-ribbon/MenuRibbon.tsx',
+  'cart/app/gallery/components/menu-ribbon/MenuRibbon.tsx',
   () => <MenuRibbon rows={menuEntryMockData} />,
   TAGS_RAIL,
 );
@@ -141,7 +141,7 @@ export const menuRibbonSection = entry(
 export const menuDockSection = entry(
   'menu-dock',
   'Menu · D3 · Bottom dock',
-  'cart/component-gallery/components/menu-dock/MenuDock.tsx',
+  'cart/app/gallery/components/menu-dock/MenuDock.tsx',
   () => <MenuDock rows={menuEntryMockData} />,
   TAGS_RAIL,
 );
@@ -149,7 +149,7 @@ export const menuDockSection = entry(
 export const menuMarqueeSection = entry(
   'menu-marquee',
   'Menu · D4 · Marquee ticker',
-  'cart/component-gallery/components/menu-marquee/MenuMarquee.tsx',
+  'cart/app/gallery/components/menu-marquee/MenuMarquee.tsx',
   () => <MenuMarquee rows={menuEntryMockData} />,
   TAGS_RAIL,
 );
@@ -158,7 +158,7 @@ export const menuMarqueeSection = entry(
 export const menuDossierSection = entry(
   'menu-dossier',
   'Menu · E1 · Dossier fan',
-  'cart/component-gallery/components/menu-dossier/MenuDossier.tsx',
+  'cart/app/gallery/components/menu-dossier/MenuDossier.tsx',
   () => <MenuDossier rows={menuEntryMockData} />,
   TAGS_CARD,
 );
@@ -166,7 +166,7 @@ export const menuDossierSection = entry(
 export const menuFolderSection = entry(
   'menu-folder',
   'Menu · E2 · File folder',
-  'cart/component-gallery/components/menu-folder/MenuFolder.tsx',
+  'cart/app/gallery/components/menu-folder/MenuFolder.tsx',
   () => <MenuFolder rows={menuEntryMockData} />,
   TAGS_CARD,
 );
@@ -175,7 +175,7 @@ export const menuFolderSection = entry(
 export const menuCliTreeSection = entry(
   'menu-cli-tree',
   'Menu · F2 · CLI tree',
-  'cart/component-gallery/components/menu-cli-tree/MenuCliTree.tsx',
+  'cart/app/gallery/components/menu-cli-tree/MenuCliTree.tsx',
   () => <MenuCliTree rows={menuEntryMockData} />,
   TAGS_DIAG,
 );
@@ -183,7 +183,7 @@ export const menuCliTreeSection = entry(
 export const menuFlowSection = entry(
   'menu-flow',
   'Menu · F3 · Linear flow',
-  'cart/component-gallery/components/menu-flow/MenuFlow.tsx',
+  'cart/app/gallery/components/menu-flow/MenuFlow.tsx',
   () => <MenuFlow rows={menuEntryMockData} />,
   TAGS_DIAG,
 );
@@ -192,7 +192,7 @@ export const menuFlowSection = entry(
 export const menuDepthSection = entry(
   'menu-depth',
   'Menu · G1 · Depth tiers',
-  'cart/component-gallery/components/menu-depth/MenuDepth.tsx',
+  'cart/app/gallery/components/menu-depth/MenuDepth.tsx',
   () => <MenuDepth rows={menuEntryMockData} />,
   TAGS_SPATIAL,
 );
@@ -200,7 +200,7 @@ export const menuDepthSection = entry(
 export const menuTerminalSection = entry(
   'menu-terminal',
   'Menu · G2 · Terminal prompt',
-  'cart/component-gallery/components/menu-terminal/MenuTerminal.tsx',
+  'cart/app/gallery/components/menu-terminal/MenuTerminal.tsx',
   () => <MenuTerminal rows={menuEntryMockData} />,
   TAGS_SPATIAL,
 );
@@ -208,7 +208,7 @@ export const menuTerminalSection = entry(
 export const menuConsoleSection = entry(
   'menu-console',
   'Menu · G3 · Control panel',
-  'cart/component-gallery/components/menu-console/MenuConsole.tsx',
+  'cart/app/gallery/components/menu-console/MenuConsole.tsx',
   () => <MenuConsole rows={menuEntryMockData} />,
   TAGS_SPATIAL,
 );
@@ -216,7 +216,7 @@ export const menuConsoleSection = entry(
 export const menuCurtainSection = entry(
   'menu-curtain',
   'Menu · G4 · Curtain reveal',
-  'cart/component-gallery/components/menu-curtain/MenuCurtain.tsx',
+  'cart/app/gallery/components/menu-curtain/MenuCurtain.tsx',
   () => <MenuCurtain rows={menuEntryMockData} />,
   TAGS_SPATIAL,
 );
@@ -225,7 +225,7 @@ export const menuCurtainSection = entry(
 export const menuBarcodeSection = entry(
   'menu-barcode',
   'Menu · H2 · Barcode',
-  'cart/component-gallery/components/menu-barcode/MenuBarcode.tsx',
+  'cart/app/gallery/components/menu-barcode/MenuBarcode.tsx',
   () => <MenuBarcode rows={menuEntryMockData} />,
   TAGS_WEIRD,
 );
@@ -233,7 +233,7 @@ export const menuBarcodeSection = entry(
 export const menuPeriodicSection = entry(
   'menu-periodic',
   'Menu · H3 · Periodic',
-  'cart/component-gallery/components/menu-periodic/MenuPeriodic.tsx',
+  'cart/app/gallery/components/menu-periodic/MenuPeriodic.tsx',
   () => <MenuPeriodic rows={menuEntryMockData} />,
   TAGS_WEIRD,
 );
@@ -241,7 +241,7 @@ export const menuPeriodicSection = entry(
 export const menuTypeStackSection = entry(
   'menu-type-stack',
   'Menu · H5 · Type stack',
-  'cart/component-gallery/components/menu-type-stack/MenuTypeStack.tsx',
+  'cart/app/gallery/components/menu-type-stack/MenuTypeStack.tsx',
   () => <MenuTypeStack rows={menuEntryMockData} />,
   TAGS_WEIRD,
 );

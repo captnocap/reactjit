@@ -13,7 +13,7 @@ export const providerSection = defineGallerySection({
     defineGalleryDataStory({
       id: "provider/catalog",
       title: "Provider",
-      source: "cart/component-gallery/data/provider.ts",
+      source: "cart/app/gallery/data/provider.ts",
       format: 'data',
       status: 'draft',
       tags: ["catalog", "connection"],

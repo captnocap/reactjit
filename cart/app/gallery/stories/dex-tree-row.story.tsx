@@ -13,7 +13,7 @@ export const dexTreeRowSection = defineGallerySection({
     defineGalleryStory({
       id: "dex-tree-row/default",
       title: "Dex Tree Row",
-      source: "cart/component-gallery/components/dex-tree-row/DexTreeRow.tsx",
+      source: "cart/app/gallery/components/dex-tree-row/DexTreeRow.tsx",
       status: 'ready',
       summary: 'Hierarchical row atom with indentation guides, disclosure state, value, and type badge.',
       tags: ["data-explorer", "atom"],

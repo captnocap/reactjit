@@ -184,7 +184,7 @@ const BINARY_EXTENSIONS = new Set([
 ]);
 
 const SAMPLE_PATH_CANDIDATES = [
-  'cart/component-gallery/components/ast-quilt/AstQuilt.tsx',
+  'cart/app/gallery/components/ast-quilt/AstQuilt.tsx',
   'runtime/primitives.tsx',
   'package.json',
   'tests/component-gallery.autotest',

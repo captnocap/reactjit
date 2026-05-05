@@ -8,7 +8,7 @@ export const stripBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'strip-badge/default',
       title: 'Strip Badge',
-      source: 'cart/component-gallery/components/controls-specimen/StripBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/StripBadge.tsx',
       status: 'ready',
       summary: 'Multi-segment inline strip for compact route, state, and value tags.',
       tags: ['controls', 'badge', 'atom'],

@@ -13,7 +13,7 @@ export const budgetSection = defineGallerySection({
     defineGalleryDataStory({
       id: "budget/catalog",
       title: "Budget",
-      source: "cart/component-gallery/data/budget.ts",
+      source: "cart/app/gallery/data/budget.ts",
       format: 'data',
       status: 'draft',
       tags: ["budget", "policy", "spending"],

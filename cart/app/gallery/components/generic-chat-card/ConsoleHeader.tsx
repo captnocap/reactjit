@@ -21,7 +21,7 @@ export function ConsoleHeader({ title, pathology, achievement, trust, note, mode
         gap: 0,
         backgroundColor: CHAT_CARD.panel,
         borderWidth: 1,
-        borderColor: '#4a4238',
+        borderColor: 'theme:inkGhost',
         borderRadius: 4,
         overflow: 'hidden',
       }}

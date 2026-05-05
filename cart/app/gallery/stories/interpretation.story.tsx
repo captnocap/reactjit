@@ -13,7 +13,7 @@ export const interpretationSection = defineGallerySection({
     defineGalleryDataStory({
       id: "interpretation/catalog",
       title: "Interpretation",
-      source: "cart/component-gallery/data/interpretation.ts",
+      source: "cart/app/gallery/data/interpretation.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

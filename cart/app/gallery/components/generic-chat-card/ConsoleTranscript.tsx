@@ -92,7 +92,7 @@ export function ConsoleTranscript({ blocks, attachment }: { blocks: TranscriptBl
         <Box
           style={{
             borderTopWidth: 1,
-            borderColor: '#3a2a1e',
+            borderColor: 'theme:rule',
             backgroundColor: CHAT_CARD.panelDeep,
           }}
         >

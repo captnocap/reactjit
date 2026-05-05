@@ -2,13 +2,15 @@
 
 Living index of every file under `cart/app/` — what each one is, how it's wired, and what's still pending. Format is per-file: a status word (Stub / WIP / Complete) + a checklist. "Complete" means *complete for what it is meant to do today*, not "feature-complete forever". Line numbers are best-effort and drift quickly; treat them as hints, not contracts.
 
-The app is a router-driven cart with a **three-state shell** — see **Animation principles → Input-strip shell morph (GOLDEN)** for the canonical description. Top window chrome (titlebar + nav + window controls) plus a persistent supervisor `<InputStrip>` that morphs between two slots (full-width bottom bar / docked side panel) based on `(routeMode, inputFocal)`. Routes register at `/`, `/settings`, `/about`, and `/activity/<id>`; each declares `mode: 'full' | 'side'` metadata. An `OnboardingProvider` wraps the route tree.
+The app is a router-driven cart with a **three-state shell** — see **Animation principles → Input-strip shell morph (GOLDEN)** for the canonical description. Top window chrome (titlebar + nav + window controls) plus a persistent supervisor `<InputStrip>` that morphs between two slots (full-width bottom bar / docked side panel) based on `(routeMode, inputFocal)`. Routes currently register at `/`, `/settings`, `/settings/customize`, `/activity/sweatshop`, `/composer`, `/character`, and `/gallery`; each declares or derives `mode: 'full' | 'side'` metadata. An `OnboardingProvider` wraps the route tree.
 
 Two parallel state mechanisms drive the shell:
 - **IFTTT bus** (`app:navigate`) — input-strip token submissions fire here so every future input tier (@-token catalog, router model, supervisor session) hits the same handler the router subscribes to. Bus events are for *intents* that other components might want to observe.
 - **Module-level stores** — `cart/app/shell.tsx` (`useInputFocal()` / `setInputFocal()`) and the runtime variant store. Activities call these directly when the state is genuinely shared across components, not an event.
 
-**All theme-touching styling lives in `cart/component-gallery/components.cls.ts`** — every surface in cart/app is a classifier (`<S.AppChrome>`, `<S.AppHello>`, gallery menu atoms, etc.). There is no `theme.js` shim; if you find yourself reaching for `tokenColor` or hex literals, add a classifier in `components.cls.ts` instead. Active/inactive variants are separate classifiers (e.g. `AppNavLink` / `AppNavLinkActive`); the JSX picks one. Dynamic per-render values (animation opacity, slide marginTop, fixed home-menu stage size) flow as inline `style={{...}}` overrides — `mergeUserProps` in `runtime/classifier.tsx` merges user style over the classifier's resolved style.
+**All theme-touching styling lives in `cart/app/gallery/components.cls.ts`** — every surface in cart/app is a classifier (`<S.AppChrome>`, `<S.AppHello>`, gallery menu atoms, etc.). There is no `theme.js` shim; if you find yourself reaching for `tokenColor` or hex literals, add a classifier in `components.cls.ts` instead. Active/inactive variants are separate classifiers (e.g. `AppNavLink` / `AppNavLinkActive`); the JSX picks one. Dynamic per-render values (animation opacity, slide marginTop, fixed home-menu stage size) flow as inline `style={{...}}` overrides — `mergeUserProps` in `runtime/classifier.tsx` merges user style over the classifier's resolved style.
+
+**Runtime theme reassignment is token-level, not component-level.** `/settings/customize` edits color token overrides for the active component-gallery theme. The override layer lives in `cart/app/gallery/gallery-theme.ts`: it reads/writes the JSON map at localstore key `component-gallery-theme-token-overrides`, applies overrides after flattening the active theme's token categories, then calls `setTokens(...)` so all `theme:NAME` classifier references update during runtime. This is the only sanctioned place for user-entered color strings; component code still uses `theme:` tokens and classifiers.
 
 ---
 
@@ -35,7 +37,7 @@ Pick the technique by the *shape* of the thing being revealed:
 
 - **Card / box borders (preferred — adopt this everywhere it fits)** — animated dashed border via `borderDashOn` / `borderDashOff` / `borderDashWidth` (any Box accepts these — `framework/border_dash.zig` walks a flattened rounded-rect perimeter). Two modes:
   - **One-shot border trace** — animate `borderDashOn` from 0 to the rect's perimeter and `borderDashOff` from perimeter to 0; a single dash extends around the corners. **Use this as the hover effect for list items, menu rows, and any pressable surface** — the trace fires on pointer-enter and reverses on leave. Cheap, doesn't re-render the element body, and reads as "this thing is now selectable."
-  - **Continuous marching flow** — static dash pattern + `borderFlowSpeed: <px/sec>` (negative reverses). **Use this for activity / attention-grabbing states** — a card processing in the background, an unread item, a primary CTA waiting for input. This is the GenericCardShell pattern (`cart/component-gallery/components/generic-card/GenericCardShell.tsx`).
+  - **Continuous marching flow** — static dash pattern + `borderFlowSpeed: <px/sec>` (negative reverses). **Use this for activity / attention-grabbing states** — a card processing in the background, an unread item, a primary CTA waiting for input. This is the GenericCardShell pattern (`cart/app/gallery/components/generic-card/GenericCardShell.tsx`).
   - Both demoed in `cart/list_lab/` "border" scene.
 - **SVG paths** (icons, signatures, diagrams, charts) — reactive `d` recomputation. Compute the path's total arc length, then per frame emit a `d` string truncated to `t * arcLength` and let `<Graph.Path d={...}>` re-render. Mount `<Graph>` with `originTopLeft` so coordinates anchor at the container's top-left rather than centered. Demoed in `cart/list_lab/` "trace" scene. The framework has `svg_path.zig:drawStrokePartial` implemented but not yet wired to a JS prop — when a `drawProgress: 0..1` prop lands on `<Canvas.Path>` / `<Graph.Path>` this collapses to a single-prop API.
 - **Continuous stroke flow on a path** — `flowSpeed: <px/sec>` on `<Canvas.Path>`. Glow pulses slide along the stroke. Use for "this path is alive / signaling," not for one-shot reveals.
@@ -73,7 +75,7 @@ Three resolved shell states. The persistent `<InputStrip>` morphs between them v
 - **TO BAR** (variant `'side'` → `null`): variant flip + ALL morphs in PARALLEL. No sequencing — sequencing the bottom morph first (page retract) before the input expand introduced a perceived 600ms delay before the input animated, because the page-retract step is too subtle to register. BottomInputBar's `theme:bg` covers the bottom strip while the page content retracts behind it, so they overlap cleanly.
 - **No variant change** (A↔C, where the input stays in the bar but the side panel grows/shrinks): just animate whichever morphs differ. `startTween` is a no-op when from===to.
 
-**Single source of truth:** `APP_BOTTOM_BAR_H` is exported from `cart/component-gallery/components.cls.ts`. The `AppBottomInputBar` classifier owns its own `height: APP_BOTTOM_BAR_H`; the cart imports the same constant for routes' paddingBottom calc. Never inline a height fallback in cart code — the regression that bites is that the input strip's natural height changes (added/removed chip rows, etc.), the cart's local fallback drifts out of sync, and the page reflow stops aligning.
+**Single source of truth:** `APP_BOTTOM_BAR_H` is exported from `cart/app/gallery/components.cls.ts`. The `AppBottomInputBar` classifier owns its own `height: APP_BOTTOM_BAR_H`; the cart imports the same constant for routes' paddingBottom calc. Never inline a height fallback in cart code — the regression that bites is that the input strip's natural height changes (added/removed chip rows, etc.), the cart's local fallback drifts out of sync, and the page reflow stops aligning.
 
 **Architectural invariant — useRoute placement.** Hooks that subscribe to `<Router>` (and the variant store, and the focal store) MUST run inside `<Router>`'s subtree. App is split into a thin shell (mounts `TooltipRoot > OnboardingProvider > Router > NavigationBus > ShellBody`) and `<ShellBody>` (everything route-aware). If you collapse them back into one component the route changes won't trigger re-renders and the morph will look like it never fires — only the page-area content will swap.
 
@@ -118,7 +120,7 @@ The bar is *transparent*. The page bg is what shows where the bar's input doesn'
 
 **Sub-nav promotion (Phase B):**
 
-Routes that previously held an in-page sub-nav (settings: Profile / Preferences / Providers / Defaults / Voice / Embedding / Database / Privacy / Onboarding) now lift that sub-nav into the HUD. The sub-nav stacks at the top of the same column as the assistant rail — settings nav above, AssistantChat in the middle (`flexGrow:1`), InputStrip pinned to the bottom — so the left side of the screen reads as one continuous chrome instead of "assistant + adjacent column."
+Routes that previously held an in-page sub-nav now lift that sub-nav into the HUD. Settings currently exposes User / Customize / Providers / Models / Actions / Data / Privacy / About. The sub-nav stacks at the top of the same column as the assistant rail — settings nav above, AssistantChat in the middle (`flexGrow:1`), InputStrip pinned to the bottom — so the left side of the screen reads as one continuous chrome instead of "assistant + adjacent column."
 
 Active section is a shell-level store: `useSettingsSection()` in `cart/app/shell.tsx` (mirrors the `useInputFocal` pattern). The page reads it; the HUD-rendered `<SettingsNav />` reads + writes it.
 
@@ -140,9 +142,9 @@ The pattern is reusable. To promote another route's sub-nav:
 ### App shell — `index.tsx` — WIP
 
 CHECKLIST:
-- Purpose: Cart entry. Boots the gallery theme, mounts the providers (`TooltipRoot > OnboardingProvider > Router > NavigationBus > ShellBody`), and houses the three-state shell machinery in `ShellBody`. Registers the `/`, `/settings`, `/about`, and `/activity/sweatshop` routes. The `ROUTES` table carries `mode: 'full' | 'side'` per entry; `ShellBody` derives `headingTo` from `(routeMode, inputFocal)` and runs the morph machinery on changes (see **Animation principles → Input-strip shell morph (GOLDEN)** for the full description). `NavigationBus` (no DOM output) subscribes to `app:navigate` on the IFTTT bus and converts emitted paths into `nav.push(...)` calls so every input tier fires the same event the router subscribes to.
+- Purpose: Cart entry. Boots the gallery theme, mounts the providers (`TooltipRoot > OnboardingProvider > Router > NavigationBus > ShellBody`), and houses the three-state shell machinery in `ShellBody`. Registers the `/`, `/settings`, `/settings/customize`, `/activity/sweatshop`, `/composer`, `/character`, and `/gallery` routes. The `ROUTES` table carries `mode: 'full' | 'side'` per top-level entry; settings descendants derive side mode via `route.path.startsWith('/settings')`. `ShellBody` derives `headingTo` from `(routeMode, inputFocal)` and runs the morph machinery on changes (see **Animation principles → Input-strip shell morph (GOLDEN)** for the full description). `NavigationBus` (no DOM output) subscribes to `app:navigate` on the IFTTT bus and converts emitted paths into `nav.push(...)` calls so every input tier fires the same event the router subscribes to.
 - isRoute: FALSE
-- Route: N/A (registers `/`, `/settings`, `/about`, `/activity/sweatshop` inside the `<Router>`; ROUTES table also carries the `mode` axis the shell reads)
+- Route: N/A (registers `/`, `/settings`, `/settings/customize`, `/activity/sweatshop`, `/composer`, `/character`, `/gallery` inside the `<Router>`; ROUTES table also carries the `mode` axis the shell reads)
 - hasDatashape: FALSE
 - Datashape: consumes `onboarding/state.jsx` (`useOnboarding`); subscribes to the IFTTT bus event `app:navigate` (payload = path string) via `NavigationBus`; reads route via `useRoute()` and focal via `useInputFocal()` from `cart/app/shell.tsx`; reads variant via `useActiveVariant()` from `runtime/theme.tsx` (variant is the lagging render state — which slot hosts the input — flipped at the right moment in the morph)
 - exposedDatashapes: `onb.step`, `onb.totalSteps`, `onb.setStep`, `onb.complete`, `onb.loading`, `onb.tourStatus`, `onb.acceptTour`, `onb.declineTour`
@@ -151,14 +153,14 @@ CHECKLIST:
   - `onboardingActive = !onb.loading && !onb.complete` swaps step cubes for route nav links on the right side of the chrome
   - `showTour = !onboardingActive && onb.tourStatus === 'pending'` — drops the tour banner into the right cluster (BEFORE the nav row, after the brand) once Step5 has called `markComplete()`. Banner unmounts on accept / decline.
   - `ConditionalInputStrip` renders only when `!onb.loading && onb.complete` — bottom supervisor strip stays hidden during onboarding.
-  - **Shell state derivation** — `routeMode = ROUTES.find(r => r.path === route.path)?.mode ?? 'full'`, then `headingTo = deriveHeadingTo(routeMode, focal)` returning `'home' | 'activity-docked' | 'activity-focal'`. The `useEffect([headingTo])` dispatches morphs via the `TARGETS` table; same-mode route navigations don't change `headingTo`, so the effect doesn't fire and only the page-area content swaps.
+  - **Shell state derivation** — settings paths are forced to side mode (`route.path.startsWith('/settings') ? 'side' : ...`), otherwise `routeMode = ROUTES.find(r => r.path === route.path)?.mode ?? 'full'`; then `headingTo = deriveHeadingTo(routeMode, focal)` returning `'home' | 'activity-docked' | 'activity-focal'`. The `useEffect([headingTo])` dispatches morphs via the `TARGETS` table; same-mode route navigations don't change `headingTo`, so the effect doesn't fire and only the page-area content swaps.
   - **Variant flip pivot** — TO PANEL (`null → 'side'`): morph "shrink" first (input + side parallel), variant flip on input completion, then bottom morph. TO BAR (`'side' → null`): variant flip + ALL morphs in PARALLEL. No-variant-change (A↔C): just animate whichever morphs differ.
   - `NavigationBus` subscribes once at mount; `useIFTTT('app:navigate', cb)` validates the payload is a string starting with `/` before calling `nav.push(payload)`.
-- Components: `TooltipRoot`, `OnboardingProvider`, `Router`, `NavigationBus`, `ShellBody`, `Route`, `IndexPage`, `SettingsPage`, `AboutPage`, `SweatshopPage`, `Chrome`, `NavLink`, `StepCubes`, `TourBanner`, `ConditionalInputStrip`, `InputStrip`
+- Components: `TooltipRoot`, `OnboardingProvider`, `Router`, `NavigationBus`, `ShellBody`, `Route`, `IndexPage`, `SettingsPage`, `SweatshopPage`, `ComposerPage`, `CharacterPage`, `GalleryPage`, `Chrome`, `NavLink`, `StepCubes`, `TourBanner`, `ConditionalInputStrip`, `InputStrip`, `AssistantChat`
 - Atoms: `Box`, `Pressable`, `Text`, `S.AppBottomInputBar`, `S.AppSideMenuInput`, plus all the legacy chrome atoms (`S.AppChrome`, `S.AppChromeBrandRow`, etc. — see commit `3bad2f07d` for the slot classifiers' contract)
 - isUsingTheme: TRUE — every surface goes through a classifier in `components.cls.ts`
 - hasIcons: TRUE
-- Icons: `Home`, `Settings`, `Info`, `Minimize`, `Maximize`, `X`
+- Icons: `Home`, `Settings`, `LayoutGrid`, `User2`, `Minimize`, `Maximize`, `X`
 - hasAnimation: TRUE — three RAF-driven snapshot tweens (`inputMorph` / `sideMorph` / `bottomMorph`) coordinate with the variant flip per the GOLDEN section. Tour banner uses its own animation timeline (separate machinery).
 - Animations: see **Animation principles → Input-strip shell morph (GOLDEN)**. Tour banner: mounts at `markComplete()`, holds invisible until `TOUR_BANNER_FADE_DELAY_MS = 1400ms`, then fades in over `TOUR_BANNER_FADE_MS = 500ms`.
 - TODO:
@@ -166,7 +168,7 @@ CHECKLIST:
   - Once a real tour is wired, `acceptTour()` should arm the overlay; today it just hides the banner.
   - Decide whether `ConditionalInputStrip` should render in onboarding's later steps. Today it's all-or-nothing on `complete`.
 - PROBLEMS:
-  - **Shell vertical budget shared with the bar.** `APP_BOTTOM_BAR_H` (in `cart/component-gallery/components.cls.ts`) is the height of the input bar AND drives the routes wrapper's `paddingBottom` in states A and C. The strip's natural `minHeight: 206` (`CommandComposerFrame`, in the same file) is the lower bound; `APP_BOTTOM_BAR_H = 226` is a small over-allocation that the classifier's `justifyContent: 'flex-end'` absorbs. They're related but not the same number — change them together.
+  - **Shell vertical budget shared with the bar.** `APP_BOTTOM_BAR_H` (in `cart/app/gallery/components.cls.ts`) is the height of the input bar AND drives the routes wrapper's `paddingBottom` in states A and C. The strip's natural `minHeight: 206` (`CommandComposerFrame`, in the same file) is the lower bound; `APP_BOTTOM_BAR_H = 226` is a small over-allocation that the classifier's `justifyContent: 'flex-end'` absorbs. They're related but not the same number — change them together.
   - **Architectural invariant: `<ShellBody>` MUST be inside `<Router>`.** `useRoute()` reads RouterContext; if a hook in App's body (App is the Router's parent) calls it, route changes don't trigger re-renders and the morph never fires. Splitting App into thin App + ShellBody is the fix; don't collapse it back. (See GOLDEN regression "morph never fires on route change".)
 
 ---
@@ -186,7 +188,7 @@ CHECKLIST:
   - `submit()` is a no-op on empty/whitespace input (`text.trim().length === 0`)
   - Per-keystroke `resolveTokens(draft)` drives the chip preview; on submit the token list is recomputed off the trimmed `draftRef.current` so the chips and the dispatched events agree even with mid-string edits
   - Submit fires one `busEmit('app:navigate', token.path)` per matched route token, in source order; `NavigationBus`'s subscriber (in `index.tsx`) is the single subscriber that converts each emit into a `nav.push(...)`
-- Components: `CommandComposerHeader`, `CommandComposerFooter`, `CommandComposerChip` (all from `cart/component-gallery/components/command-composer/`), `TextInput`
+- Components: `CommandComposerHeader`, `CommandComposerFooter`, `CommandComposerChip` (all from `cart/app/gallery/components/command-composer/`), `TextInput`
 - Atoms: `S.CommandComposerFrame`, `S.CommandComposerMain`, `S.CommandComposerPromptRows`, `S.CommandComposerPromptFlow`, `S.CommandComposerActionRow`, `S.CommandComposerShortcutGroup`, `S.CommandComposerIconButton`, `S.CommandComposerIconText`, `S.CommandComposerSend`, `S.CommandComposerActionText`
 - isUsingTheme: TRUE — every surface is a gallery classifier; the embedded `<TextInput>` overrides only with `theme:` tokens (transparent background, `theme:ink` color, no hex literals)
 - hasIcons: TRUE (via `CommandComposerChip` — the gallery component handles `iconForChip` based on chip prefix; `⌁` → `GitBranch` for the live branch chip, no icon for `@`-prefixed token chips)
@@ -229,9 +231,10 @@ CHECKLIST:
 - hasAnimation: FALSE
 - Animations: —
 - TODO:
-  - Add `@settings` now that the `/settings` route exists. `@sweatshop` / `@gallery` / `@chatbot` wait for the cartridge ABI to mount those inline.
+  - `@sweatshop` / `@composer` / `@gallery` / `@chatbot` wait for token-catalog cleanup. `/composer` and `/gallery` are real routes now; the token catalog has not caught up.
   - Add the `{ type: 'app'; id: string }` variant when cartridges are mountable — `InputStrip.submit()` will branch on `token.type` to fire either `app:navigate` (route) or `app:open` (app).
   - Lift the catalog to a persisted gallery row when third-party cartridges can register their own tokens at install time. Until then, cart code is the authority.
+- LANDED: `@home`, `@settings`, `@character` point at live routes. `@about` is now stale because the `/about` route was removed from `index.tsx`; remove or retarget it when the token catalog is cleaned up. Add `@composer` and `@gallery` next.
 - PROBLEMS:
   - Catalog can drift from the actual route list. If a token's `path` no longer matches a registered route, `nav.push(path)` silently lands on an empty Route slot. Add a build-time check against the routes registered in `index.tsx` once the route catalog is extracted to a shared constant.
   - `@-token` names share namespace across types (route / app / command). When the catalog grows, collision becomes a real concern — first-match-wins or explicit prefixes (`@route:home` vs `@app:sweatshop`) are the next decisions.
@@ -283,28 +286,58 @@ CHECKLIST:
 
 ---
 
-### Settings page — `settings/page.jsx` — WIP
+### Settings page — `settings/page.tsx` — WIP
 
 CHECKLIST:
-- Purpose: `/settings` route. Mode `'side'` — the route enters HUD state B (assistant rail visible). The page is now single-column `theme:bg1` content; the section sub-nav (Profile / Preferences / Providers / Defaults / Voice / Embedding / Database / Privacy / Onboarding) is rendered by the shell at the top of the assistant rail (see **Animation principles → HUD / iframe split** for the pattern). Each section reads/writes the gallery data graph through `useCRUD` against the `app` namespace (User, Settings, Privacy, Connection rows).
+- Purpose: `/settings` route family. Mode `'side'` — `/settings` and `/settings/customize` enter HUD state B (assistant rail visible). The page is single-column `theme:bg1` content; the section sub-nav (User / Customize / Providers / Models / Actions / Data / Privacy / About) is rendered by the shell at the top of the assistant rail (see **Animation principles → HUD / iframe split** for the pattern). Data-backed sections read/write the gallery data graph through `useCRUD` against the `app` namespace (User, Settings, Privacy, Connection, Model rows). Customize reads the active component-gallery theme and writes token color overrides through `cart/app/gallery/gallery-theme.ts`.
 - isRoute: TRUE
-- Route: `/settings`
-- hasDatashape: TRUE (consumes/writes User, Settings, Privacy, Connection via `useCRUD`)
-- Datashape: User (`user_local`), Settings (`settings_default`), Privacy (`privacy_default`), Connection rows scoped by `settingsId === SETTINGS_ID`; consumes onboarding state for the Onboarding section.
+- Route: `/settings`, `/settings/customize`
+- hasDatashape: TRUE (consumes/writes User, Settings, Privacy, Connection, Model via `useCRUD`; Customize consumes/writes gallery theme token overrides)
+- Datashape: User (`user_local`), Settings (`settings_default`), Privacy (`privacy_default`), Connection rows scoped by `settingsId === SETTINGS_ID`, Model rows; Customize override map `Record<runtimeTokenName, colorString>` persisted at localstore key `component-gallery-theme-token-overrides`.
 - exposedDatashapes: `SettingsNav` (named export — rendered by `index.tsx`'s ShellBody at the top of the assistant rail), `SettingsPage` (default export — single-column content)
-- Hooks: `useOnboarding`, `useSettingsSection` (shell-level active-section store), `useHudInsets` (page applies `insets.bottom` to its scroll content's `paddingBottom`), `useCRUD` (one per row type), `useState`, `useEffect`, `useMemo`, `useRef`
+- Hooks: `useSettingsSection` (shell-level active-section store), `useHudInsets` (page applies `insets.bottom` to its scroll content's `paddingBottom`), `useRoute` (sets Customize active when path is `/settings/customize`), `useNavigate` (SettingsNav pushes `/settings/customize` for Customize, `/settings` for the rest), `useCRUD` (one per row type), `useState`, `useEffect`
 - Conditions:
   - Active section comes from `useSettingsSection()` (shell-level store) — page reads, `SettingsNav` reads + writes via `setActive`
+  - `/settings/customize` forces `settingsSection = 'customize'` on mount/path change
+  - SettingsNav path behavior is intentionally shallow: Customize gets a real child route, all other sections stay on `/settings` and are selected by the shell store
   - Each section dispatches off `active === '<id>'` for its render
-- Components: `SettingsNav` (HUD rail entry), `ProfileSection`, `PreferencesSection`, `ProvidersSection`, `DefaultsSection`, `VoiceSection`, `EmbeddingSection`, `DatabaseSection`, `PrivacySection`, `OnboardingSection`
+- Components: `SettingsNav` (HUD rail entry), `UserRoute`, `CustomizeRoute`, `ProvidersRoute`, `ModelsRoute`, `ActionsRoute`, `DataRoute`, `PrivacyRoute`, `AboutRoute`
 - Atoms: `Box`, `Pressable`, `ScrollView`, `S.Caption`, `S.Title`, `S.Body`, `S.NavPill`, `S.NavPillActive`
 - isUsingTheme: TRUE — page wrapper paints `theme:bg1` edge-to-edge into the iframe slot; nav paints `theme:bg` (matches the rail above)
 - hasIcons: FALSE (route nav icon comes from `index.tsx`, not the page body)
 - Icons: —
 - hasAnimation: FALSE
 - Animations: —
-- TODO: see open threads — real probes for API / Local providers; UX for default provider/model selection per connection.
-- PROBLEMS: none specific to this file. The page is no longer the stub it was — the stub doc here was preserved verbatim while the actual page grew; this rewrite catches the doc up to the HUD-rail split (2026-05-02) but the section-by-section CHECKLISTs for each panel are still owed.
+- TODO: see open threads — real probes for API / Local providers; UX for default provider/model selection per connection; richer Customize controls once numeric style-token reassignment is in scope.
+- PROBLEMS: Settings child routes are only partially path-addressable today. `/settings/customize` is real because it needs a shareable Customize path; User/Providers/Models/Actions/Data/Privacy/About still use `/settings` plus the shell-local section store.
+
+### Settings customize route — `settings/routes/customize.tsx` — WIP
+
+CHECKLIST:
+- Purpose: Theme reassigner for component-gallery color tokens. Lists editable string color tokens from the active gallery theme's merged token categories, shows the runtime token name (`bg`, `accentHot`, `paperRule`, etc.), displays the base value, and lets the user assign an override that applies immediately.
+- isRoute: FALSE (mounted inside `SettingsPage`; addressable through `/settings/customize` selecting the settings section)
+- Route: `/settings/customize` via `SettingsPage`
+- hasDatashape: TRUE
+- Datashape: `GalleryThemeTokenOverrides = Record<string, string>` stored under localstore key `component-gallery-theme-token-overrides`
+- exposedDatashapes: none; consumes `useGalleryTheme()` from `cart/app/gallery/gallery-theme.ts`
+- Hooks: `useMemo`, `useGalleryTheme`
+- Conditions:
+  - Only string values that look like colors are editable (`#`, rgb/rgba, hsl/hsla, or `transparent`)
+  - `fontMono` and `fontSans` are intentionally excluded even though they are string tokens
+  - Empty override text deletes the override; the field then shows the base value as placeholder and the runtime falls back to the active theme
+  - `Clear` removes the whole override map and re-pushes the active theme
+- Components: `Section`, `Field`, `Input`, local `TokenRow`, local `Swatch`
+- Atoms: `Box`, `S.Card`, `S.Body`, `S.Caption`, `S.ButtonOutline`, `S.ButtonOutlineLabel`
+- isUsingTheme: TRUE — UI chrome uses `theme:` tokens; the swatch `backgroundColor` is the user/base token value being inspected
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: FALSE
+- Animations: —
+- TODO:
+  - Add validation feedback for malformed color strings. Today invalid strings are persisted and passed through to runtime token resolution.
+  - Add numeric style-token reassignment if users need spacing/radius/type controls.
+  - Add category grouping once the token list grows beyond one screen.
+- PROBLEMS: Color override persistence uses the legacy single-key `__store_get` / `__store_set` localstore surface inside `gallery-theme.ts`, matching active gallery theme persistence. It is not a `useCRUD` row, so it will not show up in settings data export until a theme-preferences row lands.
 
 ---
 
@@ -331,64 +364,129 @@ CHECKLIST:
 
 ---
 
-### About page — `about/page.jsx` — Stub
+### Composer page — `composer/page.tsx` — WIP
 
 CHECKLIST:
-- Purpose: `/about` route. Currently just a placeholder card that proves the second route works.
+- Purpose: `/composer` route. First in-app pass of the UI authoring canvas described in `docs/11-composer.md`: a Figma-style page canvas where the canonical state is an editable `SNode` tree, not generated DOM or opaque screenshots. The route lives inside the app shell in side mode, with a left atom library rail, center `Canvas`, right inspector/layers column, and bottom code drawer. The canvas output is intentionally composer-native primitives (`Page`, `Box`, `Text`, `Pressable`, `GalleryAtom`) so the emitted JSX is visible and selectable.
 - isRoute: TRUE
-- Route: `/about`
-- hasDatashape: FALSE
-- Datashape: —
-- exposedDatashapes: —
-- Hooks: —
-- Conditions: —
-- Components: —
-- Atoms: `Box`, `S.Page`, `S.Card`, `S.Title`, `S.Body`
-- isUsingTheme: TRUE (via classifiers)
-- hasIcons: FALSE
-- Icons: —
+- Route: `/composer` (`mode: 'side'` in `index.tsx`)
+- hasDatashape: TRUE (local composer draft shape, not `useCRUD`)
+- Datashape:
+  - `ComposerDoc` stored through the host store at `composer:draft:default`; index metadata stored at `composer:drafts`
+  - `ComposerDoc.pages: SNode[]`, `selection: string[]`, `viewport: { x, y, zoom }`
+  - `SNode` fields: `kind`, `name`, `galleryId`, `shapeId`, `text`, `bg`, `color`, `width`, `height`, `padding`, `gap`, `flexDirection`, `alignH`, `alignV`, `x`, `y`, `children`
+  - `PaletteAtom` derived from primitives plus `cart/app/gallery/stories` sections, grouped through `gallery/taxonomy.ts`
+- exposedDatashapes: none public yet; all state is page-local and persisted as one draft record
+- Hooks: `useState`, `useEffect`, `useMemo`, `useRef`, `useIFTTT`
+- Conditions:
+  - `loadDoc()` restores the saved draft; invalid/missing drafts fall back to one blank page.
+  - `saveDoc()` autosaves the normalized draft after edits (500ms debounce).
+  - `normalizeDoc()` guarantees unique ids, removes invalid selection ids, and upgrades old empty `GalleryAtom` records into editable child templates.
+  - Blank page creation is intentionally blank: no starter text/box scaffold is inserted.
+  - New pages use `nextPagePosition()` so frames spread horizontally on the canvas instead of stacking on top of each other.
+  - Pages render as `Canvas.Node`; native drag handles move the page and `onMove` persists `x/y` back into the draft.
+  - The bottom-center actionbar is mounted inside `Canvas.Clamp`, so it stays fixed to the viewport instead of panning with the canvas.
+  - Only the base tools stay on the actionbar: select, pan, draw, box, text, button, copy, paste, duplicate, delete, group, ungroup, page.
+  - The full atom/gallery catalog is tucked into the left rail menu (`ALL`, `PRIM`, `SHAPE`, `UI`, `HIDE/OPEN`) instead of crowding the toolbar.
+  - The canvas content does **not** inherit cockpit classifiers. Authored `Box`/`Text`/`Pressable` styles are stored as node values (`bg`, `color`, spacing, dimensions) so a composed app does not have to undo the composer shell's theme.
+  - Selecting a row or canvas primitive normally sets a single selection. Multi-selection is deliberate, currently from `Ctrl/Cmd+A` scoped to the active page's children.
+  - The layers panel lists pages and nested children through the existing gallery `LayerRow` atom, so each row gets `LayerThumbnail`, `LayerVisibilityToggle`, `LayerLockToggle`, `StripBadge`, opacity/fill badges, and selected-state chrome. Active rows expose inline `UP`, `DN`, `OUT`, `IN`, `DEL` controls; duplicate/copy controls live only on the actionbar.
+  - Page rows are selectable and deletable; the editor no longer forces a permanent default 320px page/layer to remain.
+  - `removeNodes()` deletes the whole current selection; `groupSelection()` groups siblings under a new Box; `ungroupSelection()` lifts a selected group's children back to the parent.
+  - Clipboard copy writes `reactjit/composer-nodes` JSON to the host clipboard when available and keeps an in-memory fallback. Paste inserts pages as pages, non-pages into the selected container/parent.
+  - Keyboard handling is scoped away from focused inputs: `Ctrl/Cmd+A` select scoped layers, `Delete/Backspace` delete, `Esc` clear selection, `Ctrl/Cmd+C/V/D` copy/paste/duplicate, `Ctrl/Cmd+G` group, `Ctrl/Cmd+Shift+G` ungroup, `Alt+Up/Down` reorder, `Alt+Left/Right` outdent/indent.
+  - The inspector keeps direct composer geometry/content controls, then embeds the gallery `LayerPropertiesPanel` for compositing controls (`LayerBlendModeControl`, `LayerOpacityControls`, mask range, thumbnail, badges). `StepSlider` drives spacing presets.
+  - The bottom code drawer emits only the selected element and its nested subtree via `emitNode()`, not the entire document, and renders each TSX line through the gallery `SyntaxHighlighter`.
+  - `FieldInput` tracks `onFocus/onBlur` so keyboard shortcuts do not fire while editing properties.
+  - A local `ComposerBoundary` catches render failures inside the composer and shows a contained composer error surface.
+- Components: `ComposerPage`, `ComposerBoundary`, `LayerTree`, `FieldInput`, `ColorSwatchRow`, `ActionBarButton`, `ActionBarDivider`, `RailTab`, `LayerRowButton`, `AlignButton`, `PropertyLabel`, `MiniPresetButton`, `LayerPropertiesPanel`, `LayerRow`, `StepSlider`, `SyntaxHighlighter`
+- Atoms: `Canvas`, `Canvas.Clamp`, `Canvas.Node`, `Box`, `Pressable`, `ScrollView`, `Text`, `TextInput`, `LayerToolButton`, `LayerThumbnail`, `LayerLockToggle`, `LayerVisibilityToggle`, `LayerBlendModeControl`, `LayerOpacityControls`, `StripBadge`
+- isUsingTheme: TRUE for composer chrome/inspector/layers via `S.*` classifiers and `theme:` tokens. Authored canvas content intentionally uses stored explicit style values so it stays app-agnostic.
+- hasIcons: TRUE
+- Icons: `MousePointer`, `Hand`, `PenLine`, `Square`, `Type`, `MousePointerClick`, `Copy`, `ClipboardPaste`, `BoxSelect`, `Trash2`, `Group`, `Ungroup`, `MonitorCheck`
 - hasAnimation: FALSE
 - Animations: —
-- TODO: decide what About actually shows (build/cart info, license, version, etc.)
-- PROBLEMS: none
+- TODO:
+  - Tool modes are visually present, but `pan` and `draw` are not fully wired as modal canvas behaviors yet.
+  - Gallery atoms currently decompose into composer-native editable templates by heuristic (chart/control/card/fallback), not by parsing the real gallery component source. This is deliberate for editability, but it is not a perfect inverse of every gallery story.
+  - Code drawer is still one-way selected-subtree emit. JSX→SNode parse-back from `docs/11-composer.md` is not landed in this pass.
+  - Drag-to-reparent, resize handles for child nodes, border/radius/shadow/animation/conditional/repeat bindings, and shape binding are still deferred.
+  - Draft management is one default draft plus an index record; no multi-draft picker/restore UI yet.
+  - Selection still depends on nested `Pressable` event behavior. If hit-testing bubbles unexpectedly, keep selection changes in one explicit path and avoid additive selection outside keyboard shortcuts.
+- PROBLEMS:
+  - The atom templates solve the "sticker" problem by making nested primitives editable, but they are generic approximations. A real component-to-editable-tree compiler is a separate project.
+  - The active layer controls are tiny and text-based (`UP`, `DN`, `OUT`, `IN`, `DEL`). They work, but will need icon/button polish once behavior stabilizes.
 
 ---
 
-### Character creator page — `character/page.tsx` — Stub
+### Gallery route — `gallery/index.tsx` — WIP
 
 CHECKLIST:
-- Purpose: `/character` route. Sims-style page where the user sculpts the assistant's voice — visual identity (name, displayName, avatarRef, voiceThumbnailRef, themeId), archetype seed, twelve dial sliders, quirks drawer, three small enums (relationshipStance / initiativeProfile / correctionStyle), boundary-rule Constraint pickers, knowledge-source list. Live preview message updates on every dial change. Save fires `system:character:saved` on the IFTTT bus; the shell subscribes and applies the new theme + classifier set. See `cart/app/docs/character/README.md` for the design corpus and `cart/app/recipes/character-creator.tsx` for the runtime composition.
-- isRoute: TRUE (planned — registered in `index.tsx`'s `ROUTES` table at `mode: 'side'`)
+- Purpose: `/gallery` route. Mounts the component gallery inside the app shell so the catalog is reachable from the main nav while the composer consumes the same registry as its atom source.
+- isRoute: TRUE
+- Route: `/gallery` (`mode: 'side'` in `index.tsx`)
+- hasDatashape: TRUE (gallery stories/data/theme registry, owned by the gallery package)
+- Datashape: `storySections`, gallery data shapes, active gallery theme state
+- exposedDatashapes: none from app shell; gallery owns its own registry/surface
+- Hooks: gallery-owned
+- Conditions: Route is side-mode so it enters the HUD/assistant rail layout like settings, character, and composer.
+- Components: `GalleryPage`
+- Atoms: gallery-owned
+- isUsingTheme: TRUE
+- hasIcons: TRUE (nav only)
+- Icons: `LayoutGrid` in app chrome
+- hasAnimation: gallery-owned
+- Animations: gallery-owned
+- TODO: Add `@gallery` token and decide whether the gallery should expose a compact picker mode for the composer instead of only the full route.
+- PROBLEMS: none known at the app-shell level.
+
+---
+
+### Character creator page — `character/page.tsx` — WIP
+
+CHECKLIST:
+- Purpose: `/character` route. Non-linear character workbench for sculpting the assistant's identity, voice, purpose, behavior, knowledge weighting, and light-fiction posture. The page is intentionally not a wizard: the user can jump directly between folder tabs (`Identity`, `Purpose`, `Voice Lab`, `Behavior`, `Knowledge`, `Fiction`) and edit one thing without walking through the whole surface. The center column presents a folder-tab document; the right rail is a persistent global readout with avatar preview, quick stats, voice meters, and manifest charts. See `cart/app/docs/character/README.md` for the design corpus and `cart/app/recipes/character-creator.tsx` for the runtime composition.
+- isRoute: TRUE (registered in `index.tsx`'s `ROUTES` table at `mode: 'side'`)
 - Route: `/character`
 - hasDatashape: TRUE
-- Datashape: reads/writes `Character` (`cart/component-gallery/data/character.ts`) via the planned character provider; reads `PersonalityDial`, `CharacterArchetype`, `CharacterQuirk`, `Constraint` catalogs; emits `system:character:saved` on the IFTTT bus
-- exposedDatashapes: `Character`, `CharacterArchetype`, `PersonalityDial`, `CharacterQuirk`, `Constraint`
-- Hooks: `useCRUD` (per shape, namespace `app`); `useIFTTT` for `system:character:saved`; planned `useActiveCharacter()` from `cart/app/character/state.tsx`
+- Datashape: reads/writes `CharacterRow` via `useCharacter()` from `cart/app/character/state.tsx` (one `useCRUD('character', …, { namespace: 'app' })`); reads catalog (`ARCHETYPES`, `DIALS`, `QUIRKS`, `STANCES`, `INITIATIVES`, `CORRECTIONS`, `BOUNDARY_RULES`, `TASK_DOMAINS`, `RELATIONSHIP_REGISTERS`, `USER_STATES`, `STAKE_PROFILES`, `KNOWLEDGE_SPECIALIZATIONS`, `DEFAULT_AVATAR`) from `cart/app/character/catalog.ts`
+- exposedDatashapes: `CharacterRow` (persisted shape: id, assistantId, settingsId, userId, status/visibility, name, displayName, bio, mask contract, archetypeId, dialValues, quirkIds, stance enums, boundaryRuleIds, task domains, relationship registers, user states, stake profile, knowledge weights, instruction buckets, negative mode, roleplay identity fields, custom properties, optional identity-continuity fields, version, timestamps)
+- Hooks: `useCharacter` (cart provider); `useState`; `useRef` (live-state reads inside `<TextInput>` `onChangeText` to avoid stale closures, per the Pressable-stale-closure rule); `useAnimationTimeline`; `useGradientWave`; `useScramble`
 - Conditions:
-  - Empty state (no Character row exists) shows the archetype picker first; once an archetype is picked the dials + quirks panel mounts populated.
-  - Live preview line is gated on `dialValues` changing — debounced to one resolve per ~200ms so the LLM-style preview is plausible cost.
-  - Save button is gated on at least `name` being non-empty.
-- Components: `ArchetypePicker`, `DialPanel`, `QuirkDrawer`, `StanceTriad`, `BoundaryRuleList`, `KnowledgeSourceList`, `LivePreviewLine`, `CharacterCard`
-- Atoms: gallery slider family (`bipolar-slider`, `discrete-slider`, `meter-slider`), `segmented-control`, `choice-list`, `intent-surface` (for the preview), `generic-card`, `preset-card`, `model-card` (for archetype cards), `tooltip-frame` (for dial axis hints), `circular-progress` (organic fit metric)
-- isUsingTheme: TRUE (classifiers only; `themeId` on the saved Character drives the active theme post-save)
-- hasIcons: TRUE
-- Icons: archetype icons (TBD), `Save`, `Trash`, `Plus`, `ChevronRight`
-- hasAnimation: TRUE — fade between archetype cards (Spring on entry, Fade on swap), dial slider tween on programmatic update (when archetype is changed; user-initiated drags are direct), card border-trace on save success
-- Animations: see app.md Animation principles. No new animation primitive.
+  - `c.loading` shows a single "Loading character…" line until the bootstrap useEffect resolves.
+  - Folder tabs are direct navigation, not step progression. Every tab can be entered independently and every section writes through the same provider.
+  - Selecting an archetype seeds dial values + quirkIds + stance/initiative/correction in one patch. Once any dial is touched afterward, the `archetypeId` pointer is mostly a starting-point label.
+  - `MoreOptionsButton` appears on archetypes, quirks, stance, and boundaries. It invokes the assistant through `askAssistant(promptForMoreOptions(kind))` so the model can generate fresh options without committing them to the static catalog.
+  - Archetype tiles are distributed through 25% column wrappers inside a max-width lane, avoiding a hard-coded tile width that leaves large side gaps.
+  - Voice dials have two render layers: featured `MeterSlider` readouts for the active few, and fixed non-wrapping 11-cell axis rows for the full bipolar matrix. The row math is explicit so theme changes do not push right-side labels/value readouts into another layout planet.
+  - Optional identity substrate fields are inert unless filled: relationship projection, continuity seeds, identity guardrails, recovery style, fallback deflections, deliberation/availability/delivery pattern.
+  - The right rail is global and non-scrollable: avatar/BlockFaces identity card, compact stats grid, `AxisReadout` voice card, and manifest charts stay visible on every tab.
+  - The center document wrapper uses content height (`flexGrow: 0`) so the page does not create a huge empty tail below the current tab's content.
+- Components: `CharacterPage`, `SaveBar`, `CharacterCard`, `IdentitySection`, `PurposeSection`, `VoiceLabSection`, `BehaviorSection`, `KnowledgeSection`, `FictionSection`, `ArchetypeSection`, `DialsSection`, `QuirksSection`, `StanceTriadSection`, `BoundariesSection`, `RelationshipProjectionSection`, `ContinuitySeedSection`, `IdentityIntegritySection`, `DeliveryPatternSection`, `RoleplayIdentitySection`, `CustomPropertiesSection`, `AvatarPreview`, `VoiceRailCard`, `ManifestChartsCard`, `MoreOptionsButton`, plus shared `Pill`, `Segmented`, and discrete-axis primitives co-located in the file
+- Atoms: `Box`, `Col`, `Row`, `Text`, `Pressable`, `TextInput`, `ScrollView` (runtime primitives); `<Avatar>` from `@reactjit/runtime/avatar`; runtime `Tooltip`; gallery atoms `AxisReadout`, `MeterSlider`, `BlockFaces`, `PopulationPyramid`, `Venn`; animated-text hooks `useGradientWave`, `useScramble`
+- isUsingTheme: TRUE — uses app theme tokens/classifiers for page surfaces, paper/document colors, tab text, rail panels, and accent colors. Preview backdrop swatches remain fixed local colors because they are avatar options, not app chrome.
+- hasIcons: FALSE — pills + segmented buttons only; no icons inside the page (the `User2` icon for the route nav lives in `index.tsx`).
+- Icons: —
+- hasAnimation: TRUE
+- Animations: page fade/stagger through `useAnimationTimeline`; animated manifest text in the rail through `useGradientWave` and `useScramble`; avatar preview and gallery atoms own their internal motion/visual state.
 - TODO:
-  - Build the `cart/app/character/state.tsx` provider mirroring `cart/app/onboarding/state.jsx` shape (one `useCRUD` per collection, `app` namespace, optimistic cache).
-  - Wire avatar / voice-thumbnail capture pipeline (open thread).
-  - Decide if the live preview is real-LLM or template-based for v1 (template-based gets to feedback faster).
+  - Wire `system:character:saved` IFTTT emit on Save. The recipe declares the event hook; the cart side just needs `busEmit('system:character:saved', { characterId })` in `state.tsx:save()`.
+  - Multi-character/persona picker and active-character pointer (`Assistant.activeCharacterId`).
+  - Compatibility/recompute view: honest read on how the current character and user manifest will work together.
+  - Personality drift detection: repeated user corrections should offer to adjust the character settings instead of staying case-by-case forever.
+  - Replace the static preview mannequin with a real avatar/profile-image pipeline and voice-thumbnail capture.
+  - Promote long optional identity fields to richer multi-line editors if the runtime text-area affordance stabilizes for this surface.
 - PROBLEMS:
-  - The data shapes ship in `cart/component-gallery/data/{character,personality-dial,character-archetype,character-quirk,character-compatibility}.ts` but the page has no implementation yet. Stories render the shapes in the gallery; `/character` is a stub route until the provider + page mount.
-  - Avatar / voice-thumbnail pipeline is unresolved; UI uses placeholders until that lands.
+  - Single-character only today — `CHARACTER_ID = 'char_default'` is hardcoded in `state.tsx`. Multi-character + active-pointer (`Assistant.activeCharacterId`) lands when the picker UI ships.
+  - Optional identity fields are currently single-line inputs even when the semantic value is essay-like.
+  - Catalog data is duplicated between `cart/app/character/catalog.ts` and `cart/app/gallery/data/{character-archetype,personality-dial,character-quirk,constraint}.ts`. Will collapse once a shared package boundary exists; mirrored by hand for now.
 
 ---
 
 ### Manifest page — `manifest/page.tsx` — Stub
 
 CHECKLIST:
-- Purpose: `/manifest` route. Personality Survey + manifest viewer. Surfaces the assistant's evolving read of the user (`UserManifest` from `cart/component-gallery/data/user-manifest.ts`), shows pending quiz cards (chat-loom intent trees rendered inline via `runtime/intent/render.RenderIntent`), shows the digest of high-confidence dimensions, surfaces friction alerts from the active `CharacterCompatibility` row, and runs the anomaly-detection re-check inline when a contradiction lands. Organic progress framing per PRD §5 ("still getting to know you" / "practically finishing each other's sentences") — no percentage bars.
+- Purpose: `/manifest` route. Personality Survey + manifest viewer. Surfaces the assistant's evolving read of the user (`UserManifest` from `cart/app/gallery/data/user-manifest.ts`), shows pending quiz cards (chat-loom intent trees rendered inline via `runtime/intent/render.RenderIntent`), shows the digest of high-confidence dimensions, surfaces friction alerts from the active `CharacterCompatibility` row, and runs the anomaly-detection re-check inline when a contradiction lands. Organic progress framing per PRD §5 ("still getting to know you" / "practically finishing each other's sentences") — no percentage bars.
 - isRoute: TRUE (planned)
 - Route: `/manifest`
 - hasDatashape: TRUE
@@ -418,7 +516,7 @@ CHECKLIST:
 
 ## Onboarding
 
-The 5-step onboarding seeds **declared** user traits into `User.preferences.accommodations[]` (Step 3 multi-select chips wired through `cart/app/onboarding/traits.js`). The **inferred** counterpart — what the assistant figures out about the user over time through quizzes and conversational moments — lives on `UserManifest` (`cart/component-gallery/data/user-manifest.ts`) and is built post-onboarding by the Personality Survey at `/manifest`. The two coexist and never fold; see [`cart/app/docs/character/03-manifest-as-evolving-read.md`](docs/character/03-manifest-as-evolving-read.md).
+The 5-step onboarding seeds **declared** user traits into `User.preferences.accommodations[]` (Step 3 multi-select chips wired through `cart/app/onboarding/traits.js`). The **inferred** counterpart — what the assistant figures out about the user over time through quizzes and conversational moments — lives on `UserManifest` (`cart/app/gallery/data/user-manifest.ts`) and is built post-onboarding by the Personality Survey at `/manifest`. The two coexist and never fold; see [`cart/app/docs/character/03-manifest-as-evolving-read.md`](docs/character/03-manifest-as-evolving-read.md).
 
 ### Onboarding step router — `onboarding/Onboarding.jsx` — Complete
 
@@ -677,7 +775,7 @@ CHECKLIST:
 - Route: —
 - hasDatashape: TRUE (multi-collection)
 - Datashape:
-  - **User** (`cart/component-gallery/data/user.ts`) — id `user_local`, holds `displayName`, `bio`, `configPath`, `preferences.accommodations[]`, `onboarding.{status,step,startedAt,completedAt,skippedAt,tourStatus}`
+  - **User** (`cart/app/gallery/data/user.ts`) — id `user_local`, holds `displayName`, `bio`, `configPath`, `preferences.accommodations[]`, `onboarding.{status,step,startedAt,completedAt,skippedAt,tourStatus}`
   - **Settings** (`settings.ts`) — id `settings_default`, holds `defaultConnectionId` + `defaultModelId` once `commitConnection` runs
   - **Privacy** (`privacy.ts`) — id `privacy_default`, seeded with sane defaults on first user creation
   - **Workspace** (`workspace.ts`) — id `ws_local`, `rootPath` from `__cwd` host fn, parent of every Goal row
@@ -710,7 +808,7 @@ CHECKLIST:
   - Replace canned model lists in `ApiKeyForm.probe` with a real HTTP call so `commitConnection` doesn't write a placeholder model id
   - When the homepage adds a "skipped mode" branch, stop hiding the tour banner via `tourStatus=null` and instead skip the offer purely via the `User.onboarding.status === 'skipped'` check
 - PROBLEMS:
-  - Schemas in `cart/component-gallery/data/*.ts` are JSON Schema documents, not runtime parsers — `useCRUD`'s `Schema<T>` contract is satisfied with identity passthrough today. Validation is the writer's responsibility. Lift to ajv-backed parsers when drift becomes a problem.
+  - Schemas in `cart/app/gallery/data/*.ts` are JSON Schema documents, not runtime parsers — `useCRUD`'s `Schema<T>` contract is satisfied with identity passthrough today. Validation is the writer's responsibility. Lift to ajv-backed parsers when drift becomes a problem.
   - Bootstrap reads four to five collections in sequence (User, Settings, Connection, Goal list, plus Workspace/Privacy on first-create). Cold-boot adds a few ms before the loading flag flips; tolerable for now but worth re-examining if it ever feels sluggish.
 
 ---
@@ -721,7 +819,7 @@ CHECKLIST:
 - Purpose: Module-level subscribe stores that the shell publishes and other parts of the cart consume. All follow the same `React.useSyncExternalStore` pattern (mirrors `runtime/theme.tsx`'s variant store).
   - **`inputFocal: boolean`** — `useInputFocal()` / `setInputFocal()` / `getInputFocal()`. Activities call `setInputFocal(true)` to take the persistent `<InputStrip>` into focal mode (state C in the GOLDEN shell state machine); `setInputFocal(false)` to release (state B). State PERSISTS across route changes — only the activity that took focus knows when it's done with it.
   - **`hudInsets: { bottom, left }`** — `useHudInsets()` / `setHudInsets(bottom, left)`. The shell publishes the animated bar reservation (and side rail width if/when pages opt in) each render tick from `ShellBody` (see **Animation principles → HUD / iframe split**). Pages consume `useHudInsets()` to apply matching internal padding so their bg paints edge-to-edge while their content stays clear of the HUD overlays.
-  - **`settingsSection: string`** — `useSettingsSection()` / `setSettingsSection()` / `getSettingsSection()`. The active /settings sub-section. The shell-rendered `<SettingsNav />` (top of the assistant rail) and the `<SettingsPage />` content body both subscribe; promoting the sub-nav to the HUD means active section can't live as page-local state anymore.
+  - **`settingsSection: string`** — `useSettingsSection()` / `setSettingsSection()` / `getSettingsSection()`. The active /settings sub-section (`user`, `customize`, `providers`, `models`, `actions`, `data`, `privacy`, `about`). The shell-rendered `<SettingsNav />` (top of the assistant rail) and the `<SettingsPage />` content body both subscribe; promoting the sub-nav to the HUD means active section can't live as page-local state anymore. `/settings/customize` also writes this store on mount so the URL and active rail state agree.
 - isRoute: FALSE
 - Route: —
 - hasDatashape: FALSE (each store is a plain JS value at module scope)
@@ -747,7 +845,7 @@ CHECKLIST:
 - Purpose: Single source of truth for the Step3 chip catalog. Each entry is `{ id, label, note }` — `label` is the chip text the user clicks, `note` is the worker-facing accommodation hint that lands in `User.preferences.accommodations[]` on lock-in. Also exports the helpers `traitsToAccommodations(ids)` and `accommodationsToTraits(accommodations)` that state.jsx uses to round-trip selections through disk. Extracted so Step3 (chip render) and state.jsx (id → accommodation row mapping) can both import without a circular dep.
 - isRoute: FALSE
 - Route: —
-- hasDatashape: TRUE (companion to `User.preferences.accommodations[]` in `cart/component-gallery/data/user.ts`)
+- hasDatashape: TRUE (companion to `User.preferences.accommodations[]` in `cart/app/gallery/data/user.ts`)
 - Datashape: produces `UserAccommodation` rows (`{ id: 'acc_<traitId>', label, note }`) — round-trippable via the `acc_` prefix scheme.
 - exposedDatashapes: `TRAITS` (the chip array), `TRAITS_BY_ID` (lookup map), `traitsToAccommodations(ids)`, `accommodationsToTraits(accommodations)`
 - Hooks: —
@@ -810,17 +908,52 @@ CHECKLIST:
 
 ---
 
-### Character + manifest provider — `character/state.tsx` — Stub
+### Character provider — `character/state.tsx` — WIP
 
 CHECKLIST:
-- Purpose: Mirror of `cart/app/onboarding/state.jsx` for the Character Creator + Personality Survey. One `useCRUD` per collection (`character`, `userManifest`, `quizSession`, `characterCompatibility`) in the same `app` namespace so a dev wipe clears everything cleanly. Holds the in-memory optimistic cache; exposes `useActiveCharacter()`, `useActiveManifest()`, `useCompatibility()`, `useQuizFeed()`. Future code, none today.
+- Purpose: In-memory optimistic cache + `useCRUD` write-through for the single Character row. Mirrors `cart/app/onboarding/state.jsx` shape: one collection (`character`) in the `app` namespace, hydrate on mount, every setter calls `patch()` which mirrors to the in-memory cache and the localstore. Provides `<CharacterProvider>` and `useCharacter()` to the Character workbench. The Manifest / QuizSession / CharacterCompatibility collections are deferred until the manifest page surfaces.
 - isRoute: FALSE
 - Route: —
 - hasDatashape: TRUE
-- Datashape: reads/writes `Character`, `UserManifest`, `QuizSession`, `CharacterCompatibility`; emits `system:character:saved`, subscribes to `manifest:updated` / `manifest:anomaly-detected`
-- exposedDatashapes: `Character`, `UserManifest`, `QuizSession`, `CharacterCompatibility`, `CharacterArchetype`, `PersonalityDial`, `CharacterQuirk`, `ManifestDimensionDef`
-- Hooks: `useCRUD`, `useIFTTT`, planned `useActiveCharacter`, `useActiveManifest`, `useCompatibility`, `useQuizFeed`
-- Conditions: bootstrap mirrors onboarding's pattern — read on mount, hydrate cache, follow `Settings.activeCharacterId` (planned field) to active Character.
+- Datashape: reads/writes `CharacterRow` (typed locally; mirrors `cart/app/gallery/data/character.ts` shape but stays cart-side until a shared types package exists). Stable id `char_default`; assistantId `assistant_default`; settingsId `settings_default`; userId `user_local`. Current row includes core identity, explicit assistant-mask authority, archetype/dial tuning, quirks, stance/initiative/correction, boundaries, task domains, relationship registers, user states, stakes, knowledge weights, instruction buckets (`do` / `prefer` / `avoid` / `never`), negative mode, roleplay identity, custom key/value properties, and optional identity-continuity fields. Gallery shape also declares `CharacterPromptSnapshot`, the compiled prompt-facing JSON block that should feed `src_character_snapshot`.
+- exposedDatashapes: `CharacterRow` plus `CharacterContextValue` (the setter surface)
+- Hooks: `useCRUD('character', passthrough, { namespace: 'app' })`; `useState`, `useEffect` for bootstrap; `useContext` via `useCharacter()`
+- Conditions:
+  - Bootstrap on mount: read `char_default` from store; if present, hydrate cache with `{ ...defaultCharacterRow(), ...existing, dialValues: dv, knowledgeWeights: kw }` so rows written before new fields/dials/weights were added still work; if absent, defaults stand and first setter call seeds the row.
+  - `setArchetype` is a *batch* patch — overwrites dialValues + quirkIds + stance/initiative/correction in one update. After the patch, the archetypeId pointer survives but is cosmetic.
+  - `setDialValue` clamps to `[0, 1]`.
+  - `toggleQuirk`, `toggleBoundaryRule`, `toggleTaskDomain`, `toggleRelationshipRegister`, and `toggleUserState` are membership flips; stance/initiative/correction/stakes and roleplay identity fields are direct value setters.
+  - `setKnowledgeWeight(domainId, value)` clamps to `[0, 1]`.
+  - Optional identity-continuity setters are direct string patches: `setUserIdentityToCharacter`, `setRelationshipType`, `setRelationshipContext`, `setContinuitySeed`, `setGhostHistorySeed`, `setIdentityGuardrails`, `setIdentityRecoveryStyle`, `setFallbackDeflections`, `setDeliberationProfile`, `setAvailabilityProfile`, `setDeliveryPattern`.
+  - `save()` bumps `version` and write-throughs but does NOT yet emit `system:character:saved` on the IFTTT bus (TODO).
+- Components: `CharacterProvider`
+- Atoms: —
+- isUsingTheme: FALSE
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: FALSE
+- Animations: —
+- TODO:
+  - Wire `busEmit('system:character:saved', { characterId })` in `save()` — the recipe at `cart/app/recipes/character-creator.tsx` declares the event hook; the shell subscriber lands when the theme-swap path is wired.
+  - Add provider variants for `userManifest` / `quizSession` / `characterCompatibility` once `/manifest` is scoped.
+  - Decide grain question (open thread): does Character switch with the active Settings profile, or is it User-grain with per-profile visibility?
+- PROBLEMS:
+  - Single-row only — `CHARACTER_ID = 'char_default'` is hardcoded. Multi-character + active-pointer (`Assistant.activeCharacterId`) lands when the picker UI ships.
+  - Local types duplicate the gallery shape's structure (intentionally, to avoid cart→cart imports). Will collapse to one source of truth when a shared types package exists.
+
+---
+
+### Character catalog — `character/catalog.ts` — Complete
+
+CHECKLIST:
+- Purpose: Co-located reference data the Character page reads: 12 archetypes (with `defaultDialValues`/`defaultQuirkIds`/default stance/initiative/correction), 38 bipolar dials, 8 quirks, the relationship-stance / initiative-profile / correction-style enum option lists, 5 sample boundary-rule labels, 38 task domains, 13 relationship registers, 14 user-state chips, 4 stake profiles, 10 knowledge specializations, and the `DEFAULT_AVATAR` `AvatarData` for the preview pane. Mirrors the gallery shapes (`cart/app/gallery/data/{character-archetype, personality-dial, character-quirk, constraint, avatar}.ts`) by hand; will converge on a shared package later.
+- isRoute: FALSE
+- Route: —
+- hasDatashape: FALSE (this is *catalog* data — the shape it mirrors is in the gallery)
+- Datashape: produces `Archetype[]`, `Dial[]`, `Quirk[]`, stance/initiative/correction option lists, `BoundaryRule[]`, `CatalogOption[]` groups, `KnowledgeSpecialization[]`, `DEFAULT_AVATAR: AvatarData`. Plus `defaultDialValues()` helper that derives a fresh `Record<dialId, number>` from the catalog defaults.
+- exposedDatashapes: `Archetype`, `Dial`, `Quirk`, `BoundaryRule`, `CatalogOption`, `KnowledgeSpecialization`, `RelationshipStance`, `InitiativeProfile`, `CorrectionStyle`, `ArchetypeId`
+- Hooks: —
+- Conditions: dial value defaults are baked at module scope; `defaultDialValues()` returns a fresh shallow copy each call so callers can mutate.
 - Components: —
 - Atoms: —
 - isUsingTheme: FALSE
@@ -829,9 +962,44 @@ CHECKLIST:
 - hasAnimation: FALSE
 - Animations: —
 - TODO:
-  - Land the provider file once `cart/app/character/page.tsx` and `cart/app/manifest/page.tsx` are scoped.
-  - Decide grain question (open thread): does Character switch with the active Settings profile, or is it User-grain with per-profile visibility?
-- PROBLEMS: stub — no implementation yet. Data shapes ship in `cart/component-gallery/data/`.
+  - Collapse to a single source of truth once a shared types/data package exists between cart and gallery.
+  - Keep assistant-generated "more" results runtime-only until there is a reviewed/user-owned extension table for catalog additions.
+- PROBLEMS:
+  - Hand-mirrored data drifts if the gallery's catalog grows. Today only the form consumes this; if other carts start reading the gallery shapes directly the duplication becomes a real pain.
+
+---
+
+### Assistant / Supervisor / Worker / Character data split — `gallery/data/{assistant,supervisor,worker,character}.ts` — WIP
+
+CHECKLIST:
+- Purpose: Four distinct runtime identities. `Assistant` is the durable long-term user-facing identity; `Character` is an Assistant-only presentation mask; `Supervisor` is the fixed task-local spec enforcer/orchestrator; `Worker` is the runtime executor owned by Supervisor. References connect the tables for querying; they do not imply the rows can become each other.
+- isRoute: FALSE
+- Route: —
+- hasDatashape: TRUE
+- Datashape:
+  - `Assistant`: long-term identity, user/settings references, activeCharacterId, defaultSupervisorId, manifest/goal memory policy, and authority flags that explicitly say it does not supervise workers and cannot become Supervisor/Worker.
+  - `Character`: assistantId-backed mask for Assistant only. Includes voice/personality/negative traits and compiled `CharacterPromptSnapshot`.
+  - `Supervisor`: assistantId-backed fixed task-local orchestrator. Keeps 15-30 minute task context policy, spec-enforcement authority, and `fixedCrew[]` slots.
+  - `Worker`: supervisorId-backed executor. Has `crewMode` (`fixed` / `spawned`) and `crewSlotId` for the fixed crew experiment. Worker has no Character reference.
+- exposedDatashapes: `Assistant`, `Supervisor`, `Worker`, `Character`, `CharacterPromptSnapshot`
+- Hooks: consumed through `useCRUD` when mounted by app surfaces; gallery stories expose static schemas/mock data
+- Conditions:
+  - `Character.assistantId -> Assistant.id`; Character never references Supervisor or Worker.
+  - `Supervisor.assistantId -> Assistant.id`; Supervisor can receive assistant briefings but cannot override Assistant and cannot become Assistant.
+  - `Worker.supervisorId -> Supervisor.id`; Worker receives assignment/spec slices, not Assistant character or Supervisor identity.
+  - `Supervisor.fixedCrew[].workerId -> Worker.id` supports the stable crew experiment without collapsing Worker into Supervisor.
+- Components: —
+- Atoms: —
+- isUsingTheme: FALSE
+- hasIcons: FALSE
+- Icons: —
+- hasAnimation: FALSE
+- Animations: —
+- TODO:
+  - Add `SupervisionSession` once task-local session state needs its own persisted lifecycle separate from the fixed Supervisor identity.
+  - Decide whether fixed crew is the default or an optional mode after the first orchestration prototype.
+- PROBLEMS:
+  - `Worker` still carries `parentWorkerId` / `childWorkerIds` for worker-to-worker delegation; those fields are no longer the Supervisor chain and should be used sparingly.
 
 ---
 
@@ -839,20 +1007,17 @@ CHECKLIST:
 
 The sections below are *forward-looking* plans, not file entries. They live here so the architecture and the work-not-yet-done are in one place; the per-file index above stays a clean per-file map.
 
-### Character creator page
+### Character creator follow-up scope
 
-The data shapes for the Character Creator ship today (`cart/component-gallery/data/{character,personality-dial,character-archetype,character-quirk,character-compatibility}.ts`) but the page implementation is the next phase. Scope:
+The Character page is live now; this section tracks the parts that remain follow-up rather than describing the already-shipped surface.
 
-- **Archetype picker.** Six cards (`Sage / Jester / Protector / Curator / Companion / Critic`), each previewing the archetype's voice with a one-line sample. Picking seeds the dials + quirks; the card border-traces on hover (gallery border-dash pattern).
-- **Dial panel.** Twelve `bipolar-slider` instances, one per `PersonalityDial`. Each dial shows leftLabel / rightLabel / axisDescription on hover via `tooltip-frame`. Mid-range values (0.15..0.85) show a "neutral" badge so the user knows the dial isn't contributing.
-- **Quirks drawer.** Multi-select chip list against `CharacterQuirk`, grouped by category. Locked quirks (per the unlock-table) appear dimmed with a badge listing the trigger.
-- **Stance / initiative / correction triad.** Three `segmented-control` instances, one per enum.
-- **Boundary rules picker.** A `choice-list` against the active settings' `Constraint` rows; the user picks which boundaries this character carries. New boundaries can be added inline (creates a new Constraint row scoped to the active settings).
-- **Knowledge sources.** A list of file/url/inline locators with add/remove affordances; pipeline TBD (see open threads).
-- **Live preview message.** A short sample reply rendered through `intent-surface` (or template-based for v1) that updates on every dial change. Debounced.
-- **Save → fires `system:character:saved`.** The shell subscribes and applies the new theme + classifier set per the character-creator recipe's event hook.
-
-Composition path: the runtime side is already declared by [`cart/app/recipes/character-creator.tsx`](recipes/character-creator.tsx). The page just authors / edits the `Character` row; saving fires the event hook the recipe declares.
+- **Save event.** `save()` still needs to emit `system:character:saved` so the shell can apply the character-creator recipe's event hook.
+- **Multiple personas.** Add an active-character pointer and a picker so different cartridges/contexts can use different assistants.
+- **Compatibility view.** Use the active character plus UserManifest to produce an honest "how we will work together" readout and suggested adjustments.
+- **Personality drift detection.** Repeated corrections like "shorter" or "push back more" should offer to change the Character row.
+- **User-owned catalog extension.** Assistant-generated "more" options are currently transient chat output; persisting them needs a reviewed extension table or explicit user save path.
+- **Avatar/profile pipeline.** Replace the v1 mannequin/default avatar with a real generated or assembled assistant embodiment.
+- **Richer optional identity editors.** Relationship projection, continuity, guardrails, deflections, and delivery patterns are optional and persisted, but currently edited through compact single-line fields.
 
 ### Personality Survey page
 
@@ -896,7 +1061,7 @@ The three-state shell (A / B / C) and the input morph machinery shipped in commi
 
 **Top-chrome reconciliation.** Today's `Chrome` carries brand + nav + window controls. In states B/C the side menu would normally replace the chrome's nav row; chrome reduces to brand + window controls. Decide whether the brand stays at the top or moves into the side menu's header.
 
-**Routing inside activities.** `/` / `/about` / `/settings` are page-sized. In activity mode they currently still render at the page level — should they instead live inside the `ActivityHost`? Likely yes for `/about` and `/settings` (they feel like activity-shaped surfaces); `/` probably stays as the home anchor.
+**Routing inside activities.** `/`, `/settings`, `/composer`, `/character`, and `/gallery` are page-sized routes. In activity mode they currently still render at the page level — should some instead live inside the `ActivityHost`? Likely yes for tool-shaped routes (`/composer`, `/gallery`, maybe `/settings`); `/` stays as the home anchor.
 
 **Open problems** (still open):
 - **InputStrip sizing in the 360w side dock.** `CommandComposerFrame` has `minHeight: 206`, `CommandComposerMain` has asymmetric `paddingLeft: 32, paddingRight: 24`. At 360w the strip looks chunky and the asymmetric padding is visible. `useBreakpoint` is window-scoped (not container-scoped), so the `sm` variant won't fire from a dock. Cheapest fix: a `compact` prop the shell sets explicitly when docked.
@@ -947,7 +1112,7 @@ CHECKLIST:
   - Decide notification copy ("Care to clarify?" was the user's phrasing — likely keeps it, but worth A/B'ing once we have telemetry).
   - Wire `comp_concern_structurer` into the upset path. The composition is already in the recipe stamp (`frag_concern_structurer` + `comp_concern_structurer`). Cart side: spawn a separate single-turn `claude_runner` session against that composition's system prompt, hand it the user's last message as the user-turn, capture the structured-concerns table, prepend to the writing turn's user-message, then fire the writer.
   - Decide the upset-detection heuristic. v1 can be cheap and blunt — token-based (presence of "??", ALL CAPS bursts, "this is exactly what I was worried about", explicit profanity) plus a length floor. v2 could be a small classifier turn against a frozen prompt. Don't over-engineer this; false positives on the structurer just cost an extra short turn (~$0.03) and never make the output worse — false negatives mean the writer doesn't get the structured-concerns prepend.
-  - Theme-bridge for the embedded chat-loom render. Today `runtime/intent/render` (and `cart/chat-loom.tsx`) carry hardcoded hex literals (`#0b1020`, `#1e293b`, `#f1f5f9`, …). Inside the cart/app shell that's a `no-color-drift` violation. Either route the intent renderer through `cart/component-gallery/components.cls.ts` classifiers (preferred), or wrap the rendered tree in an override that swaps the inline backgroundColor/color/borderColor to `theme:NAME` tokens. Do this as part of the deferred-clarify pass; don't expand the surface area of inline hex first.
+  - Theme-bridge for the embedded chat-loom render. Today `runtime/intent/render` (and `cart/chat-loom.tsx`) carry hardcoded hex literals (`#0b1020`, `#1e293b`, `#f1f5f9`, …). Inside the cart/app shell that's a `no-color-drift` violation. Either route the intent renderer through `cart/app/gallery/components.cls.ts` classifiers (preferred), or wrap the rendered tree in an override that swaps the inline backgroundColor/color/borderColor to `theme:NAME` tokens. Do this as part of the deferred-clarify pass; don't expand the surface area of inline hex first.
 - PROBLEMS:
   - **Cross-cuts the lock-in pass.** The activity gate is meaningless without persistence, because every reload would refire the notification. Land this *after* the onboarding lock-in.
   - **Activity-gate definition is the hard part.** "User has settled" is not a bright line — typing-quiet-for-N-seconds is the cheap version, but a user reading something on screen looks identical to an idle user. First version stays cheap; consider scroll/mouse signals later if false-fires are common.
@@ -984,7 +1149,7 @@ The lift / surface tags (`SURFACE`, `READ-ONLY`, `LIFT`, `IDLE` / `TOOL` / `STUC
 
 The `$ swarm audit --readers 3 --depth full` command preview that surfaces only in full mode is the gallery's `code-block` component (or a `S.CommandComposer*Mono` riff) — terminal-shaped, mono, theme-tinted. Pick `code-block` first; only fall back to a new mono classifier if the existing one carries chrome we don't want.
 
-**New classifiers needed (`cart/component-gallery/components.cls.ts` — do NOT inline):**
+**New classifiers needed (`cart/app/gallery/components.cls.ts` — do NOT inline):**
 
 Only what isn't covered by the above. Naming follows the `App<Surface>` convention already used by every other cart/app surface:
 
@@ -1002,7 +1167,7 @@ Only what isn't covered by the above. Naming follows the `App<Surface>` conventi
 **Datashape (TBD — sketch, not lock-in):**
 - `AssistantThread` — id, turns, model id, started/last-touched timestamps, optional anchored-activity id (so a thread can be "the sweatshop conversation").
 - `AssistantTurn` — `{ id, threadId, author: 'asst' | 'user', timestamp, body, surfaces?: ChatSurface[] }`. `body` is plain prose; surfaces are structured renders.
-- `ChatSurface` — discriminated union: `{ kind: 'audit' | 'fleet' | ... , props }`. Surfaces are the inline-form / card embeds the assistant emits — `IntentSurface` from `cart/component-gallery/components/intent-surface/` is the existing primitive for this and should be the renderer of choice (matches the deferred-clarify section's stance — emit chat-loom-shaped trees, parse via `runtime/intent/parser`, render via `runtime/intent/render`).
+- `ChatSurface` — discriminated union: `{ kind: 'audit' | 'fleet' | ... , props }`. Surfaces are the inline-form / card embeds the assistant emits — `IntentSurface` from `cart/app/gallery/components/intent-surface/` is the existing primitive for this and should be the renderer of choice (matches the deferred-clarify section's stance — emit chat-loom-shaped trees, parse via `runtime/intent/parser`, render via `runtime/intent/render`).
 - Persistence: `useCRUD` row(s) under namespace `app`, sibling to the onboarding row. Same pattern as `Goal`. Single canonical `AssistantThread` per cart instance (the "supervisor session"); switching activities does NOT spawn new threads — the same conversation continues.
 
 **Datashape decision: ONE thread or MANY?** Concept image text says "PERSISTENT · 14 TURNS" — a single rolling supervisor thread. v1 ships one. Multi-thread (per-activity / per-worker scoping) is a follow-up; the side-menu's "chat-history list" bullet implies it eventually, but v1 is one thread visible across all windows.
@@ -1046,7 +1211,7 @@ Only what isn't covered by the above. Naming follows the `App<Surface>` conventi
 - `cart/app/chat/AssistantSurface.tsx` — surface-card wrapper around `IntentSurface` / `GenericCardShell`. Owns the lift / read-only chrome.
 - `cart/app/chat/useAssistantChat.ts` — connection-router hook (follow-up commit).
 - `cart/app/chat/fixtures.ts` — v1 mock turns to drive the visual.
-- `cart/component-gallery/components.cls.ts` — new `AppChat*` classifiers per the list above.
+- `cart/app/gallery/components.cls.ts` — new `AppChat*` classifiers per the list above.
 
 ---
 
@@ -1061,17 +1226,34 @@ These need a coordinated touch — not localized to a single file.
 - **Goal popover copy** — Step5's tooltip text lives inline in `Step5.jsx` (`GOAL_TOOLTIP`). Move to a content / i18n layer once one exists; today there's no other natural home for it.
 - **Local chat path verification** — RESOLVED via the subprocess pivot. The link-time `extern "c"` rewrite hit a different wall (struct-ABI mismatch with whichever llama.cpp the linked .so was built against, plus the wgpu/Vulkan VkInstance fight reappeared once the cart actually got far enough to load tensors). Replaced with an out-of-process inference worker — see "Local chat: subprocess pivot" in Recently landed. The recipe at `cart/app/recipes/gemma-line-gate-for-claude-edits.{md,ts}` is still aspirational; rewriting it against the subprocess path is the next concrete step.
 - **Avatar + voice-thumbnail pipeline (Character)** — `Character.avatarRef` and `Character.voiceThumbnailRef` are opaque locators. Three viable paths (local-file upload, external URL, generated-from-prompt); the data shape is stable across all three so the pick can be deferred. UI uses placeholders until one lands. See `cart/app/docs/character/99-open-questions.md`.
-- **Character grain across profiles** — Character is profile-grain via `Settings.activeCharacterId` (planned field). Open whether a character should be visible across profiles or per-profile. Leaning: User-owned (already true via `character.userId`), per-profile *exposed* via a `Settings.sharedCharacterIds[]` opt-in. Deferred until multi-profile lands.
-- **Manifest privacy tier** — PRD §6 calls for per-dimension visibility ('visible' / 'anonymized' / 'hidden' / 'deletable'). Sketch: extend `Privacy` (`cart/component-gallery/data/privacy.ts`) with a `manifest` namespace mirroring the `tools` / `filesystem` shape; `src_user-manifest-snapshot` reads the tier and skips hidden dimensions. Deferred to a Privacy revision; data shapes here don't depend on the answer.
-- **Token registry @character / @manifest** — once the routes land, add the `@character` and `@manifest` route tokens to `cart/app/tokens.ts` so the input strip dispatches to them. Trivial — gated on the routes existing.
+- **Character grain across profiles** — Character is Assistant-grain via `Assistant.activeCharacterId`; Settings may still scope visibility/profile defaults. Open whether a character should be visible across profiles or per-profile. Leaning: User-owned (already true via `character.userId`), per-profile *exposed* via a `Settings.sharedCharacterIds[]` opt-in. Deferred until multi-profile lands.
+- **Manifest privacy tier** — PRD §6 calls for per-dimension visibility ('visible' / 'anonymized' / 'hidden' / 'deletable'). Sketch: extend `Privacy` (`cart/app/gallery/data/privacy.ts`) with a `manifest` namespace mirroring the `tools` / `filesystem` shape; `src_user-manifest-snapshot` reads the tier and skips hidden dimensions. Deferred to a Privacy revision; data shapes here don't depend on the answer.
+- **Token registry cleanup** — `@composer` and `@gallery` should be added now that both routes are registered. `@about` should be removed or retargeted because `/about` no longer exists. `@manifest` still waits for a real route. `@character` already points at a live route.
 
 ### Recently landed
 
 A short rolling log so cross-file work doesn't keep getting re-planned. Trim entries older than the last few weeks.
 
+- **Composer route + canvas authoring first pass** (2026-05-04) — moved the `docs/11-composer.md` plan into a real app route at `/composer` and registered it in the shell (`mode: 'side'`). Also registered `/gallery` as a side-mode route and removed the stale `/about` route from `index.tsx`. Main pieces:
+  - **Canvas substrate** — `composer/page.tsx` owns `ComposerDoc` + `SNode` state, persists one default draft through `__store_get/__store_set`, autosaves with a debounce, and normalizes ids/selection on every edit. Pages are `Canvas.Node`s with persisted `x/y/width/height`; new pages are blank and placed beside existing pages instead of stacked on top of each other.
+  - **Canvas clamp toolbar** — replaced the top toolbar with a bottom-center actionbar inside `Canvas.Clamp`. It uses the gallery layer-control button atom (`LayerToolButton`) plus runtime icons for select/pan/draw, Box/Text/Button creation, copy/paste/duplicate/delete, group/ungroup, and page creation.
+  - **Atom library rail** — moved the full primitive/gallery atom catalog off the toolbar into the left rail. Rail tabs are `ALL`, `PRIM`, `SHAPE`, `UI`, and `HIDE/OPEN`; the visible menu has search/filter and adds atoms to the current selection target.
+  - **Canvas content style isolation** — composer chrome uses app/gallery classifiers and `theme:` tokens, but authored canvas content is persisted as explicit node style values. Dropped Box/Text/Pressable content does not inherit cockpit chrome styling; gallery-source atoms are treated as editable composer templates.
+  - **Layers panel behavior** — layers live in the right inspector under properties with fixed space, render all pages and nested children, and expose `UP`, `DN`, `OUT`, `IN`, `DEL` inline on the active row. Removed duplicate layer-control buttons above the tree. Page rows can be selected/deleted; no permanent default layer/page is forced to survive.
+  - **Selection repairs** — click selection is single-selection by default; accidental additive multi-selection was removed. `Ctrl/Cmd+A` is the intentional multi-select path and is scoped to the active page's children (or the page itself if empty). `Esc` clears focus/selection. Nested child nodes remain reachable because parent gallery atoms with children render as containers, not opaque pressable previews.
+  - **Editing operations** — added copy/paste/duplicate/delete/group/ungroup and sibling reorder/outdent/indent. Clipboard writes/reads `reactjit/composer-nodes` JSON through the host clipboard when present, with an in-memory fallback.
+  - **Keyboard handling** — `useIFTTT` bindings: `Ctrl/Cmd+A`, `Delete`, `Backspace`, `Esc`, `Ctrl/Cmd+C/V/D`, `Ctrl/Cmd+G`, `Ctrl/Cmd+Shift+G`, `Alt+Up/Down`, `Alt+Left/Right`. Inputs set an `inputFocused` flag so shortcuts do not fire while typing.
+  - **Inspector polish** — properties panel gained stable field widths, page size presets, canvas-position fields for pages, spacing controls, background/text color swatches plus hex fields, row/column layout buttons, and a 3x3 alignment grid. The layers count now reports the real selection length.
+  - **Existing gallery atoms wired into composer** — the layer tree now renders through `LayerRow` (`LayerThumbnail`, lock/visibility toggles, `StripBadge`, opacity/fill badges); the inspector embeds `LayerPropertiesPanel` (`LayerBlendModeControl`, `LayerOpacityControls`, mask range, thumbnail/badge deck); spacing presets use `StepSlider`; the code drawer renders through `SyntaxHighlighter`.
+  - **Selected-subtree code drawer** — bottom code drawer now emits only the selected element and whatever is nested inside it via `emitNode()`, instead of dumping the whole document, and highlights the generated TSX line-by-line.
+  - **Gallery atom decomposition** — removed the story-render preview path that made gallery atoms behave like stickers. Dropped atoms now expand into editable child templates (charts → bars, controls → track/knob/value, cards/panels/rows → text/lines/action, shapes → mock field/action). Existing saved empty `GalleryAtom`s normalize into editable children and old short default heights are expanded to avoid clipping.
+  - **Crash containment** — fixed `FieldInput`'s missing `onFocus/onBlur` prop destructuring (`onFocus is not defined`) and wrapped the composer tree in `ComposerBoundary` so future render errors show a contained route-level failure instead of tearing down the app.
+  - **Validation** — `BUNDLE_FROM_HARNESS=1 CART_ROOT="$PWD" tools/v8cli scripts/cart-bundle.js "$PWD/cart/app/index.tsx" --out "$PWD/bundle-app.js"` passes. The only warning is the pre-existing duplicate `prompt` key in `cart/app/gallery/taxonomy.ts`.
+  - **Still open** — pan/draw are visible tool modes but not full modal canvas behaviors yet; gallery atom decomposition is heuristic rather than a true component-source inverse parser; code drawer is one-way emit with no parse-back; child resize handles, drag-to-reparent, shape binding, repeat/conditional, border/radius/shadow/animation, and a multi-draft picker remain future passes.
 - **Onboarding "lock-in" pass** (2026-04-29) — `state.jsx` writes through `useCRUD` (namespace `app`) into the gallery data graph: User (`user_local`), Settings (`settings_default`), Privacy (`privacy_default`), Workspace (`ws_local`), plus per-completion Connection + Goal rows. `User.onboarding.{status, step, startedAt, completedAt, skippedAt, tourStatus}` all persist.
 - **Three-state shell + input morph** (commits `3bad2f07d` → `6aa1cd24c`, 2026-05-01) — A/B/C state machine, route+focal driver axes, smoke-and-mirrors variant flip, GOLDEN regression list. Canonical reference: **Animation principles → Input-strip shell morph (GOLDEN)**. `git log --grep GOLDEN`.
 - **HUD / iframe split + settings sub-nav promotion** (commits `25910df18` (Phase A) → `0e49af62f` (Phase B), 2026-05-02) — fixed the `/settings` morph-flash regression. Phase A: bar bg → `theme:transparent`, routes wrapper drops `paddingBottom`, pages own internal `paddingBottom` via the new `useHudInsets()` store in `cart/app/shell.tsx`. Phase B: `SettingsNav` lifts out of the page tree and renders inside `S.AppSideMenuInput` at the top of the assistant rail, reading active section from a new `useSettingsSection()` shell store. Canonical reference: **Animation principles → HUD / iframe split**. Covers `cart/app/{index.tsx,shell.tsx,page.tsx,about/page.jsx,settings/page.jsx,sweatshop/page.tsx}`.
+- **Settings Customize + runtime theme token overrides** (2026-05-03) — added `/settings/customize` and the Customize settings section. `settings/routes/customize.tsx` edits component-gallery color token overrides; `cart/app/gallery/gallery-theme.ts` persists them at `component-gallery-theme-token-overrides` and applies them after the active gallery theme's flattened token categories are pushed into `runtime/theme.tsx`. This keeps app components classifier-only while allowing user-entered runtime colors.
 - **Local chat: subprocess pivot — full GPU inference inside cart/app** (commits `ea3e1654d` → `d2b1a3981`, 2026-05-02) — the in-process llama.cpp link-time path (entry just below) hit two compounding walls: (a) struct-ABI mismatch with whichever upstream commit our prebuilt `libllama_ffi.so` was built against — `llama_model_default_params()`'s 72-byte return struct shape was drifting under us, leaving garbage in `progress_callback` that triggered a `cancelled model load` mid-offload; (b) once we got past the struct issue, the original wgpu/Vulkan `VkInstance` fight was still there and killed the offload at the buffer-allocation boundary anyway. Pivoted to running inference in a separate process so each side gets its own `VkInstance` (see `framework/ffi/llm_worker.cpp`). Pieces:
   - `framework/ffi/llm_worker.cpp` — small C++ subprocess that loads a `.gguf` on Vulkan, talks to the cart over a line-delimited LOAD/CHAT/READY/TOK/DONE/ERR protocol on stdin/stdout. Sniffs the model's embedded Jinja chat template for known markers (gemma / chatml / llama2 / phi3) since llama.cpp's `apply_template` doesn't render full Jinja.
   - `framework/ffi/llama_headers/` — vendored `llama.h` + `ggml*.h` + `gguf.h` from llama.cpp upstream. Knows gemma4, qwen3.6, every current arch.

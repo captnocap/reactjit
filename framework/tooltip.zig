@@ -73,7 +73,7 @@ pub fn paintOverlay(measure_fn: layout.MeasureTextFn, win_w: f32, win_h: f32) vo
     if (!visible or text_ptr.len == 0) return;
 
     // Measure text to size the box
-    const metrics = measure_fn(text_ptr, FONT_SIZE, MAX_WIDTH, 0, 0, 0, false, false);
+    const metrics = measure_fn(text_ptr, FONT_SIZE, 0, MAX_WIDTH, 0, 0, 0, false, false);
     const box_w = metrics.width + PAD_H * 2;
     const box_h = metrics.height + PAD_V * 2;
 

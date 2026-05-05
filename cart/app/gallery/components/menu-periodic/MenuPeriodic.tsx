@@ -34,8 +34,8 @@ const LIVE: LiveCell[] = [
 const ROMAN: string[] = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 
 // Block tints — s-block (cols 0–1) cool, p-block (cols 2–6) warm.
-const BLOCK_BASE = ['#26221c', '#28231a', '#221c14', '#241c14', '#26200f', '#291f10', '#2a1c10'];
-const BLOCK_BORDER = '#3a342a';
+const BLOCK_BASE = ['theme:paperInk', 'theme:paperInk', 'theme:paperInk', 'theme:paperInk', 'theme:paperInk', 'theme:paperInk', 'theme:paperInk'];
+const BLOCK_BORDER = 'theme:paperRule';
 
 function EmptyTile({ row, col, t }: { row: number; col: number; t: number }) {
   const phase = t * 1.4 - col * 0.55 - row * 0.35;

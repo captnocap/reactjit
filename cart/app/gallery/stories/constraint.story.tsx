@@ -13,7 +13,7 @@ export const constraintSection = defineGallerySection({
     defineGalleryDataStory({
       id: "constraint/catalog",
       title: "Constraint",
-      source: "cart/component-gallery/data/constraint.ts",
+      source: "cart/app/gallery/data/constraint.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

@@ -65,40 +65,40 @@ function section(id: string, title: string, source: string, render: () => any) {
 export const commandComposerHeaderSection = section(
   'command-composer-header',
   'Command Composer Header',
-  'cart/component-gallery/components/command-composer/CommandComposerHeader.tsx',
+  'cart/app/gallery/components/command-composer/CommandComposerHeader.tsx',
   () => <CommandComposerHeader row={row} />,
 );
 
 export const commandComposerPromptLineSection = section(
   'command-composer-prompt-line',
   'Command Composer Prompt Line',
-  'cart/component-gallery/components/command-composer/CommandComposerPromptLine.tsx',
+  'cart/app/gallery/components/command-composer/CommandComposerPromptLine.tsx',
   () => <CommandComposerPromptLine row={row} />,
 );
 
 export const commandComposerFooterSection = section(
   'command-composer-footer',
   'Command Composer Footer',
-  'cart/component-gallery/components/command-composer/CommandComposerFooter.tsx',
+  'cart/app/gallery/components/command-composer/CommandComposerFooter.tsx',
   () => <CommandComposerFooter row={row} />,
 );
 
 export const commandComposerActionRailSection = section(
   'command-composer-action-rail',
   'Command Composer Action Rail',
-  'cart/component-gallery/components/command-composer/CommandComposerActionRail.tsx',
+  'cart/app/gallery/components/command-composer/CommandComposerActionRail.tsx',
   () => <CommandComposerActionRail modeGlyph={row.modeGlyph} sendLabel={row.sendLabel} />,
 );
 
 export const commandComposerChipSection = section(
   'command-composer-chip',
   'Command Composer Chip',
-  'cart/component-gallery/components/command-composer/CommandComposerChip.tsx',
+  'cart/app/gallery/components/command-composer/CommandComposerChip.tsx',
   () => (
     <AtomShelf>
       <AtomRow>
-        <CommandComposerChip chip={row.route} />
-        <CommandComposerChip chip={row.target} />
+        <CommandComposerChip chip={row.route!} />
+        <CommandComposerChip chip={row.target!} />
         <CommandComposerChip chip={row.branch} />
       </AtomRow>
       <AtomRow>
@@ -113,7 +113,7 @@ export const commandComposerChipSection = section(
 export const commandComposerShortcutSection = section(
   'command-composer-shortcut',
   'Command Composer Shortcut',
-  'cart/component-gallery/components/command-composer/CommandComposerShortcut.tsx',
+  'cart/app/gallery/components/command-composer/CommandComposerShortcut.tsx',
   () => (
     <AtomRow>
       {row.leftShortcuts.map((shortcut) => (

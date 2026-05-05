@@ -13,7 +13,7 @@ export const tooltipDataRowSection = defineGallerySection({
     defineGalleryStory({
       id: "tooltip-data-row/default",
       title: "Tooltip Data Row",
-      source: "cart/component-gallery/components/tooltip-data-row/TooltipDataRow.tsx",
+      source: "cart/app/gallery/components/tooltip-data-row/TooltipDataRow.tsx",
       status: 'ready',
       summary: 'Tooltip row adapter over the existing KeyValueBadge atom.',
       tags: ["card", "table", "data"],

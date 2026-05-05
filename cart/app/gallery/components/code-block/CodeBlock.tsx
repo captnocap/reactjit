@@ -1,9 +1,9 @@
 // CodeBlock — top-level gallery component bound to the `CodeSnippet` data shape.
 //
 // Composed atoms:
-//   - cart/component-gallery/components/code-line-number/CodeLineNumber.tsx
-//   - cart/component-gallery/components/syntax-highlighter/SyntaxHighlighter.tsx
-//   - cart/component-gallery/components/code-copy-button/CodeCopyButton.tsx
+//   - cart/app/gallery/components/code-line-number/CodeLineNumber.tsx
+//   - cart/app/gallery/components/syntax-highlighter/SyntaxHighlighter.tsx
+//   - cart/app/gallery/components/code-copy-button/CodeCopyButton.tsx
 
 import { classifiers as S } from '@reactjit/core';
 import { Box, ScrollView, Text } from '@reactjit/runtime/primitives';

@@ -11,17 +11,17 @@ export const spreadsheetSection = defineGallerySection({
   },
   kind: 'top-level',
   composedOf: [
-    'cart/component-gallery/components/spreadsheet/SpreadsheetTopBar.tsx',
-    'cart/component-gallery/components/spreadsheet/SpreadsheetFormulaBar.tsx',
-    'cart/component-gallery/components/spreadsheet/SpreadsheetGrid.tsx',
-    'cart/component-gallery/components/spreadsheet/SpreadsheetMetricStrip.tsx',
-    'cart/component-gallery/components/spreadsheet/SpreadsheetStatusBar.tsx',
+    'cart/app/gallery/components/spreadsheet/SpreadsheetTopBar.tsx',
+    'cart/app/gallery/components/spreadsheet/SpreadsheetFormulaBar.tsx',
+    'cart/app/gallery/components/spreadsheet/SpreadsheetGrid.tsx',
+    'cart/app/gallery/components/spreadsheet/SpreadsheetMetricStrip.tsx',
+    'cart/app/gallery/components/spreadsheet/SpreadsheetStatusBar.tsx',
   ],
   stories: [
     defineGalleryStory({
       id: 'spreadsheet/default',
       title: 'Spreadsheet',
-      source: 'cart/component-gallery/components/spreadsheet/Spreadsheet.tsx',
+      source: 'cart/app/gallery/components/spreadsheet/Spreadsheet.tsx',
       status: 'ready',
       tags: ['table', 'input', 'panel'],
       variants: [

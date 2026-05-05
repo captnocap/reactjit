@@ -1,0 +1,7 @@
+{
+  "name": "AppBytecode",
+  "description": "cart/app rendered as decoded bytes — every source-color tile becomes a unique hash-keyed bit-glyph.",
+  "customChrome": true,
+  "width": 1280,
+  "height": 860
+}

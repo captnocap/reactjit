@@ -8,7 +8,7 @@ export const pictorialFractionChartSection = defineGallerySection({
     defineGalleryStory({
       id: 'pictorial-fraction-chart/default',
       title: 'Pictorial Fraction Chart',
-      source: 'cart/component-gallery/components/pictorial-fraction-chart/PictorialFractionChart.tsx',
+      source: 'cart/app/gallery/components/pictorial-fraction-chart/PictorialFractionChart.tsx',
       status: 'draft',
       variants: [
         {

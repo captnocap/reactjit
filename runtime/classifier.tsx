@@ -57,7 +57,9 @@ import { Icon } from './icons/Icon';
 // classifiers can theme `color` via `'theme:NAME'` resolution.
 const PRIMITIVES: Record<string, any> = {
   Box, Text, Image, Pressable, ScrollView, TextInput,
-  Canvas, Graph, Native, Icon,
+  Canvas, CanvasNode: Canvas.Node, CanvasPath: Canvas.Path, CanvasClamp: Canvas.Clamp,
+  Graph, GraphNode: Graph.Node, GraphPath: Graph.Path,
+  Native, Icon,
 };
 
 const STYLE_KEYS = [

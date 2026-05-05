@@ -13,7 +13,7 @@ export const taskGraphSection = defineGallerySection({
     defineGalleryDataStory({
       id: "task-graph/catalog",
       title: "Task Graph",
-      source: "cart/component-gallery/data/task-graph.ts",
+      source: "cart/app/gallery/data/task-graph.ts",
       format: 'data',
       status: 'draft',
       tags: ["task", "graph", "dag"],

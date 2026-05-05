@@ -166,7 +166,7 @@ export const budgetReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Settings',
-    targetSource: 'cart/component-gallery/data/settings.ts',
+    targetSource: 'cart/app/gallery/data/settings.ts',
     sourceField: 'settingsId',
     targetField: 'id',
     summary: 'Each budget belongs to a settings profile — swapping profiles swaps the active cap set.',
@@ -174,7 +174,7 @@ export const budgetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Scope target — provider',
-    targetSource: 'cart/component-gallery/data/provider.ts',
+    targetSource: 'cart/app/gallery/data/provider.ts',
     sourceField: 'scopeTargetId (when scope=provider)',
     targetField: 'id',
     summary: 'Budget scoped to a single Provider — e.g. "OpenAI monthly cap".',
@@ -182,7 +182,7 @@ export const budgetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Scope target — connection',
-    targetSource: 'cart/component-gallery/data/connection.ts',
+    targetSource: 'cart/app/gallery/data/connection.ts',
     sourceField: 'scopeTargetId (when scope=connection)',
     targetField: 'id',
     summary: 'Budget scoped to a single Connection — e.g. "work Console API key monthly".',
@@ -190,7 +190,7 @@ export const budgetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Scope target — model',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'scopeTargetId (when scope=model)',
     targetField: 'id',
     summary: 'Budget scoped to a single Model — e.g. "Opus daily cap", paired with degradeToModelId for a ramp.',
@@ -198,7 +198,7 @@ export const budgetReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Degrade target',
-    targetSource: 'cart/component-gallery/data/model.ts',
+    targetSource: 'cart/app/gallery/data/model.ts',
     sourceField: 'degradeToModelId',
     targetField: 'id',
     summary:

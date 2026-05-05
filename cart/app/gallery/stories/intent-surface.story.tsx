@@ -77,7 +77,7 @@ export const intentSurfaceSection = defineGallerySection({
     defineGalleryStory({
       id: 'intent-surface/composed-choices',
       title: 'Composed — multi-choice surface',
-      source: 'cart/component-gallery/components/intent-surface/IntentSurface.tsx',
+      source: 'cart/app/gallery/components/intent-surface/IntentSurface.tsx',
       status: 'ready',
       tags: ['intent', 'chat-surface', 'choices'],
       variants: [
@@ -92,7 +92,7 @@ export const intentSurfaceSection = defineGallerySection({
     defineGalleryStory({
       id: 'intent-surface/mockup-fidelity',
       title: 'Composed — visual-fidelity mockup',
-      source: 'cart/component-gallery/components/intent-surface/IntentSurface.tsx',
+      source: 'cart/app/gallery/components/intent-surface/IntentSurface.tsx',
       status: 'ready',
       tags: ['intent', 'chat-surface', 'mockup', 'badge', 'code', 'divider', 'kbd', 'spacer'],
       variants: [
@@ -107,7 +107,7 @@ export const intentSurfaceSection = defineGallerySection({
     defineGalleryStory({
       id: 'intent-surface/form-roundtrip',
       title: 'Composed — form with submit',
-      source: 'cart/component-gallery/components/intent-surface/IntentForm.tsx',
+      source: 'cart/app/gallery/components/intent-surface/IntentForm.tsx',
       status: 'ready',
       tags: ['intent', 'chat-surface', 'form'],
       variants: [
@@ -122,7 +122,7 @@ export const intentSurfaceSection = defineGallerySection({
     defineGalleryStory({
       id: 'intent-surface/atoms',
       title: 'Atoms — every tag in isolation',
-      source: 'cart/component-gallery/components/intent-surface',
+      source: 'cart/app/gallery/components/intent-surface',
       status: 'ready',
       tags: ['intent', 'chat-surface', 'atoms'],
       variants: [

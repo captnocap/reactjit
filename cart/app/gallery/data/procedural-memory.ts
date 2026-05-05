@@ -116,7 +116,7 @@ export const proceduralMemoryMockData: Playbook[] = [
     id: 'play_add_data_shape',
     userId: 'user_local',
     label: 'Add a new data-shape file',
-    summary: 'Scaffold + populate a new shape in cart/component-gallery/data/, with all references wired.',
+    summary: 'Scaffold + populate a new shape in cart/app/gallery/data/, with all references wired.',
     trigger: 'User asks for a new entity, type, or shape to be added to the gallery.',
     steps: [
       {
@@ -301,7 +301,7 @@ export const proceduralMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'User',
-    targetSource: 'cart/component-gallery/data/user.ts',
+    targetSource: 'cart/app/gallery/data/user.ts',
     sourceField: 'userId',
     targetField: 'id',
     summary: 'Playbooks travel with the user across projects (how-to is portable).',
@@ -309,7 +309,7 @@ export const proceduralMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Implements skill',
-    targetSource: 'cart/component-gallery/data/skill.ts',
+    targetSource: 'cart/app/gallery/data/skill.ts',
     sourceField: 'implementsSkillId',
     targetField: 'id',
     summary:
@@ -318,7 +318,7 @@ export const proceduralMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Source episodes',
-    targetSource: 'cart/component-gallery/data/episodic-memory.ts',
+    targetSource: 'cart/app/gallery/data/episodic-memory.ts',
     sourceField: 'derivedFromEpisodeIds[]',
     targetField: 'id',
     summary: 'Episodes that contributed to this playbook\'s shape — useful for tracing why a step exists.',
@@ -326,7 +326,7 @@ export const proceduralMemoryReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Revision-of',
-    targetSource: 'cart/component-gallery/data/procedural-memory.ts',
+    targetSource: 'cart/app/gallery/data/procedural-memory.ts',
     sourceField: 'revisionOf',
     targetField: 'id',
     summary: 'Supersession chain — the V2 playbook points at the V1 it replaced.',

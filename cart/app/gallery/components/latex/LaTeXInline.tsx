@@ -9,7 +9,7 @@ export type LaTeXInlineProps = {
   style?: any;
 };
 
-export function LaTeXInline({ source, fontSize = 16, color = '#f2e8dc', style }: LaTeXInlineProps) {
+export function LaTeXInline({ source, fontSize = 16, color = 'theme:ink', style }: LaTeXInlineProps) {
   const nodes = useLaTeXParse(source);
   return (
     <Box style={{ flexDirection: 'row', alignItems: 'flex-start', ...style }}>

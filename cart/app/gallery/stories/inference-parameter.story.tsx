@@ -13,7 +13,7 @@ export const inferenceParameterSection = defineGallerySection({
     defineGalleryDataStory({
       id: "inference-parameter/catalog",
       title: "Inference Parameter",
-      source: "cart/component-gallery/data/inference-parameter.ts",
+      source: "cart/app/gallery/data/inference-parameter.ts",
       format: 'data',
       status: 'draft',
       tags: ["catalog", "inference", "connection"],

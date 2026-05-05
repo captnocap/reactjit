@@ -13,7 +13,7 @@ export const retrievalQuerySection = defineGallerySection({
     defineGalleryDataStory({
       id: "retrieval-query/catalog",
       title: "Retrieval Query",
-      source: "cart/component-gallery/data/retrieval-query.ts",
+      source: "cart/app/gallery/data/retrieval-query.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

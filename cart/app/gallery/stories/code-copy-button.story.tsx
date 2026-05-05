@@ -19,7 +19,7 @@ export const codeCopyButtonSection = defineGallerySection({
     defineGalleryStory({
       id: "code-copy-button/default",
       title: "Code Copy Button",
-      source: "cart/component-gallery/components/code-copy-button/CodeCopyButton.tsx",
+      source: "cart/app/gallery/components/code-copy-button/CodeCopyButton.tsx",
       status: 'ready',
       summary: 'Clipboard action atom for code-oriented source rows.',
       tags: ["button", "card", "data"],

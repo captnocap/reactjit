@@ -1,6 +1,6 @@
 import { classifiers as S } from '@reactjit/core';
 import { Minus, PanelLeft, Plus } from '@reactjit/runtime/icons/icons';
-import { Icon, type IconData } from '../../../sweatshop/components/icons';
+import { Icon, type IconData } from '@reactjit/runtime/icons/Icon';
 import type { DocumentSize } from './documentViewerShared';
 
 export type DocumentToolbarProps = {
@@ -27,13 +27,13 @@ function ToolbarButton({
   if (active) {
     return (
       <S.DocToolbarBtnActive onPress={onPress}>
-        <Icon icon={icon} size={14} color="#0e0b09" strokeWidth={2.2} />
+        <Icon icon={icon} size={14} color="theme:bg" strokeWidth={2.2} />
       </S.DocToolbarBtnActive>
     );
   }
   return (
     <S.DocToolbarBtn onPress={onPress}>
-      <Icon icon={icon} size={14} color="#f2e8dc" strokeWidth={2.2} />
+      <Icon icon={icon} size={14} color="theme:ink" strokeWidth={2.2} />
     </S.DocToolbarBtn>
   );
 }

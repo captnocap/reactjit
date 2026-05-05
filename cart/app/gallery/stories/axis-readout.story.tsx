@@ -8,7 +8,7 @@ export const axisReadoutSection = defineGallerySection({
     defineGalleryStory({
       id: "axis-readout/default",
       title: "Axis Readout",
-      source: "cart/component-gallery/components/controls-specimen/AxisReadout.tsx",
+      source: "cart/app/gallery/components/controls-specimen/AxisReadout.tsx",
       status: 'ready',
       summary: 'Vertical axis title plus horizontal bars readout from the marginalia page.',
       tags: ['controls', 'axis', 'mixed-axis', 'atom'],

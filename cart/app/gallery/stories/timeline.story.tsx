@@ -8,7 +8,7 @@ export const timelineSection = defineGallerySection({
     defineGalleryStory({
       id: 'timeline/default',
       title: 'Timeline',
-      source: 'cart/component-gallery/components/timeline/Timeline.tsx',
+      source: 'cart/app/gallery/components/timeline/Timeline.tsx',
       status: 'draft',
       variants: [
         {

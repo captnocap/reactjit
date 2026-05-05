@@ -16,16 +16,16 @@ export type FeedComposerProps = {
 };
 
 const COLORS = {
-  panel: '#18120e',
-  panelRaised: '#211915',
-  rule: '#3a2a1e',
-  ruleBright: '#8a4a20',
-  ink: '#f2e8dc',
-  inkDim: '#b8a890',
-  inkFaint: '#7a6e5d',
-  accent: '#d26a2a',
-  success: '#6aa390',
-  link: '#5a8bd6',
+  panel: 'theme:bg1',
+  panelRaised: 'theme:bg2',
+  rule: 'theme:rule',
+  ruleBright: 'theme:ruleBright',
+  ink: 'theme:ink',
+  inkDim: 'theme:inkDim',
+  inkFaint: 'theme:inkDimmer',
+  accent: 'theme:accent',
+  success: 'theme:ok',
+  link: 'theme:blue',
 };
 
 function composerTool(icon: IconData, label: string, color: string) {
@@ -81,7 +81,7 @@ export function FeedComposer({ author, value, onChange, onSubmit }: FeedComposer
             borderRadius: 8,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#2c211a',
+            backgroundColor: 'theme:paperInk',
             borderWidth: 1,
             borderColor: COLORS.ruleBright,
           }}
@@ -122,7 +122,7 @@ export function FeedComposer({ author, value, onChange, onSubmit }: FeedComposer
               borderRadius: 6,
               borderWidth: 1,
               borderColor: COLORS.rule,
-              backgroundColor: '#100c09',
+              backgroundColor: 'theme:bg',
               color: COLORS.ink,
               fontSize: 14,
               lineHeight: 19,

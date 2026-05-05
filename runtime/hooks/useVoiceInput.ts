@@ -61,6 +61,7 @@ const subs = {
   vadFrame: new Set<Handler>(),
   speechStart: new Set<Handler>(),
   speechEnd: new Set<Handler>(),
+  previewReady: new Set<Handler>(),
   transcript: new Set<Handler>(),
 };
 
@@ -85,6 +86,9 @@ if (!G.__voice_handlers_installed) {
   G.__voice_onSpeechStart = () => emit(subs.speechStart);
   G.__voice_onSpeechEnd = (id: number, lenSamples: number) => {
     emit(subs.speechEnd, { id, lenSamples, durationMs: (lenSamples / 16000) * 1000 });
+  };
+  G.__voice_onPreviewReady = (id: number, lenSamples: number) => {
+    emit(subs.previewReady, { id, lenSamples, durationMs: (lenSamples / 16000) * 1000 });
   };
   G.__voice_onTranscript = (text: string) => emit(subs.transcript, text);
 }
@@ -115,6 +119,15 @@ export interface VoiceInputOptions {
   /** Free the captured PCM buffer after speech-end. Default true; set false
    *  if you want to call a transcribe-by-id helper before it's freed. */
   autoRelease?: boolean;
+  /** Stride between live-preview snapshots while mid-utterance, in ms.
+   *  The Zig side periodically copies the in-flight PCM into a stable
+   *  id-keyed buffer and fires __voice_onPreviewReady so a downstream
+   *  hook (e.g. useEnsembleTranscript) can transcribe it for a live
+   *  preview. 0 disables. Whisper's encoder runs a fixed 30s context
+   *  regardless of clip length, so don't push this below ~700ms unless
+   *  you want backlog. Default undefined = leaves the Zig default
+   *  (~1500ms) untouched. */
+  previewStrideMs?: number;
 }
 
 /**
@@ -139,6 +152,29 @@ export function subscribeRawLevel(fn: (level: number) => void): () => void {
   const wrapper: Handler = (v) => fn(typeof v === 'number' ? v : 0);
   subs.level.add(wrapper);
   return () => { subs.level.delete(wrapper); };
+}
+
+/** Subscribe to live-preview snapshots fired while the user is mid-utterance.
+ *  Each event carries an id keyed into the same buffer store as speech-end —
+ *  call `transcribe(id, modelPath)` on it for a fast preview, then
+ *  `__voice_release_buffer(id)` once the result lands. The hook does not
+ *  auto-release preview buffers because the consumer (e.g. ensemble) is
+ *  responsible for the transcribe-then-release lifecycle. */
+export function subscribePreview(
+  fn: (e: { id: number; lenSamples: number; durationMs: number }) => void,
+): () => void {
+  const wrapper: Handler = (v) => fn(v);
+  subs.previewReady.add(wrapper);
+  return () => { subs.previewReady.delete(wrapper); };
+}
+
+/** Subscribe to confirmed speech-start edges (post-debounce). Useful for
+ *  resetting derived state — e.g. clearing a stale live-preview the moment a
+ *  new utterance begins, before the first preview chunk lands. */
+export function subscribeSpeechStart(fn: () => void): () => void {
+  const wrapper: Handler = () => fn();
+  subs.speechStart.add(wrapper);
+  return () => { subs.speechStart.delete(wrapper); };
 }
 
 // ── The hook ─────────────────────────────────────────────────────────────
@@ -168,6 +204,16 @@ export function useVoiceInput(opts: VoiceInputOptions = {}): VoiceInputResult {
     const f = Math.max(0, Math.min(1, opts.floor ?? 0));
     fn(Math.round(f * 10000));
   }, [opts.floor]);
+
+  // Live-preview stride: forward to Zig if the cart specified one. Skip
+  // when undefined so the Zig default (DEFAULT_PREVIEW_STRIDE_FRAMES, ~1.5s)
+  // stays in effect — VAD-only carts get zero overhead.
+  useEffect(() => {
+    if (opts.previewStrideMs === undefined) return;
+    const fn = G.__voice_set_preview_stride_ms;
+    if (typeof fn !== 'function') return;
+    fn(Math.max(0, Math.round(opts.previewStrideMs)));
+  }, [opts.previewStrideMs]);
 
   // Subscribe to bridge events for this instance's lifetime.
   useEffect(() => {

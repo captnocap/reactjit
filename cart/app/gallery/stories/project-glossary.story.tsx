@@ -13,7 +13,7 @@ export const projectGlossarySection = defineGallerySection({
     defineGalleryDataStory({
       id: "project-glossary/catalog",
       title: "Project Glossary",
-      source: "cart/component-gallery/data/project-glossary.ts",
+      source: "cart/app/gallery/data/project-glossary.ts",
       format: 'data',
       status: 'draft',
       tags: ["data"],

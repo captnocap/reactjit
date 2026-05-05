@@ -8,7 +8,7 @@ export const metricBadgeSection = defineGallerySection({
     defineGalleryStory({
       id: 'metric-badge/default',
       title: 'Metric Badge',
-      source: 'cart/component-gallery/components/controls-specimen/MetricBadge.tsx',
+      source: 'cart/app/gallery/components/controls-specimen/MetricBadge.tsx',
       status: 'ready',
       summary: 'Framed metric readout with label block, accent value, and optional unit.',
       tags: ['controls', 'badge', 'atom'],

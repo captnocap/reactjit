@@ -10,7 +10,7 @@ import {
   Trash2,
 } from '@reactjit/runtime/icons/icons';
 import { classifiers as S } from '@reactjit/core';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import { KeyValueBadge } from '../controls-specimen/KeyValueBadge';
 import { StatusBadge } from '../controls-specimen/StatusBadge';
 import { StripBadge } from '../controls-specimen/StripBadge';

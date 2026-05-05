@@ -13,7 +13,7 @@ export const claudeCliRawEventSection = defineGallerySection({
     defineGalleryDataStory({
       id: "claude-cli-raw-event/catalog",
       title: "Claude Cli Raw Event",
-      source: "cart/component-gallery/data/claude-cli-raw-event.ts",
+      source: "cart/app/gallery/data/claude-cli-raw-event.ts",
       format: 'data',
       status: 'draft',
       tags: ["raw-event", "claude-cli", "contract"],

@@ -206,28 +206,28 @@ export const userInterventionReferences: GalleryDataReference[] = [
   {
     kind: 'belongs-to',
     label: 'Worker (being intervened on)',
-    targetSource: 'cart/component-gallery/data/worker.ts',
+    targetSource: 'cart/app/gallery/data/worker.ts',
     sourceField: 'workerId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Task',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'taskId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Goal',
-    targetSource: 'cart/component-gallery/data/goal.ts',
+    targetSource: 'cart/app/gallery/data/goal.ts',
     sourceField: 'goalId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Targeted adjustment',
-    targetSource: 'cart/component-gallery/data/task.ts',
+    targetSource: 'cart/app/gallery/data/task.ts',
     sourceField: 'targetAdjustmentId',
     targetField: 'executionAdjustments[].id',
     summary:
@@ -236,7 +236,7 @@ export const userInterventionReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Spawned constraint',
-    targetSource: 'cart/component-gallery/data/constraint.ts',
+    targetSource: 'cart/app/gallery/data/constraint.ts',
     sourceField: 'spawnedConstraintId',
     targetField: 'id',
     summary:
@@ -245,14 +245,14 @@ export const userInterventionReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Spawned reframed goal',
-    targetSource: 'cart/component-gallery/data/goal.ts',
+    targetSource: 'cart/app/gallery/data/goal.ts',
     sourceField: 'spawnedReframedGoalId',
     targetField: 'id',
   },
   {
     kind: 'references',
     label: 'Spawned episode',
-    targetSource: 'cart/component-gallery/data/episodic-memory.ts',
+    targetSource: 'cart/app/gallery/data/episodic-memory.ts',
     sourceField: 'spawnedEpisodeId',
     targetField: 'id',
     summary: 'Especially for outcome=too-late — the lesson lives on as an episodic record.',
@@ -260,7 +260,7 @@ export const userInterventionReferences: GalleryDataReference[] = [
   {
     kind: 'references',
     label: 'Cited rubric dimension',
-    targetSource: 'cart/component-gallery/data/outcome-rubric.ts',
+    targetSource: 'cart/app/gallery/data/outcome-rubric.ts',
     sourceField: 'rubricDimensionId',
     targetField: 'dimensions[].id',
     summary:

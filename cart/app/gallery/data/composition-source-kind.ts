@@ -244,6 +244,40 @@ export const compositionSourceKindMockData: CompositionSourceKind[] = [
     createdAt: '2026-04-26T00:00:00Z',
     updatedAt: '2026-04-26T00:00:00Z',
   },
+  // ── Character / manifest / quiz sources ──────────────────────────
+  {
+    id: 'src_character-snapshot',
+    label: 'Character snapshot',
+    description:
+      'Resolves the active Character\'s archetype + dial-derived fragments + quirk fragments + relationship-stance / initiative / correction fragments + boundary-rule constraints into a single voice preamble.',
+    applicableToCompositionKinds: ['who', 'prompt'],
+    refKind: 'computed',
+    authoredBy: 'system',
+    createdAt: '2026-05-02T00:00:00Z',
+    updatedAt: '2026-05-02T00:00:00Z',
+  },
+  {
+    id: 'src_user-manifest-snapshot',
+    label: 'User manifest snapshot',
+    description:
+      'Resolves the top-N highest-confidence ManifestDimension entries for the active user into a "things I\'ve inferred about you" preamble. Confidence threshold and N are computeScript params.',
+    applicableToCompositionKinds: ['who', 'context'],
+    refKind: 'computed',
+    authoredBy: 'system',
+    createdAt: '2026-05-02T00:00:00Z',
+    updatedAt: '2026-05-02T00:00:00Z',
+  },
+  {
+    id: 'src_quiz-prior-context',
+    label: 'Quiz prior context',
+    description:
+      'Resolves to the last K QuizSessions for this user-manifest formatted as Q/A pairs (no inferences). Used by the quiz-author turn to build on prior answers per the spiral-design pattern.',
+    applicableToCompositionKinds: ['prompt', 'context'],
+    refKind: 'computed',
+    authoredBy: 'system',
+    createdAt: '2026-05-02T00:00:00Z',
+    updatedAt: '2026-05-02T00:00:00Z',
+  },
   // ── Custom-kind exemplar (extension-shipped) ─────────────────────
   {
     id: 'src_external_pr_summary',
@@ -318,7 +352,7 @@ export const compositionSourceKindReferences: GalleryDataReference[] = [
   {
     kind: 'has-many',
     label: 'Compositions (consume registered kinds)',
-    targetSource: 'cart/component-gallery/data/composition.ts',
+    targetSource: 'cart/app/gallery/data/composition.ts',
     sourceField: 'id',
     targetField: 'slots[].sources[].kind',
     summary:

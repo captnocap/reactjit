@@ -15,10 +15,10 @@ function Panel(props: { title: string; children: any; height?: number }) {
       style={{
         width: PANEL_W,
         height: props.height ?? 240,
-        backgroundColor: '#0e0b09',
+        backgroundColor: 'theme:bg',
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: '#1a1511',
+        borderColor: 'theme:bg2',
         overflow: 'hidden',
       }}
     >
@@ -26,11 +26,11 @@ function Panel(props: { title: string; children: any; height?: number }) {
         style={{
           padding: 10,
           borderBottomWidth: 1,
-          borderBottomColor: '#1a1511',
-          backgroundColor: '#13100d',
+          borderBottomColor: 'theme:bg2',
+          backgroundColor: 'theme:bg1',
         }}
       >
-        <Text style={{ fontSize: 11, color: '#d48aa7', fontFamily: 'monospace' }}>{props.title}</Text>
+        <Text style={{ fontSize: 11, color: 'theme:atch', fontFamily: 'monospace' }}>{props.title}</Text>
       </Row>
       <Col style={{ flexGrow: 1, padding: 14 }}>{props.children}</Col>
     </Col>
@@ -56,7 +56,7 @@ function TerminalLine(props: { line: string; delay: number; cursor: boolean }) {
     <Text
       style={{
         fontSize: 12,
-        color: isPrompt ? '#7ad4a7' : '#cdbfae',
+        color: isPrompt ? 'theme:tool' : 'theme:inkDim',
         fontFamily: 'monospace',
         lineHeight: 18,
       }}
@@ -122,16 +122,16 @@ export function ChatScene() {
               width: 22,
               height: 22,
               borderRadius: 11,
-              backgroundColor: '#d48aa7',
+              backgroundColor: 'theme:atch',
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <Text style={{ fontSize: 10, color: '#0e0b09', fontWeight: 'bold' }}>R</Text>
+            <Text style={{ fontSize: 10, color: 'theme:bg', fontWeight: 'bold' }}>R</Text>
           </Box>
           <Col style={{ flexGrow: 1 }}>
-            <Text style={{ fontSize: 10, color: '#7a6e5d', marginBottom: 4 }}>reactjit · just now</Text>
-            <Text style={{ fontSize: 13, color: '#f2e8dc', lineHeight: 19 }}>
+            <Text style={{ fontSize: 10, color: 'theme:inkDimmer', marginBottom: 4 }}>reactjit · just now</Text>
+            <Text style={{ fontSize: 13, color: 'theme:ink', lineHeight: 19 }}>
               {text}{showCursor ? '▌' : ''}
             </Text>
           </Col>
@@ -147,18 +147,12 @@ export function HeroScene() {
   const titleChars = useGradientWave(title, {
     speed: 1.4,
     spread: 0.45,
-    hueStart: 290,
-    hueEnd: 30,
-    saturation: 90,
-    lightness: 68,
+    tokens: ['theme:lilac', 'theme:atch', 'theme:accent', 'theme:accentHot'],
   });
   const subChars = useGradientWave(subtitle, {
     speed: 0.7,
     spread: 0.12,
-    hueStart: 200,
-    hueEnd: 280,
-    saturation: 40,
-    lightness: 55,
+    tokens: ['theme:blue', 'theme:tool', 'theme:inkDim', 'theme:lilac'],
   });
 
   return (
@@ -200,8 +194,8 @@ function SecretRow(props: { label: string; value: string; delay: number; key2: n
   const v = useScramble(props.value, { durationMs: 1100, scrambleChance: 0.95 });
   return (
     <Row style={{ gap: 14, alignItems: 'baseline' }}>
-      <Text style={{ fontSize: 10, color: '#7a6e5d', fontFamily: 'monospace', width: 70 }}>{props.label}</Text>
-      <Text style={{ fontSize: 14, color: '#7ad4a7', fontFamily: 'monospace', letterSpacing: 1 }}>{v}</Text>
+      <Text style={{ fontSize: 10, color: 'theme:inkDimmer', fontFamily: 'monospace', width: 70 }}>{props.label}</Text>
+      <Text style={{ fontSize: 14, color: 'theme:tool', fontFamily: 'monospace', letterSpacing: 1 }}>{v}</Text>
     </Row>
   );
 }
@@ -216,7 +210,7 @@ export function DecoderScene() {
   return (
     <Panel title="decoder · useScramble" height={220}>
       <Col key={runId} style={{ gap: 8 }}>
-        <Text style={{ fontSize: 11, color: '#7a6e5d', marginBottom: 6 }}>◉ decrypting payload</Text>
+        <Text style={{ fontSize: 11, color: 'theme:inkDimmer', marginBottom: 6 }}>◉ decrypting payload</Text>
         {SECRETS.map((s, i) => (
           <SecretRow key={i} key2={runId} label={s.label} value={s.value} delay={i * 150} />
         ))}
@@ -235,7 +229,7 @@ const BOOT_LINES = [
 function BootScrambleLine(props: { text: string }) {
   const v = useScramble(props.text, { durationMs: 900, scrambleChance: 0.9 });
   return (
-    <Text style={{ fontSize: 13, color: '#d48aa7', fontFamily: 'monospace', letterSpacing: 1.5, marginBottom: 4 }}>
+    <Text style={{ fontSize: 13, color: 'theme:atch', fontFamily: 'monospace', letterSpacing: 1.5, marginBottom: 4 }}>
       {v}
     </Text>
   );
@@ -243,7 +237,7 @@ function BootScrambleLine(props: { text: string }) {
 function BootTypeLine(props: { text: string; final: boolean }) {
   const r = useTypewriter(props.text, { cps: 50, cursor: props.final ? '▌' : '' });
   return (
-    <Text style={{ fontSize: 12, color: '#7ad4a7', fontFamily: 'monospace', lineHeight: 18 }}>
+    <Text style={{ fontSize: 12, color: 'theme:tool', fontFamily: 'monospace', lineHeight: 18 }}>
       {r.text}
     </Text>
   );
@@ -251,7 +245,7 @@ function BootTypeLine(props: { text: string; final: boolean }) {
 function BootStreamLine(props: { text: string }) {
   const t = useStreamingText(props.text, { wordsPerSec: 10, jitter: 0.4 });
   return (
-    <Text style={{ fontSize: 12, color: '#cdbfae', fontFamily: 'monospace', lineHeight: 18 }}>
+    <Text style={{ fontSize: 12, color: 'theme:inkDim', fontFamily: 'monospace', lineHeight: 18 }}>
       {t}
     </Text>
   );

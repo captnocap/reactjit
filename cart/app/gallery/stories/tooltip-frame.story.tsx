@@ -13,7 +13,7 @@ export const tooltipFrameSection = defineGallerySection({
     defineGalleryStory({
       id: "tooltip-frame/default",
       title: "Tooltip Frame",
-      source: "cart/component-gallery/components/tooltip-frame/TooltipFrame.tsx",
+      source: "cart/app/gallery/components/tooltip-frame/TooltipFrame.tsx",
       status: 'ready',
       summary: 'Tooltip frame adapter built from existing AtomFrame and VerticalSpine atoms.',
       tags: ["card", "panel"],

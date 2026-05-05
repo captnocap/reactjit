@@ -14,7 +14,7 @@ export const goalCardSection = defineGallerySection({
     defineGalleryStory({
       id: "goal-card/default",
       title: "Goal Card",
-      source: "cart/component-gallery/components/goal-card/GoalCard.tsx",
+      source: "cart/app/gallery/components/goal-card/GoalCard.tsx",
       status: 'draft',
       tags: ["card"],
       variants: [

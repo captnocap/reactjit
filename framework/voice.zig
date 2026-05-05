@@ -46,6 +46,15 @@ const SILENCE_END_FRAMES: u32 = 25; // ~750ms — natural sentence-end pause
 // utterance and emit __voice_onSpeechEnd so whisper sees something.
 const MAX_UTTERANCE_SAMPLES: usize = @as(usize, @intCast(SAMPLE_RATE)) * 30;
 
+// Live-preview defaults. While the user is mid-utterance we periodically
+// snapshot the in-flight PCM into a stable id-keyed buffer so JS can
+// transcribe it for a live preview. Whisper's encoder runs a fixed 30s
+// context regardless of input length, so previews don't gain much from
+// sub-clipping — the stride is tuned to "don't queue faster than tiny can
+// drain". 0 disables the feature.
+const DEFAULT_PREVIEW_STRIDE_FRAMES: u32 = 1500 / FRAME_MS; // ~1500ms
+const DEFAULT_PREVIEW_MIN_FRAMES: u32 = 1000 / FRAME_MS;    // ~1s of speech
+
 // ── State ─────────────────────────────────────────────────────────────
 
 const Phase = enum(u8) { idle, candidate_speech, speaking, candidate_silence };
@@ -85,6 +94,15 @@ const State = struct {
     // 0..10000 scale as last_rms_x100. 0 = no gate. Defaults off so a
     // cart that doesn't care gets pure libfvad behaviour.
     floor_x100: i32 = 0,
+
+    // Live-preview stride: emit a snapshot of the in-flight utterance
+    // every N frames while in .speaking/.candidate_silence. 0 = disabled.
+    // frames_in_speech tracks ms-since-speech-start (in frame units) so we
+    // can suppress previews that fire on too-short audio.
+    preview_stride_frames: u32 = DEFAULT_PREVIEW_STRIDE_FRAMES,
+    preview_min_frames: u32 = DEFAULT_PREVIEW_MIN_FRAMES,
+    frames_in_speech: u32 = 0,
+    frames_since_preview: u32 = 0,
 
     allocator: std.mem.Allocator = undefined,
 };
@@ -184,6 +202,22 @@ fn resetPhase() void {
     S.consec_speech = 0;
     S.consec_silence = 0;
     S.utterance.clearRetainingCapacity();
+    S.frames_in_speech = 0;
+    S.frames_since_preview = 0;
+}
+
+/// Configure how often a live-preview snapshot fires while mid-utterance.
+/// 0 disables. Floored to 90ms (3 frames) — anything shorter would queue
+/// faster than even tiny.en can drain at typical CPU speeds.
+pub fn setPreviewStrideMs(ms: i32) void {
+    if (ms <= 0) {
+        S.preview_stride_frames = 0;
+        return;
+    }
+    const ms_u: u32 = @intCast(ms);
+    var frames: u32 = ms_u / FRAME_MS;
+    if (frames < 3) frames = 3;
+    S.preview_stride_frames = frames;
 }
 
 // ── Tick — drain SDL stream, run VAD, fire events ─────────────────────
@@ -257,6 +291,25 @@ pub fn tick(_: u32) void {
                 }
             },
         }
+
+        // Live-preview snapshot: while we're speaking (or in the brief
+        // candidate-silence window before a possible end), every
+        // preview_stride_frames we copy the in-flight utterance into a
+        // stable id-keyed buffer and fire __voice_onPreviewReady so the
+        // JS side can run a fast model on it. Skipped if the user has
+        // dialled the stride to 0 (off) or we haven't accumulated enough
+        // speech to be worth transcribing.
+        if (S.phase == .speaking or S.phase == .candidate_silence) {
+            S.frames_in_speech +%= 1;
+            S.frames_since_preview +%= 1;
+            if (S.preview_stride_frames > 0
+                and S.frames_in_speech >= S.preview_min_frames
+                and S.frames_since_preview >= S.preview_stride_frames)
+            {
+                snapshotPreview();
+                S.frames_since_preview = 0;
+            }
+        }
     }
 
     // Level callback fires once per tick regardless of phase, throttled to
@@ -284,6 +337,28 @@ fn finaliseUtterance() void {
     };
     v8_runtime.callGlobal2Int(
         "__voice_onSpeechEnd",
+        @intCast(id),
+        @intCast(owned.len),
+    );
+}
+
+/// Snapshot the in-flight utterance into a stable id-keyed buffer and fire
+/// __voice_onPreviewReady so the JS side can transcribe it with a small
+/// model for a live-preview UX. The snapshot is a copy, so the main
+/// engine thread can keep extending S.utterance while whisper's worker
+/// reads the slice.
+fn snapshotPreview() void {
+    if (S.utterance.items.len == 0) return;
+    const id = S.next_buf_id;
+    S.next_buf_id +%= 1;
+    const owned = S.allocator.alloc(i16, S.utterance.items.len) catch return;
+    @memcpy(owned, S.utterance.items);
+    S.buffers.put(id, owned) catch {
+        S.allocator.free(owned);
+        return;
+    };
+    v8_runtime.callGlobal2Int(
+        "__voice_onPreviewReady",
         @intCast(id),
         @intCast(owned.len),
     );

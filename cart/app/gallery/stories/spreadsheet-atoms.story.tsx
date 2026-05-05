@@ -58,7 +58,7 @@ function section(id: string, title: string, source: string, render: () => any): 
 export const spreadsheetTopBarSection = section(
   'spreadsheet-top-bar',
   'Spreadsheet Top Bar',
-  'cart/component-gallery/components/spreadsheet/SpreadsheetTopBar.tsx',
+  'cart/app/gallery/components/spreadsheet/SpreadsheetTopBar.tsx',
   () => (
     <AtomPad>
       <SpreadsheetTopBar title={workbook.title} subtitle={workbook.subtitle} state={state} />
@@ -69,7 +69,7 @@ export const spreadsheetTopBarSection = section(
 export const spreadsheetFormulaBarSection = section(
   'spreadsheet-formula-bar',
   'Spreadsheet Formula Bar',
-  'cart/component-gallery/components/spreadsheet/SpreadsheetFormulaBar.tsx',
+  'cart/app/gallery/components/spreadsheet/SpreadsheetFormulaBar.tsx',
   () => (
     <AtomPad>
       <SpreadsheetFormulaBar state={state} adjustments={workbook.quickAdjustments} />
@@ -80,7 +80,7 @@ export const spreadsheetFormulaBarSection = section(
 export const spreadsheetMetricStripSection = section(
   'spreadsheet-metric-strip',
   'Spreadsheet Metric Strip',
-  'cart/component-gallery/components/spreadsheet/SpreadsheetMetricStrip.tsx',
+  'cart/app/gallery/components/spreadsheet/SpreadsheetMetricStrip.tsx',
   () => (
     <AtomPad>
       <SpreadsheetMetricStrip metrics={workbook.metrics} />
@@ -91,7 +91,7 @@ export const spreadsheetMetricStripSection = section(
 export const spreadsheetStatusBarSection = section(
   'spreadsheet-status-bar',
   'Spreadsheet Status Bar',
-  'cart/component-gallery/components/spreadsheet/SpreadsheetStatusBar.tsx',
+  'cart/app/gallery/components/spreadsheet/SpreadsheetStatusBar.tsx',
   () => (
     <AtomPad>
       <SpreadsheetStatusBar state={state} rows={workbook.rows} cols={workbook.cols} />
@@ -102,7 +102,7 @@ export const spreadsheetStatusBarSection = section(
 export const spreadsheetGridSection = section(
   'spreadsheet-grid',
   'Spreadsheet Native Grid',
-  'cart/component-gallery/components/spreadsheet/SpreadsheetGrid.tsx',
+  'cart/app/gallery/components/spreadsheet/SpreadsheetGrid.tsx',
   () => (
     <AtomPad height={280}>
       <SpreadsheetGrid

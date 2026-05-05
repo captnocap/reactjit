@@ -160,11 +160,11 @@ export function useEmbed(opts: UseEmbedOpts) {
   const [ingest, setIngest] = useState<embed.IngestProgress>(EMPTY);
   const pollingRef = useRef<any>(null);
 
-  function startIngest(rootPath: string, nWorkers: number = 4, sourceType: string = 'code-chunk'): boolean {
+  function startIngest(rootPath: string, nWorkers: number = 4, kind: embed.EmbedKind = 'code'): boolean {
     const ok = embed.ingestStart(rootPath, {
       modelPath: opts.model,
       slug: opts.storeSlug,
-      sourceType,
+      kind,
       nWorkers,
     });
     if (!ok) return false;

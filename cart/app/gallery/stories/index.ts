@@ -1,6 +1,7 @@
 import type { GallerySection } from '../types';
 
 import { chartSection } from './chart.story';
+import { galleryDisplayContainerSection } from './gallery-display-container.story';
 import { flowEditorSection } from './flow-editor.story';
 import { areaChartSection } from './area-chart.story';
 import { barChartSection } from './bar-chart.story';
@@ -51,6 +52,12 @@ import { skeletonTilesSection } from './skeleton-tiles.story';
 import { sweatshopMatrixDisplaySection } from './sweatshop-matrix-display.story';
 import { astQuiltSection } from './ast-quilt.story';
 import { easingsSection } from './easings.story';
+import { easingsLatchSection } from './easings-latch.story';
+import { easingsLatchFullSection } from './easings-latch-full.story';
+import { easingsLatchOnlySection } from './easings-latch-only.story';
+import { easingsZigMathSection } from './easings-zig-math.story';
+import { easingsZigStaticSection } from './easings-zig-static.story';
+import { easingsHostIntervalSection } from './easings-host-interval.story';
 import { animatedTextSection } from './animated-text.story';
 import { gridSpinnersSection } from './grid-spinners.story';
 import { timeInstrumentsSection } from './time-instruments.story';
@@ -108,6 +115,7 @@ import { modelSection } from './model.story';
 import { connectionSection } from './connection.story';
 import { codexRawEventSection } from './codex-raw-event.story';
 import { envVarSection } from './env-var.story';
+import { assistantSection } from './assistant.story';
 import { userSection } from './user.story';
 import { agentMemorySection } from './agent-memory.story';
 import { inferenceParameterSection } from './inference-parameter.story';
@@ -125,6 +133,7 @@ import { roleAssignmentSection } from './role-assignment.story';
 import { workspaceSection } from './workspace.story';
 import { projectSection } from './project.story';
 import { environmentSection } from './environment.story';
+import { supervisorSection } from './supervisor.story';
 import { workerSection } from './worker.story';
 import { workingMemorySection } from './working-memory.story';
 import { episodicMemorySection } from './episodic-memory.story';
@@ -230,11 +239,21 @@ import { blockFacesSection } from './block-faces.story';
 import { newsFeedPostSection } from './news-feed-post.story';
 import { newsFeedSection } from './news-feed.story';
 import { socialImageGallerySection } from './social-image-gallery.story';
+import { characterSection } from './character.story';
+import { personalityDialSection } from './personality-dial.story';
+import { characterArchetypeSection } from './character-archetype.story';
+import { characterQuirkSection } from './character-quirk.story';
+import { userManifestSection } from './user-manifest.story';
+import { manifestDimensionSection } from './manifest-dimension.story';
+import { quizSessionSection } from './quiz-session.story';
+import { characterCompatibilitySection } from './character-compatibility.story';
+import { avatarSection } from './avatar.story';
 // component-gallery:imports
 
 export const storySections: GallerySection[] = [
   classifierCatalogSection,
   iconCatalogSection,
+  galleryDisplayContainerSection,
   chartSection,
   areaChartSection,
   barChartSection,
@@ -285,6 +304,12 @@ export const storySections: GallerySection[] = [
   sweatshopMatrixDisplaySection,
   astQuiltSection,
   easingsSection,
+  easingsLatchSection,
+  easingsLatchOnlySection,
+  easingsLatchFullSection,
+  easingsZigMathSection,
+  easingsZigStaticSection,
+  easingsHostIntervalSection,
   animatedTextSection,
   gridSpinnersSection,
   timeInstrumentsSection,
@@ -342,6 +367,7 @@ export const storySections: GallerySection[] = [
   connectionSection,
   codexRawEventSection,
   envVarSection,
+  assistantSection,
   userSection,
   agentMemorySection,
   inferenceParameterSection,
@@ -359,6 +385,7 @@ export const storySections: GallerySection[] = [
   workspaceSection,
   projectSection,
   environmentSection,
+  supervisorSection,
   workerSection,
   workingMemorySection,
   episodicMemorySection,
@@ -463,5 +490,14 @@ export const storySections: GallerySection[] = [
   socialImageGallerySection,
   newsFeedPostSection,
   newsFeedSection,
+  characterSection,
+  personalityDialSection,
+  characterArchetypeSection,
+  characterQuirkSection,
+  userManifestSection,
+  manifestDimensionSection,
+  quizSessionSection,
+  characterCompatibilitySection,
+  avatarSection,
   // component-gallery:sections
 ];

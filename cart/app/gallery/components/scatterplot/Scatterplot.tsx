@@ -29,7 +29,7 @@ export function Scatterplot(props: ScatterplotProps) {
   return (
     <Box style={{ width, height }}>
       <S.BareGraph>
-        <Graph.Path d={`M ${plot.x} ${plot.y} L ${plot.x} ${plot.y + plot.h} L ${plot.x + plot.w} ${plot.y + plot.h}`} stroke="#3a2a1e" strokeWidth={1} />
+        <Graph.Path d={`M ${plot.x} ${plot.y} L ${plot.x} ${plot.y + plot.h} L ${plot.x + plot.w} ${plot.y + plot.h}`} stroke="theme:rule" strokeWidth={1} />
         {data.map((d, i) => (
           <Graph.Path
             key={i}

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { classifiers as S } from '@reactjit/core';
 import { Box } from '@reactjit/runtime/primitives';
 import { Search } from '@reactjit/runtime/icons/icons';
-import { Icon } from '../../../sweatshop/components/icons';
+import { Icon } from '@reactjit/runtime/icons/Icon';
 import type { GitActivity } from '../../data/git-activity';
 import { gitToneColor } from './gitLaneShared';
 

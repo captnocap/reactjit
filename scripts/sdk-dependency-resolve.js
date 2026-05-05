@@ -132,6 +132,21 @@ if (format === 'ship-gate') {
     addAll(allBuildOptions, (features[featureName] || {}).buildOptions);
   }
 
+  // ── Incompatibility: has-embed + has-whisper ────────────────────────
+  // Both libraries bundle their own copy of ggml. Linking both into one
+  // process puts two ggml symbol sets in the global namespace; the
+  // dynamic linker resolves ggml_* calls to whichever loaded first,
+  // causing heap corruption (e.g. tokenizer init double-free). The
+  // proper fix is -fvisibility=hidden on libwhisper's sources so its
+  // ggml stays internal — until that lands, the dev host can only
+  // ship one of the two. Embed wins in the dev host; carts that need
+  // whisper must use scripts/ship (which only enables what their bundle
+  // actually triggers, so they never get both at once).
+  if (allBuildOptions.has('has-embed') && allBuildOptions.has('has-whisper')) {
+    allBuildOptions.delete('has-whisper');
+    __writeStderr('[sdk-dependency-resolve] dev: dropping has-whisper (conflicts with has-embed; both bundle ggml)\n');
+  }
+
   const flags = [];
   for (const name of allBuildOptions) {
     if (declared.has(name)) flags.push('-D' + name + '=true');
