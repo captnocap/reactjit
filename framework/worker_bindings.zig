@@ -28,6 +28,7 @@ const v8rt = @import("v8_runtime.zig");
 const worker_contract = @import("worker_contract.zig");
 const claude_sdk = @import("claude_sdk/mod.zig");
 const kimi_wire_sdk = @import("kimi_wire_sdk.zig");
+const local_ai_runtime = @import("local_ai_runtime.zig");
 
 const Backend = worker_contract.Backend;
 
@@ -46,6 +47,7 @@ const BackendSession = union(Backend) {
     claude_code: claude_sdk.Session,
     codex_app_server: void,
     kimi_cli_wire: KimiSession,
+    local_ai: *local_ai_runtime.Session,
 
     pub fn deinit(self: *BackendSession) void {
         switch (self.*) {
@@ -55,6 +57,10 @@ const BackendSession = union(Backend) {
             },
             .codex_app_server => {},
             .kimi_cli_wire => self.kimi_cli_wire.deinit(),
+            .local_ai => {
+                self.local_ai.close();
+                self.local_ai.destroy();
+            },
         }
     }
 };
@@ -97,6 +103,7 @@ fn parseBackend(name: []const u8) ?Backend {
     if (std.mem.eql(u8, name, "claude_code")) return .claude_code;
     if (std.mem.eql(u8, name, "codex_app_server")) return .codex_app_server;
     if (std.mem.eql(u8, name, "kimi_cli_wire")) return .kimi_cli_wire;
+    if (std.mem.eql(u8, name, "local_ai")) return .local_ai;
     return null;
 }
 
@@ -105,6 +112,7 @@ fn backendName(b: Backend) []const u8 {
         .claude_code => "claude_code",
         .codex_app_server => "codex_app_server",
         .kimi_cli_wire => "kimi_cli_wire",
+        .local_ai => "local_ai",
     };
 }
 
@@ -171,6 +179,18 @@ fn jsonBoolField(value: std.json.Value, key: []const u8) ?bool {
     const v = obj.get(key) orelse return null;
     return switch (v) {
         .bool => |b| b,
+        else => null,
+    };
+}
+
+fn jsonIntField(value: std.json.Value, key: []const u8) ?i64 {
+    const obj = switch (value) {
+        .object => |o| o,
+        else => return null,
+    };
+    const v = obj.get(key) orelse return null;
+    return switch (v) {
+        .integer => |i| i,
         else => null,
     };
 }
@@ -265,6 +285,21 @@ fn hostWorkerStart(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void 
             break :blk .{ .kimi_cli_wire = .{ .inner = sess } };
         },
         .codex_app_server => return setReturnString(info, cx.iso, ""),
+        .local_ai => blk: {
+            const model_path = jsonStrField(parsed.value, "model_path") orelse return setReturnString(info, cx.iso, "");
+            const n_ctx_raw = jsonIntField(parsed.value, "n_ctx") orelse 2048;
+            const n_ctx: u32 = if (n_ctx_raw > 0) @intCast(n_ctx_raw) else 2048;
+            const opts = local_ai_runtime.SessionOptions{
+                .cwd = cwd_opt,
+                .model_path = model_path,
+                .session_id = jsonStrField(parsed.value, "session_id"),
+                .n_ctx = n_ctx,
+                .verbose = false,
+            };
+            const sess = local_ai_runtime.Session.create(std.heap.c_allocator, opts) catch
+                return setReturnString(info, cx.iso, "");
+            break :blk .{ .local_ai = sess };
+        },
     };
 
     const allocator = std.heap.c_allocator;
@@ -335,6 +370,9 @@ fn hostWorkerSend(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
                 return setReturnBool(info, cx.iso, false);
             token.deinit();
         },
+        .local_ai => {
+            entry.session.local_ai.submit(.{ .text = text }) catch return setReturnBool(info, cx.iso, false);
+        },
         .codex_app_server => return setReturnBool(info, cx.iso, false),
     }
     setReturnBool(info, cx.iso, true);
@@ -366,6 +404,11 @@ fn hostWorkerPoll(info_c: ?*const v8.c.FunctionCallbackInfo) callconv(.c) void {
                 var owned = (entry.session.kimi_cli_wire.inner.poll() catch break) orelse break;
                 defer owned.deinit();
                 entry.store.ingestKimiWireMessage(&owned.msg) catch {};
+            },
+            .local_ai => {
+                var owned = entry.session.local_ai.poll() orelse break;
+                defer owned.deinit();
+                entry.store.ingestLocalAiEvent(&owned) catch {};
             },
             .codex_app_server => break,
         }

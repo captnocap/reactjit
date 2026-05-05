@@ -12,11 +12,13 @@ const std = @import("std");
 const claude_types = @import("claude_sdk/types.zig");
 const codex_sdk = @import("codex_sdk.zig");
 const kimi_wire_sdk = @import("kimi_wire_sdk.zig");
+const local_ai_runtime = @import("local_ai_runtime.zig");
 
 pub const Backend = enum {
     claude_code,
     codex_app_server,
     kimi_cli_wire,
+    local_ai,
 };
 
 pub const WorkerStatus = enum {
@@ -814,6 +816,84 @@ pub const WorkerStore = struct {
                     return self.appendKimiEvent(session, .error_, .internal, "rpc_response", response.error_message, result_json, response.id, .{});
                 }
                 return self.appendKimiEvent(session, kindForKimiResponseStatus(response.status()), .internal, "rpc_response", response.status(), result_json, response.id, .{});
+            },
+        }
+    }
+
+    pub fn ingestLocalAiEvent(self: *WorkerStore, event: *const local_ai_runtime.OwnedEvent) !void {
+        const session = try self.ensureActiveSession(.local_ai);
+        switch (event.kind) {
+            .system => {
+                if (event.model) |value| try self.updateSessionModel(session, value);
+                if (event.session_id) |value| try self.updateSessionExternalId(session, value);
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .local_ai,
+                    .kind = .lifecycle,
+                    .role = .system,
+                    .model = session.model,
+                    .text = "local model loaded",
+                    .external_session_id = session.external_session_id,
+                    .status_text = "system",
+                });
+            },
+            .assistant_part => {
+                self.status = .streaming;
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .local_ai,
+                    .kind = .assistant_message,
+                    .role = .assistant,
+                    .model = session.model,
+                    .phase = event.part_type orelse "text",
+                    .text = event.text,
+                    .external_session_id = session.external_session_id,
+                });
+            },
+            .status => {
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .local_ai,
+                    .kind = .status,
+                    .role = .internal,
+                    .model = session.model,
+                    .text = event.text,
+                    .external_session_id = session.external_session_id,
+                    .status_text = if (event.is_error) "error" else "status",
+                });
+            },
+            .result => {
+                self.status = if (event.is_error) .error_ else .active;
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .local_ai,
+                    .kind = if (event.is_error) .error_ else .completion,
+                    .role = .internal,
+                    .model = session.model,
+                    .text = event.text,
+                    .external_session_id = session.external_session_id,
+                    .status_text = if (event.is_error) "error" else "success",
+                });
+            },
+            .tool_call => {
+                const id = event.tool_call_id orelse "";
+                const name = event.tool_call_name orelse "";
+                const args = event.tool_call_args orelse "{}";
+                const payload = try std.fmt.allocPrint(self.allocator,
+                    "{{\"id\":\"{s}\",\"name\":\"{s}\",\"input_json\":{s}}}",
+                    .{ id, name, args });
+                defer self.allocator.free(payload);
+                try self.appendEvent(.{
+                    .session_id = session.id,
+                    .backend = .local_ai,
+                    .kind = .tool_call,
+                    .role = .tool,
+                    .model = session.model,
+                    .phase = "tool_use",
+                    .text = name,
+                    .payload_json = payload,
+                    .external_session_id = session.external_session_id,
+                });
             },
         }
     }

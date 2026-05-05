@@ -51,6 +51,7 @@ function kindToBackend(kind: string | undefined): AssistantBackend | undefined {
   if (!kind) return undefined;
   if (kind === 'claude-code-cli' || kind === 'anthropic-api-key') return 'claude_code';
   if (kind === 'kimi-api-key') return 'kimi_cli_wire';
+  if (kind === 'local-runtime') return 'local_ai';
   return undefined;
 }
 
@@ -76,13 +77,19 @@ export function useAssistantChat() {
       ? resolveConfigDir(String(conn.credentialRef.locator))
       : '';
   const model = boundModel?.remoteId || '';
+  const modelPath =
+    kind === 'local-runtime' && conn?.credentialRef?.locator
+      ? String(conn.credentialRef.locator)
+      : '';
   const cwd = processCwd();
 
   const assistant = useAssistant({
     backend,
     cwd,
     model,
+    modelPath,
     configDir: cfgDir,
+    nCtx: backend === 'local_ai' ? 4096 : undefined,
   });
 
   // Pending-ask bridge: track the assistant_message events that arrive

@@ -26,7 +26,8 @@ import { callHost, hasHost } from '../ffi';
 export type AssistantBackend =
   | 'claude_code'
   | 'codex_app_server'
-  | 'kimi_cli_wire';
+  | 'kimi_cli_wire'
+  | 'local_ai';
 
 export type WorkerEventKind =
   | 'lifecycle'
@@ -81,8 +82,10 @@ export interface UseAssistantOpts {
   model?: string;
   configDir?: string;     // claude_code only
   resumeSession?: string; // claude_code only
-  sessionId?: string;     // kimi_cli_wire only
+  sessionId?: string;     // kimi_cli_wire / local_ai
   yolo?: boolean;         // kimi_cli_wire only
+  modelPath?: string;     // local_ai (absolute path to .gguf)
+  nCtx?: number;          // local_ai (KV-cache size; default 2048)
   pollMs?: number;
   /** When true, the worker stays alive across unmount (dev hot-reload). */
   persistAcrossUnmount?: boolean;
@@ -110,6 +113,8 @@ function buildOptsJson(opts: UseAssistantOpts): string {
   if (opts.resumeSession) out.resume_session = opts.resumeSession;
   if (opts.sessionId) out.session_id = opts.sessionId;
   if (opts.yolo !== undefined) out.yolo = opts.yolo;
+  if (opts.modelPath) out.model_path = opts.modelPath;
+  if (opts.nCtx !== undefined) out.n_ctx = opts.nCtx;
   return JSON.stringify(out);
 }
 
@@ -142,7 +147,8 @@ export function useAssistant(opts: UseAssistantOpts): UseAssistantResult {
     // render usually has empty backend/cwd/model. We re-run on opts
     // change and start the worker once required fields arrive.
     if (!startedRef.current) {
-      if (!opts.backend || !opts.cwd || !opts.model) return;
+      if (!opts.backend || !opts.cwd) return;
+      if (!opts.model && !opts.modelPath) return;
 
       if (!hasHost('__worker_start')) {
         setError('worker host bindings not registered (framework/worker_bindings.zig)');
@@ -197,7 +203,7 @@ export function useAssistant(opts: UseAssistantOpts): UseAssistantResult {
         setWorkerId(null);
       }
     };
-  }, [opts.backend, opts.cwd, opts.model, opts.configDir, opts.resumeSession, opts.sessionId, opts.yolo, opts.pollMs]);
+  }, [opts.backend, opts.cwd, opts.model, opts.modelPath, opts.nCtx, opts.configDir, opts.resumeSession, opts.sessionId, opts.yolo, opts.pollMs]);
 
   const ask = (text: string): boolean => {
     const wid = workerIdRef.current;
